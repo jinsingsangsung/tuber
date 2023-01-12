@@ -182,9 +182,9 @@ def make_transforms(image_set, cfg):
         ])
     raise ValueError(f'unknown {image_set}')
 
-def obtain_generated_bboxes_training(input_csv="/xxx/AVA_v2.2/ava_{}_v2.2.csv",
+def obtain_generated_bboxes_training(input_csv="../assets/ava_{}_v2.2.csv",
                                      eval_only=False,
-                                     frame_root="/xxx/frames",
+                                     frame_root="/mnt/video-nfs5/datasets/ava/frames",
                                      mode="train"):
     import os
     from glob import glob

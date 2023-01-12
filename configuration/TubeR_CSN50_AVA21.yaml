@@ -3,15 +3,15 @@ DDP_CONFIG:
   WORLD_RANK: 0
   GPU_WORLD_SIZE: 4
   GPU_WORLD_RANK: 0
-  DIST_URL: 'tcp://10.269.41.145:11605'
-  WOLRD_URLS: [10.269.41.145','172.21.186.167']
+  DIST_URL: 'tcp://172.21.186.167:11588' 
+  WOLRD_URLS: ["172.21.186.167"]
   AUTO_RANK_MATCH: True
   DIST_BACKEND: 'nccl'
   GPU: 0
   DISTRIBUTED: True
 
 CONFIG:
-  EVAL_ONLY: False
+  EVAL_ONLY: True # False
   TWO_STREAM: False
   USE_LFB: False
   USE_LOCATION: False
@@ -39,9 +39,9 @@ CONFIG:
 
   DATA:
     DATASET_NAME: 'ava'
-    LABEL_PATH: '/xxx/datasets/ava_action_list_v2.1_for_activitynet_2018.pbtxt'
-    ANNO_PATH: '/xxx/datasets/ava_{}_v21.json'
-    DATA_PATH: '/xxx/ava/frames/{}/'
+    LABEL_PATH: '/mnt/video-nfs5/datasets/ava/annotations/ava_action_list_v2.1_for_activitynet_2018.pbtxt'
+    ANNO_PATH: '/mnt/video-nfs5/datasets/ava/annotations/ava_{}_v21.json'
+    DATA_PATH: '/mnt/video-nfs5/datasets/ava/frames/*/' # was ava/frames/{}/
     NUM_CLASSES: 80
     MULTIGRID: False
     IMG_SIZE: 256
@@ -68,12 +68,13 @@ CONFIG:
     DS_RATE: 8
     TEMP_LEN: 32
     SAMPLE_RATE: 2
-    PRETRAINED: False
-    PRETRAIN_BACKBONE_DIR: "./pretrained_models/backbone/irCSN_152_ft_kinetics_from_ig65m_f126851907.mat"
-    PRETRAIN_TRANSFORMER_DIR: "./pretrained_models/transformer/detr.pth"
-    PRETRAINED_PATH: "./pretrained_models/main/{}.pth"
-    LOAD: False
-    LOAD_FC: False
+    PRETRAINED: True
+    PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_50_ft_kinetics_from_ig65m_f233743920.mat"
+    PRETRAIN_TRANSFORMER_DIR: "../pretrained_models/transformer/detr.pth"
+    PRETRAINED_PATH: "../pretrained_models/main/TubeR_CSN50_AVA21.pth"
+    LOAD: True
+    LOAD_FC: True
+    LOAD_DETR: False
 
   MATCHER:
     COST_CLASS: 12
@@ -94,9 +95,9 @@ CONFIG:
     CLIPS_MAX_NORM: 0.1
 
   LOG:
-    BASE_PATH: '/xxx/AVA_Tuber'
+    BASE_PATH: '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/AVA_Tuber'
     LOG_DIR: 'tb_log'
     SAVE_DIR: 'checkpoints'
-    EVAL_DIR: '/xxx/AVA_Tuber/eval'
+    EVAL_DIR: '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/AVA_Tuber/eval'
     SAVE_FREQ: 1
     RES_DIR: 'tmp2'
