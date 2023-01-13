@@ -60,7 +60,7 @@ class VideoDataset(data.Dataset):
 
             start_img = np.max((timef * 30 - self.clip_len // 2 * self.frame_sample_rate, 0))
 
-            imgs, target = self.loadvideo(start_img, vid, frame_key)
+            imgs, target = self.loadvideo(start_img, vid, frame_key) # ex) frame_key: '_eBah6c5kyA,1024' 
 
             if len(target)==0 or target['boxes'].shape[0] == 0:
                 pass
@@ -73,7 +73,7 @@ class VideoDataset(data.Dataset):
 
         return imgs, target
 
-    def load_annotation(self, sample_id, video_frame_list):
+    def load_annotation(self, sample_id, video_frame_list): # (val 혹은 train의 key frame을 표시해놓은 list)
 
         num_classes = self.class_num
         boxes, classes = [], []
@@ -117,7 +117,7 @@ class VideoDataset(data.Dataset):
             raw_boxes = F.pad(boxes, (1, 0, 0, 0), value=self.index_cnt)
         else:
             raw_boxes = boxes
-
+        classes = np.array(classes)
         classes = torch.as_tensor(classes, dtype=torch.float32).reshape(-1, num_classes)
 
         target["image_id"] = [str(sample_id).replace(",", "_"), key_pos]
@@ -131,7 +131,7 @@ class VideoDataset(data.Dataset):
         return target
 
     def loadvideo(self, start_img, vid, frame_key):
-        video_frame_path = self.frame_path
+        video_frame_path = self.frame_path.format(vid)
         video_frame_list = sorted(glob(video_frame_path + '/*.jpg'))
 
         if len(video_frame_list) == 0:

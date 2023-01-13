@@ -125,7 +125,7 @@ class STDetectionEvaluater(object):
                     }
                 # if image_key=='1j20qq1JyX4_16244':
                 #     n+=1
-
+                ### TODO: PUT GT BBOX instead of DETECTION
                 for x in range(len(scores)):
                     # if scores[x] <= 1e-2: continue
                     if self.class_num != 80 or x + 1 in self.class_whitelist:

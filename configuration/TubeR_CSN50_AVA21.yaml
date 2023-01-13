@@ -39,9 +39,9 @@ CONFIG:
 
   DATA:
     DATASET_NAME: 'ava'
-    LABEL_PATH: '/mnt/video-nfs5/datasets/ava/annotations/ava_action_list_v2.1_for_activitynet_2018.pbtxt'
-    ANNO_PATH: '/mnt/video-nfs5/datasets/ava/annotations/ava_{}_v21.json'
-    DATA_PATH: '/mnt/video-nfs5/datasets/ava/frames/*/' # was ava/frames/{}/
+    LABEL_PATH: '/home/nsml/assets/ava_action_list_v2.1_for_activitynet_2018.pbtxt'
+    ANNO_PATH: '/home/nsml/assets/ava_{}_v21.json'
+    DATA_PATH: '/mnt/video-nfs5/datasets/ava/frames/{}/'
     NUM_CLASSES: 80
     MULTIGRID: False
     IMG_SIZE: 256

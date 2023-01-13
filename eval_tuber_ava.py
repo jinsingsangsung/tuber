@@ -38,7 +38,7 @@ def main_worker(cfg):
     if not cfg.CONFIG.MODEL.LOAD: raise ("model dir not found")
     model, _ = load_model(model, cfg, load_fc=cfg.CONFIG.MODEL.LOAD_FC)
 
-    print('Start training...')
+    print('Start evaluating...') ### why start training?
     start_time = time.time()
     validate_tuber_detection(cfg, model, criterion, postprocessors, test_loader, 0, writer)
 

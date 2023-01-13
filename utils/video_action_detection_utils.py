@@ -179,6 +179,7 @@ def evaluate(cfg, model: torch.nn.Module, criterion: torch.nn.Module, postproces
         evaluater.load_GT_from_path(file_path_lst)
         file_path_lst = [tmp_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, x) for x in range(ddp_params['world_size'])]
         evaluater.load_detection_from_path(file_path_lst)
+        ###TODO: How to create a file_path_lst that has classification (detected) and localization (GT) ?
         mAP, metrics = evaluater.evaluate()
         print(metrics)
         print_string = 'mAP: {mAP:.5f}'.format(mAP=mAP[0])
