@@ -1,6 +1,6 @@
 cd /home/nsml
 # cp -r /mnt/video-nfs5/users/jinsung/tubelet-transformer ./ # bring the code
-mkdir pretrained_models && cp -r /mnt/video-nfs5/users/jinsung/pretrained_models/tubelet-transformer ./pretrained_models # bring the pretrained_model
+mkdir pretrained_models # && cp -r /mnt/video-nfs5/users/jinsung/pretrained_models/tubelet-transformer ./pretrained_models # bring the pretrained_model
 # cp -r /mnt/video-nfs5/datasets/hmdb51.tar /mnt/tmp # copy the dataset
 # cd /mnt/tmp && tar -xvf JHMDB.tar && rm -rf JHMDB.tar # untar the dataset
 cp -r /mnt/video-nfs5/datasets/ava /mnt/tmp
