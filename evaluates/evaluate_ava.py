@@ -33,7 +33,7 @@ class STDetectionEvaluater(object):
         self.class_num = class_num
         if class_num == 80:
             self.exclude_keys = []
-            f = open("/xxx/datasets/ava_val_excluded_timestamps_v2.1.csv")
+            f = open("/assets/ava_val_excluded_timestamps_v2.1.csv")
             while True:
                 line = f.readline().strip()
                 if not line: break
@@ -137,7 +137,7 @@ class STDetectionEvaluater(object):
         print("start adding into evaluator")
         count = 0
         for image_key, info in sample_dict_per_image.items():
-            if count % 500 == 0:
+            if count % 5000 == 0:
                 print(count, len(sample_dict_per_image.keys()))
             if len(info['bbox']) == 0:
                 print(count)
@@ -213,11 +213,11 @@ class STDetectionEvaluaterSinglePerson(object):
             for line in data:
                 image_key = line.split(' [')[0]
                 data = line.split(' [')[1].split(']')[0].split(',')
-                data = [float(x) for x in data]
+                data = [float(x) for x in data] # 2time..? + 4 coordinates + 80 class score
                 scores = np.array([1])
                 x1, y1, x2, y2 = data[2], data[3], data[4], data[5]
                 if (x2 - x1) * (y2 - y1) < self.threshold_size_min or (x2 - x1) * (y2 - y1) > self.threshold_size_max:
-                    continue
+                    continue # only count valid bbox of GT...
                 bbox_count += 1
                 if not image_key in sample_dict_per_image:
                     sample_dict_per_image[image_key] = {
@@ -258,11 +258,11 @@ class STDetectionEvaluaterSinglePerson(object):
         for path in file_lst:
             print("loading ", path)
             data = open(path).readlines()
-            for line in data:
+            for line in data: # coordinates, class
                 image_key = line.split(' [')[0]
                 data = line.split(' [')[1].split(']')[0].split(',')
                 data = [float(x) for x in data]
-                if data[-1] > 0:
+                if data[-1] > 0: # confidence score
                     scores = np.array(data[-1:])
                 else:
                     continue
@@ -291,7 +291,7 @@ class STDetectionEvaluaterSinglePerson(object):
         print("start adding into evaluator")
         count = 0
         for image_key, info in sample_dict_per_image.items():
-            if count % 500 == 0:
+            if count % 5000 == 0:
                 print(count, len(sample_dict_per_image.keys()))
             if len(info['bbox']) == 0:
                 print(count)

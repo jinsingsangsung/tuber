@@ -618,8 +618,10 @@ class ObjectDetectionEvaluation(object):
                 groundtruth_masks = np.empty(shape=[0, 1, 1], dtype=float)
             groundtruth_is_difficult_list = np.array([], dtype=bool)
             groundtruth_is_group_of_list = np.array([], dtype=bool)
+        # print(len(detected_boxes), detected_boxes[0]) # num_queries, 4 coordinates
+        # print(len(groundtruth_boxes), detected_boxes[0]) # num_boxes
 
-
+        ### if cfg.CONFIG.VAL.PUT_GT, replace detected boxes with gt boxes
         scores, tp_fp_labels = (
                 self.per_image_eval.compute_object_detection_metrics(
                         detected_boxes=detected_boxes,
@@ -640,12 +642,12 @@ class ObjectDetectionEvaluation(object):
     def _update_ground_truth_statistics(self, groundtruth_class_labels,
                                                                             groundtruth_is_difficult_list,
                                                                             groundtruth_is_group_of_list):
-        """Update grouth truth statitistics.
+        """Update grouth truth statistics.
 
         1. Difficult boxes are ignored when counting the number of ground truth
         instances as done in Pascal VOC devkit.
         2. Difficult boxes are treated as normal boxes when computing CorLoc related
-        statitistics.
+        statistics.
 
         Args:
             groundtruth_class_labels: An integer numpy array of length M,

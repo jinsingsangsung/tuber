@@ -406,6 +406,13 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
                 # cardinality_error=loss_dict_reduced['cardinality_error']
             )
             print(print_string)
+            # print("len(buff_id): ", len(buff_id))
+            # print("len(buff_binary): ", len(np.concatenate(buff_binary, axis=0)))
+            # print("len(buff_anno): ", len(np.concatenate(buff_anno, axis=0)))
+            # print("len(buff_output): ", len(np.concatenate(buff_output, axis=0)))
+            # print("len(buff_GT_id): ", len(buff_GT_id))
+            # print("len(buff_GT_label): ", len(np.concatenate(buff_GT_label, axis=0)))
+            # print("len(buff_GT_anno): ", len(np.concatenate(buff_GT_anno, axis=0)))
 
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
         writer.add_scalar('val/class_error', class_err.avg, epoch)
@@ -421,7 +428,7 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
     buff_GT_label = np.concatenate(buff_GT_label, axis=0)
     buff_GT_anno = np.concatenate(buff_GT_anno, axis=0)
     print(buff_output.shape, buff_anno.shape, buff_binary.shape, len(buff_id), buff_GT_anno.shape, buff_GT_label.shape, len(buff_GT_id))
-
+    
     tmp_path = '{}/{}/{}.txt'
     with open(tmp_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, cfg.DDP_CONFIG.GPU_WORLD_RANK), 'w') as f:
         for x in range(len(buff_id)):
@@ -440,7 +447,10 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
     # aggregate files
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
         # read results
-        evaluater = STDetectionEvaluater(cfg.CONFIG.DATA.LABEL_PATH, class_num=cfg.CONFIG.DATA.NUM_CLASSES)
+        if cfg.CONFIG.VAL.PUT_GT:
+            evaluater = STDetectionEvaluater(cfg.CONFIG.DATA.LABEL_PATH, tiou_thresholds=[1e-8], class_num=cfg.CONFIG.DATA.NUM_CLASSES)
+        else:
+            evaluater = STDetectionEvaluater(cfg.CONFIG.DATA.LABEL_PATH, tiou_thresholds=[0.5], class_num=cfg.CONFIG.DATA.NUM_CLASSES)
         file_path_lst = [tmp_GT_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, x) for x in range(cfg.DDP_CONFIG.GPU_WORLD_SIZE)]
         evaluater.load_GT_from_path(file_path_lst)
         file_path_lst = [tmp_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, x) for x in range(cfg.DDP_CONFIG.GPU_WORLD_SIZE)]
@@ -452,8 +462,10 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
         print(mAP)
         writer.add_scalar('val/val_mAP_epoch', mAP[0], epoch)
         Map_ = mAP[0]
-
-        evaluater = STDetectionEvaluaterSinglePerson(cfg.CONFIG.DATA.LABEL_PATH)
+        if cfg.CONFIG.VAL.PUT_GT:
+            evaluater = STDetectionEvaluaterSinglePerson(cfg.CONFIG.DATA.LABEL_PATH, tiou_thresholds=[1e-8])
+        else:
+            evaluater = STDetectionEvaluaterSinglePerson(cfg.CONFIG.DATA.LABEL_PATH)
         file_path_lst = [tmp_GT_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, x) for x in range(cfg.DDP_CONFIG.GPU_WORLD_SIZE)]
         evaluater.load_GT_from_path(file_path_lst)
         file_path_lst = [tmp_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, x) for x in range(cfg.DDP_CONFIG.GPU_WORLD_SIZE)]

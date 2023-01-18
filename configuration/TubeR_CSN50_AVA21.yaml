@@ -3,15 +3,15 @@ DDP_CONFIG:
   WORLD_RANK: 0
   GPU_WORLD_SIZE: 4
   GPU_WORLD_RANK: 0
-  DIST_URL: 'tcp://172.21.186.167:11588' 
-  WOLRD_URLS: ["172.21.186.167"]
+  DIST_URL: 'tcp://172.17.0.6:11588' 
+  WOLRD_URLS: ["172.17.0.6"]
   AUTO_RANK_MATCH: True
   DIST_BACKEND: 'nccl'
   GPU: 0
   DISTRIBUTED: True
 
 CONFIG:
-  EVAL_ONLY: True # False
+  EVAL_ONLY: False
   TWO_STREAM: False
   USE_LFB: False
   USE_LOCATION: False
@@ -36,12 +36,13 @@ CONFIG:
   VAL:
     BATCH_SIZE: 1
     FREQ: 2
+    PUT_GT: False
 
   DATA:
     DATASET_NAME: 'ava'
-    LABEL_PATH: '/home/nsml/assets/ava_action_list_v2.1_for_activitynet_2018.pbtxt'
-    ANNO_PATH: '/home/nsml/assets/ava_{}_v21.json'
-    DATA_PATH: '/mnt/video-nfs5/datasets/ava/frames/{}/'
+    LABEL_PATH: '/assets/ava_action_list_v2.1_for_activitynet_2018.pbtxt'
+    ANNO_PATH: '/assets/ava_{}_v21.json'
+    DATA_PATH: '/datasets/frames/{}/'
     # DATA_PATH: '/mnt/tmp/ava/frames/{}/'
     NUM_CLASSES: 80
     MULTIGRID: False
@@ -75,7 +76,7 @@ CONFIG:
     PRETRAINED_PATH: "../pretrained_models/main/TubeR_CSN50_AVA21.pth"
     LOAD: True
     LOAD_FC: True
-    LOAD_DETR: False
+    LOAD_DETR: True
 
   MATCHER:
     COST_CLASS: 12
@@ -96,9 +97,9 @@ CONFIG:
     CLIPS_MAX_NORM: 0.1
 
   LOG:
-    BASE_PATH: '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/AVA_Tuber'
+    BASE_PATH: '/results/tubelet-transformer/AVA_Tuber'
     LOG_DIR: 'tb_log'
     SAVE_DIR: 'checkpoints'
-    EVAL_DIR: '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/AVA_Tuber/eval'
+    EVAL_DIR: '/results/tubelet-transformer/AVA_Tuber/eval'
     SAVE_FREQ: 1
     RES_DIR: 'tmp2'

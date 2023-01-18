@@ -101,10 +101,10 @@ class VideoDataset(data.Dataset):
                 label_tmp[l] = 1
 
             if np.sum(label_tmp) == 0: continue
-            p_x = np.int(bbox[0] * nw)
-            p_y = np.int(bbox[1] * nh)
-            p_w = np.int(bbox[2] * nw)
-            p_h = np.int(bbox[3] * nh)
+            p_x = np.int_(bbox[0] * nw)
+            p_y = np.int_(bbox[1] * nh)
+            p_w = np.int_(bbox[2] * nw)
+            p_h = np.int_(bbox[3] * nh)
 
             boxes.append([p_t, p_x, p_y, p_w, p_h])
             classes.append(label_tmp)

@@ -354,10 +354,10 @@ class PerImageEvaluation(object):
     if iou.shape[1] > 0:
       groundtruth_nongroup_of_is_difficult_list = groundtruth_is_difficult_list[
           ~groundtruth_is_group_of_list]
-      max_overlap_gt_ids = np.argmax(iou, axis=1)
+      max_overlap_gt_ids = np.argmax(iou, axis=1) # iou: num detected boxes x num gt boxes
       is_gt_box_detected = np.zeros(iou.shape[1], dtype=bool)
       for i in range(num_detected_boxes):
-        gt_id = max_overlap_gt_ids[i]
+        gt_id = max_overlap_gt_ids[i] #detected_box_i indicates gt_id
         if iou[i, gt_id] >= self.matching_iou_threshold:
           if not groundtruth_nongroup_of_is_difficult_list[gt_id]:
             if not is_gt_box_detected[gt_id]:
