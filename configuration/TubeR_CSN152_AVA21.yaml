@@ -3,8 +3,8 @@ DDP_CONFIG:
   WORLD_RANK: 0
   GPU_WORLD_SIZE: 4
   GPU_WORLD_RANK: 0
-  DIST_URL: 'tcp://172.17.0.6:11588' 
-  WOLRD_URLS: ["172.17.0.6"]
+  DIST_URL: 'tcp://{}:11588' 
+  WOLRD_URLS: ["{}"]
   AUTO_RANK_MATCH: True
   DIST_BACKEND: 'nccl'
   GPU: 0
