@@ -363,12 +363,13 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
         end = time.time()
 
         if (cfg.DDP_CONFIG.GPU_WORLD_RANK == 0):
-            print_string = 'Epoch: [{0}][{1}/{2}]'.format(epoch, idx + 1, len(data_loader))
-            print(print_string)
-            print_string = 'data_time: {data_time:.3f}, batch time: {batch_time:.3f}'.format(
-                data_time=data_time.val,
-                batch_time=batch_time.val)
-            print(print_string)
+            if idx % cfg.CONFIG.LOG.DISPLAY_FREQ == 0:
+                print_string = 'Epoch: [{0}][{1}/{2}]'.format(epoch, idx + 1, len(data_loader))
+                print(print_string)
+                print_string = 'data_time: {data_time:.3f}, batch time: {batch_time:.3f}'.format(
+                    data_time=data_time.val,
+                    batch_time=batch_time.val)
+                print(print_string)
 
             # reduce losses over all GPUs for logging purposes
             # loss_dict_reduced = utils.reduce_dict(loss_dict)
@@ -396,16 +397,17 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
                 print("Loss is {}, stopping eval".format(loss_value))
                 print(loss_dict_reduced)
                 exit(1)
-            print_string = 'class_error: {class_error:.3f}, loss: {loss:.3f}, loss_bbox: {loss_bbox:.3f}, loss_giou: {loss_giou:.3f}, loss_ce: {loss_ce:.3f}, loss_ce_b: {loss_ce_b:.3f}'.format(
-                class_error=class_err.avg,
-                loss=losses_avg.avg,
-                loss_bbox=losses_box.avg,
-                loss_giou=losses_giou.avg,
-                loss_ce=losses_ce.avg,
-                loss_ce_b=losses_ce_b.avg,
-                # cardinality_error=loss_dict_reduced['cardinality_error']
-            )
-            print(print_string)
+            if idx % cfg.CONFIG.LOG.DISPLAY_FREQ == 0:
+                print_string = 'class_error: {class_error:.3f}, loss: {loss:.3f}, loss_bbox: {loss_bbox:.3f}, loss_giou: {loss_giou:.3f}, loss_ce: {loss_ce:.3f}, loss_ce_b: {loss_ce_b:.3f}'.format(
+                    class_error=class_err.avg,
+                    loss=losses_avg.avg,
+                    loss_bbox=losses_box.avg,
+                    loss_giou=losses_giou.avg,
+                    loss_ce=losses_ce.avg,
+                    loss_ce_b=losses_ce_b.avg,
+                    # cardinality_error=loss_dict_reduced['cardinality_error']
+                )
+                print(print_string)
             # print("len(buff_id): ", len(buff_id))
             # print("len(buff_binary): ", len(np.concatenate(buff_binary, axis=0)))
             # print("len(buff_anno): ", len(np.concatenate(buff_anno, axis=0)))
@@ -462,19 +464,19 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
         print(mAP)
         writer.add_scalar('val/val_mAP_epoch', mAP[0], epoch)
         Map_ = mAP[0]
-        if cfg.CONFIG.VAL.PUT_GT:
-            evaluater = STDetectionEvaluaterSinglePerson(cfg.CONFIG.DATA.LABEL_PATH, tiou_thresholds=[1e-8])
-        else:
-            evaluater = STDetectionEvaluaterSinglePerson(cfg.CONFIG.DATA.LABEL_PATH)
-        file_path_lst = [tmp_GT_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, x) for x in range(cfg.DDP_CONFIG.GPU_WORLD_SIZE)]
-        evaluater.load_GT_from_path(file_path_lst)
-        file_path_lst = [tmp_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, x) for x in range(cfg.DDP_CONFIG.GPU_WORLD_SIZE)]
-        evaluater.load_detection_from_path(file_path_lst)
-        mAP, metrics = evaluater.evaluate()
-        print(metrics)
-        print_string = 'person AP: {mAP:.5f}'.format(mAP=mAP[0])
-        print(print_string)
-        writer.add_scalar('val/val_person_AP_epoch', mAP[0], epoch)
+        # if cfg.CONFIG.VAL.PUT_GT:
+        #     evaluater = STDetectionEvaluaterSinglePerson(cfg.CONFIG.DATA.LABEL_PATH, tiou_thresholds=[1e-8])
+        # else:
+        #     evaluater = STDetectionEvaluaterSinglePerson(cfg.CONFIG.DATA.LABEL_PATH)
+        # file_path_lst = [tmp_GT_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, x) for x in range(cfg.DDP_CONFIG.GPU_WORLD_SIZE)]
+        # evaluater.load_GT_from_path(file_path_lst)
+        # file_path_lst = [tmp_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, x) for x in range(cfg.DDP_CONFIG.GPU_WORLD_SIZE)]
+        # evaluater.load_detection_from_path(file_path_lst)
+        # mAP, metrics = evaluater.evaluate()
+        # print(metrics)
+        # print_string = 'person AP: {mAP:.5f}'.format(mAP=mAP[0])
+        # print(print_string)
+        # writer.add_scalar('val/val_person_AP_epoch', mAP[0], epoch)
     torch.distributed.barrier()
     time.sleep(30)
     return Map_
