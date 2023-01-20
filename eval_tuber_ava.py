@@ -23,7 +23,6 @@ def main_worker(cfg):
     else:
         writer = None
     # cfg.freeze()
-
     # create model
     print('Creating TubeR model: %s' % cfg.CONFIG.MODEL.NAME)
     model, criterion, postprocessors = build_model(cfg)
@@ -56,4 +55,11 @@ if __name__ == '__main__':
 
     cfg = get_cfg_defaults()
     cfg.merge_from_file(args.config_file)
+    import socket 
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.connect(("8.8.8.8", 80))
+    this_ip = s.getsockname()[0] # put this to world_url
+    cfg.DDP_CONFIG.DIST_URL = "tcp://{}:11588".format(this_ip)
+    cfg.DDP_CONFIG.WOLRD_URLS = [this_ip]
+    s.close()    
     spawn_workers(main_worker, cfg)

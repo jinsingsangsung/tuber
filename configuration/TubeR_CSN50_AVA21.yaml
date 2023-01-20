@@ -11,7 +11,7 @@ DDP_CONFIG:
   DISTRIBUTED: True
 
 CONFIG:
-  EVAL_ONLY: False
+  EVAL_ONLY: True
   TWO_STREAM: False
   USE_LFB: False
   USE_LOCATION: False
@@ -103,3 +103,4 @@ CONFIG:
     EVAL_DIR: '/results/tubelet-transformer/AVA_Tuber/eval'
     SAVE_FREQ: 1
     RES_DIR: 'tmp2'
+    DISPLAY_FREQ: 1000

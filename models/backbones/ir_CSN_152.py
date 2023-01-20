@@ -311,7 +311,7 @@ def load_weights(model, pretrain_path, load_fc=True, use_affine=False, tune_poin
                      weights=r_weights['last_out_L400_b'][0],
                      weights_dict_copy=r_weights_copy)
 
-    print("load pretrain model " + pretrain_path)
+    print("load pretrain model from " + pretrain_path)
     print("load fc", load_fc)
     for k, v in r_weights_copy.items():
         if "momentum" not in k and "model_iter" not in k and "__globals__" not in k and "__header__" not in k and "lr" not in k and "__version__" not in k:

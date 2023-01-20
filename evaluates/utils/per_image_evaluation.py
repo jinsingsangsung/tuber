@@ -26,6 +26,26 @@ import evaluates.utils.np_box_list as np_box_list
 import evaluates.utils.np_box_list_ops as np_box_list_ops
 
 
+def detected_class_corrector(
+    detected_boxes,
+    detected_class_labels,
+    groundtruth_boxes,
+    groundtruth_class_labels,
+    groundtruth_is_group_of_list): # copied from _get_overlaps_and_scores_box_mode()
+
+  detected_boxlist = np_box_list.BoxList(detected_boxes)
+  gt_non_group_of_boxlist = np_box_list.BoxList(
+      groundtruth_boxes[~groundtruth_is_group_of_list])
+  iou = np_box_list_ops.iou(detected_boxlist, gt_non_group_of_boxlist)
+  if iou.shape[1] > 0:
+    max_overlap_gt_ids = np.argmax(iou, axis=1) # which gt does the detected box indicate?
+    new_labels = [groundtruth_class_labels[i] for i in max_overlap_gt_ids]
+    corrected_detected_class_labels = np.array(new_labels)
+  else:
+    corrected_detected_class_labels = detected_class_labels
+
+  return corrected_detected_class_labels
+
 class PerImageEvaluation(object):
   """Evaluate detection result of a single image."""
 
@@ -88,6 +108,10 @@ class PerImageEvaluation(object):
     detected_boxes, detected_scores, detected_class_labels, detected_masks = (
         self._remove_invalid_boxes(detected_boxes, detected_scores,
                                    detected_class_labels, detected_masks))
+
+    ## in order to replace the class label of the detection box, the things should happen here:
+    ## replace detected_class_labels with GT labels of the box with the highest IoU: line below
+    # detected_class_labels = detected_class_corrector(detected_boxes, detected_class_labels, groundtruth_boxes, groundtruth_class_labels, groundtruth_is_group_of_list)
     scores, tp_fp_labels = self._compute_tp_fp(
         detected_boxes=detected_boxes,
         detected_scores=detected_scores,
@@ -180,7 +204,7 @@ class PerImageEvaluation(object):
           Each row is of the format [y_min, x_min, y_max, x_max]
       detected_scores: A float numpy array of shape [N, 1], representing
           the confidence scores of the detected N object instances.
-      detected_class_labels: A integer numpy array of shape [N, 1], repreneting
+      detected_class_labels: A integer numpy array of shape [N, 1], representing
           the class labels of the detected N object instances.
       groundtruth_boxes: A float numpy array of shape [M, 4], representing M
           regions of object instances in ground truth
@@ -354,10 +378,10 @@ class PerImageEvaluation(object):
     if iou.shape[1] > 0:
       groundtruth_nongroup_of_is_difficult_list = groundtruth_is_difficult_list[
           ~groundtruth_is_group_of_list]
-      max_overlap_gt_ids = np.argmax(iou, axis=1) # iou: num detected boxes x num gt boxes
+      max_overlap_gt_ids = np.argmax(iou, axis=1) # iou: num detected boxes(of certain class) x num gt boxes
       is_gt_box_detected = np.zeros(iou.shape[1], dtype=bool)
       for i in range(num_detected_boxes):
-        gt_id = max_overlap_gt_ids[i] #detected_box_i indicates gt_id
+        gt_id = max_overlap_gt_ids[i] # detected_box_i indicates gt_id
         if iou[i, gt_id] >= self.matching_iou_threshold:
           if not groundtruth_nongroup_of_is_difficult_list[gt_id]:
             if not is_gt_box_detected[gt_id]:
@@ -452,3 +476,5 @@ class PerImageEvaluation(object):
     return [
         detected_boxes, detected_scores, detected_class_labels, detected_masks
     ]
+
+
