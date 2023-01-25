@@ -25,6 +25,7 @@ import numpy as np
 import evaluates.utils.np_box_list as np_box_list
 import evaluates.utils.np_box_list_ops as np_box_list_ops
 
+import copy
 
 def detected_class_corrector(
     detected_boxes,
@@ -38,9 +39,19 @@ def detected_class_corrector(
       groundtruth_boxes[~groundtruth_is_group_of_list])
   iou = np_box_list_ops.iou(detected_boxlist, gt_non_group_of_boxlist)
   if iou.shape[1] > 0:
-    max_overlap_gt_ids = np.argmax(iou, axis=1) # which gt does the detected box indicate?
-    new_labels = [groundtruth_class_labels[i] for i in max_overlap_gt_ids]
+    max_overlap_gt_ids = np.argmax(iou, axis=1) # which gt box does the detected box indicate?
+    new_labels = copy.deepcopy(detected_class_labels)
+    for i, label in enumerate(detected_class_labels):
+      if iou[i, max_overlap_gt_ids[i]] >= 0.5:
+        new_labels[i] = groundtruth_class_labels[max_overlap_gt_ids[i]]
     corrected_detected_class_labels = np.array(new_labels)
+    # print("iou shape: ", iou.shape)
+    # print("max_overlap_gt_ids shape: ", max_overlap_gt_ids.shape)
+    # how_many_are_corrected = (detected_class_labels == corrected_detected_class_labels)
+    # print("amount of correction: ", len(how_many_are_corrected) - sum(how_many_are_corrected), '/', len(how_many_are_corrected))
+    # print("detected_class_labels: ", detected_class_labels)
+    # print("corrected_detected_class_labels: ", corrected_detected_class_labels)
+
   else:
     corrected_detected_class_labels = detected_class_labels
 
@@ -111,7 +122,7 @@ class PerImageEvaluation(object):
 
     ## in order to replace the class label of the detection box, the things should happen here:
     ## replace detected_class_labels with GT labels of the box with the highest IoU: line below
-    # detected_class_labels = detected_class_corrector(detected_boxes, detected_class_labels, groundtruth_boxes, groundtruth_class_labels, groundtruth_is_group_of_list)
+    detected_class_labels = detected_class_corrector(detected_boxes, detected_class_labels, groundtruth_boxes, groundtruth_class_labels, groundtruth_is_group_of_list)
     scores, tp_fp_labels = self._compute_tp_fp(
         detected_boxes=detected_boxes,
         detected_scores=detected_scores,

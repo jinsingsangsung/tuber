@@ -101,4 +101,5 @@ CONFIG:
     SAVE_DIR: 'checkpoints'
     EVAL_DIR: '/results/tubelet-transformer/AVA_Tuber/eval'
     SAVE_FREQ: 1
-    RES_DIR: 'tmp2'
+    RES_DIR: 'tmp3'
+    DISPLAY_FREQ: 1000
