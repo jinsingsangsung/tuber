@@ -1,9 +1,9 @@
 DDP_CONFIG:
   WORLD_SIZE: 1
   WORLD_RANK: 0
-  GPU_WORLD_SIZE: 4
+  GPU_WORLD_SIZE: 2
   GPU_WORLD_RANK: 0
-  DIST_URL: 'tcp://{}:11588' 
+  DIST_URL: 'tcp://{}:11713' 
   WOLRD_URLS: ["{}"]
   AUTO_RANK_MATCH: True
   DIST_BACKEND: 'nccl'
@@ -11,7 +11,7 @@ DDP_CONFIG:
   DISTRIBUTED: True
 
 CONFIG:
-  EVAL_ONLY: True
+  EVAL_ONLY: False
   TWO_STREAM: False
   USE_LFB: False
   USE_LOCATION: False
@@ -40,9 +40,9 @@ CONFIG:
 
   DATA:
     DATASET_NAME: 'ava'
-    LABEL_PATH: '/assets/ava_action_list_v2.1_for_activitynet_2018.pbtxt'
-    ANNO_PATH: '/assets/ava_{}_v21.json'
-    DATA_PATH: '/datasets/frames/{}/'
+    LABEL_PATH: '/home/nsml/assets/ava_action_list_v2.1_for_activitynet_2018.pbtxt'
+    ANNO_PATH: '/home/nsml/assets/ava_{}_v21.json'
+    DATA_PATH: '/mnt/tmp/frames/{}/'
     # DATA_PATH: '/mnt/tmp/ava/frames/{}/'
     NUM_CLASSES: 80
     MULTIGRID: False
@@ -74,9 +74,9 @@ CONFIG:
     PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_50_ft_kinetics_from_ig65m_f233743920.mat"
     PRETRAIN_TRANSFORMER_DIR: "../pretrained_models/transformer/detr.pth"
     PRETRAINED_PATH: "../pretrained_models/main/TubeR_CSN50_AVA21.pth"
-    LOAD: True
-    LOAD_FC: True
-    LOAD_DETR: True
+    LOAD: False
+    LOAD_FC: False
+    LOAD_DETR: False
 
   MATCHER:
     COST_CLASS: 12
@@ -97,10 +97,10 @@ CONFIG:
     CLIPS_MAX_NORM: 0.1
 
   LOG:
-    BASE_PATH: '/results/tubelet-transformer/AVA_Tuber'
+    BASE_PATH: '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/AVA_Tuber'
     LOG_DIR: 'tb_log'
     SAVE_DIR: 'checkpoints'
-    EVAL_DIR: '/results/tubelet-transformer/AVA_Tuber/eval'
+    EVAL_DIR: '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/AVA_Tuber/eval'
     SAVE_FREQ: 1
-    RES_DIR: 'tmp2'
+    RES_DIR: 'tmp2_train'
     DISPLAY_FREQ: 1000
