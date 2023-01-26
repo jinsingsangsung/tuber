@@ -11,7 +11,7 @@ DDP_CONFIG:
   DISTRIBUTED: True
 
 CONFIG:
-  EVAL_ONLY: False
+  EVAL_ONLY: True
   TWO_STREAM: False
   USE_LFB: False
   USE_LOCATION: False
