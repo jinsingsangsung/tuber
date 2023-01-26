@@ -39,9 +39,9 @@ CONFIG:
 
   DATA:
     DATASET_NAME: 'ava'
-    LABEL_PATH: '/xxx/datasets/ava_action_list_v2.1_for_activitynet_2018.pbtxt'
-    ANNO_PATH: '/xxx/datasets/ava_{}_v22.json'
-    DATA_PATH: '/xxx/ava/frames/{}/'
+    LABEL_PATH: '/home/nsml/assets/ava_action_list_v2.1_for_activitynet_2018.pbtxt'
+    ANNO_PATH: '/home/nsml/assets/ava_{}_v22.json'
+    DATA_PATH: '/mnt/tmp/frames/{}/'
     NUM_CLASSES: 80
     MULTIGRID: False
     IMG_SIZE: 256
@@ -69,11 +69,12 @@ CONFIG:
     TEMP_LEN: 32
     SAMPLE_RATE: 2
     PRETRAINED: False
-    PRETRAIN_BACKBONE_DIR: "/xxx/irCSN_152_ft_kinetics_from_ig65m_f126851907.mat"
-    PRETRAIN_TRANSFORMER_DIR: "/xxx/detr.pth"
-    PRETRAINED_PATH: "/xxx/ADTR_CSN_152_decode_ava_22.pth"
+    PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_152_ft_kinetics_from_ig65m_f126851907.mat"
+    PRETRAIN_TRANSFORMER_DIR: "../pretrained_models/transformer/detr.pth"
+    PRETRAINED_PATH: "../pretrained_models/main/TubeR_CSN152_AVA22.pth"
     LOAD: True
     LOAD_FC: True
+    LOAD_DETR: False
 
   MATCHER:
     COST_CLASS: 12
@@ -94,9 +95,10 @@ CONFIG:
     CLIPS_MAX_NORM: 0.1
 
   LOG:
-    BASE_PATH: '/xxx/AVA_Tuber'
+    BASE_PATH: '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/AVA_Tuber'
     LOG_DIR: 'tb_log'
     SAVE_DIR: 'checkpoints'
-    EVAL_DIR: '/xxx/AVA_Tuber/eval'
+    EVAL_DIR: '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/AVA_Tuber/eval'
     SAVE_FREQ: 1
-    RES_DIR: 'tmp2'
+    RES_DIR: 'tmp4_train'
+    DISPLAY_FREQ: 1000
