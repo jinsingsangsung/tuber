@@ -27,7 +27,6 @@ def _import_prroi_pooling():
             from os.path import join as pjoin, dirname
             from torch.utils.cpp_extension import load as load_extension
             root_dir = pjoin(dirname(__file__), 'src')
-
             _prroi_pooling = load_extension(
                 '_prroi_pooling',
                 [pjoin(root_dir, 'prroi_pooling_gpu.c'), pjoin(root_dir, 'prroi_pooling_gpu_impl.cu')],

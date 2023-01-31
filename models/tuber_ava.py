@@ -20,6 +20,8 @@ from models.criterion import SetCriterion, PostProcess, SetCriterionAVA, PostPro
 
 from .prroi_pool import PrRoIPool2D
 from .functional import generate_intersection_map
+from models.transformer.position_encoding import build_position_encoding
+import copy
 
 class DETR(nn.Module):
     """ This is the DETR module that performs object detection """
@@ -162,7 +164,7 @@ class DETR_GT(nn.Module):
     """ This is the DETR module that performs object detection """
     def __init__(self, backbone, transformer, num_classes, num_queries,
                  hidden_dim, temporal_length, aux_loss=False, generate_lfb=False,
-                 backbone_name='CSN-152', ds_rate=1, last_stride=True, dataset_mode='ava'):
+                 backbone_name='CSN-152', ds_rate=1, last_stride=True, dataset_mode='ava', context_concat=True):
         """ Initializes the model.
         Parameters:
             backbone: torch module of the backbone to be used. See backbone.py
@@ -223,6 +225,12 @@ class DETR_GT(nn.Module):
         self.downsample_rate = 16 # add this to cfg
         self.object_roi_pool = PrRoIPool2D(self.pool_size, self.pool_size, 1.0 / self.downsample_rate)
         self.context_roi_pool = PrRoIPool2D(self.pool_size, self.pool_size, 1.0 / self.downsample_rate)       
+        self.context_concat = context_concat
+        if context_concat:
+            self.object_feature_fuse = nn.Conv2d(2048 * 2, 2048, 1)
+            self.context_feature_extract = nn.Conv2d(2048, 2048, 1)
+        self.position_encoding = build_position_encoding(hidden_dim)
+        self.num_classes = num_classes
         
 
     def freeze_params(self):
@@ -269,56 +277,97 @@ class DETR_GT(nn.Module):
         # tgt_bbox = tgt_bbox[:,1:]
         
         # below is adapted from https://github.com/vacancy/NSCL-PyTorch-Release/blob/ef493d58a986dcb1ea16a23183a57119abeaff34/nscl/nn/scene_graph/scene_graph.py
-        bs, _, t, w, h = src.shape
-        with torch.no_grad():
-            for i, v in enumerate(targets):
+        bs, _, t, w, h = src.shape # note that if cfg.MODEL.SINGLE_FRAME: t is downsampled to 1 (case of AVA)
+        # src_context = copy.deepcopy(src)
+        src = src.contiguous().permute(0,2,1,3,4).flatten(0,1)
+
+        num_boxes_per_batch_idx = []
+        this_object_features_list = []
+        tgt_bboxes_list = []
+
+        for i, v in enumerate(targets): # i iterates over batch size
+            with torch.no_grad():
                 num_boxes = len(v["boxes"])
+                num_boxes_per_batch_idx.append(num_boxes)
+                ## TODO: what happens if num_boxes == 0?
+                if num_boxes == 0:
+                    pass
                 tgt_bbox = v["boxes"][:, 1:] # num_boxes x 4
+                tgt_bboxes_list.append(tgt_bbox)
                 batch_ind = i + torch.zeros(num_boxes, 1, dtype=tgt_bbox.dtype, device=tgt_bbox.device)
                 image_h, image_w = h * self.downsample_rate, w * self.downsample_rate
-                image_box = torch.cat([
-                    torch.zeros(num_boxes, 1, dtype=tgt_bbox.dtype, device=tgt_bbox.device),
-                    torch.zeros(num_boxes, 1, dtype=tgt_bbox.dtype, device=tgt_bbox.device),
-                    image_w + torch.zeros(num_boxes, 1, dtype=tgt_bbox.dtype, device=tgt_bbox.device),
-                    image_h + torch.zeros(num_boxes, 1, dtype=tgt_bbox.dtype, device=tgt_bbox.device)
-                ], dim=-1)
-                box_context_imap = generate_intersection_map(tgt_bbox, image_box, self.pool_size)
-                this_object_features = torch.cat([
-                    self.object_roi_pool(src, torch.cat([batch_ind, tgt_bbox], dim=-1)),
-                    src, y * box_context_imap
-                ], dim=1)
-        print(num_boxes)
-        print(this_object_features.shape)
-        AssertionError
+                if self.context_concat:
+                    context_features = self.context_feature_extract(src)
+                    image_box = torch.cat([
+                        torch.zeros(num_boxes, 1, dtype=tgt_bbox.dtype, device=tgt_bbox.device),
+                        torch.zeros(num_boxes, 1, dtype=tgt_bbox.dtype, device=tgt_bbox.device),
+                        image_w + torch.zeros(num_boxes, 1, dtype=tgt_bbox.dtype, device=tgt_bbox.device),
+                        image_h + torch.zeros(num_boxes, 1, dtype=tgt_bbox.dtype, device=tgt_bbox.device)
+                    ], dim=-1)
+                    box_context_imap = generate_intersection_map(tgt_bbox, image_box, self.pool_size)
+                    this_context_features = self.context_roi_pool(context_features, torch.cat([batch_ind, image_box], dim=-1))
+                    x, y = this_context_features.chunk(2, dim=1)
+                    this_object_features = self.object_feature_fuse(
+                        torch.cat([
+                        self.object_roi_pool(
+                            features = src,
+                            rois = torch.cat([batch_ind, tgt_bbox], dim=-1)
+                        ),
+                        x, y * box_context_imap
+                        ], dim=1)
+                    )
+                else:
+                    this_object_features = self.object_roi_pool(
+                                                features = src,
+                                                rois = torch.cat([batch_ind, tgt_bbox], dim=-1)
+                                            )
+                this_object_features_list.append(this_object_features)
+        input_object_features = torch.cat(this_object_features_list, dim=0).unsqueeze(2)
+        tgt_bboxes = torch.cat(tgt_bboxes_list)
+        # print("input_object_features.shape: ", input_object_features.shape)
+        # print("input_object_features: ", input_object_features[0, 0,:,:])
 
-        
+        assert sum(num_boxes_per_batch_idx) == len(input_object_features)
+        if sum(num_boxes_per_batch_idx) == 0: #only works for ava
+            out = {'pred_logits': torch.zeros(bs, self.num_queries, self.num_classes, device=tgt_bbox.device),
+                   'pred_boxes': torch.zeros(bs, self.num_queries, 4, device=tgt_bbox.device),
+                   'pred_logits_b': torch.zeros(bs, self.num_queries, 3, device=tgt_bbox.device),
+                   }
+            return out
         # print(len(targets))
         # print(tgt_bbox.shape, features[0].tensors.shape)
-
-        hs = self.transformer(self.input_proj(src), mask, self.query_embed.weight, pos[-1])[0]
-
+        mask = torch.ones(input_object_features.size(0), 1, self.pool_size, self.pool_size, device=input_object_features.device)<1
+        pos = self.position_encoding(NestedTensor(input_object_features, mask))
+        hs = self.transformer(self.input_proj(input_object_features), mask, self.query_embed.weight, pos)[0] # layer_num, num_boxes(sum over all batch), num_query, hidden_dim
+        # hs = self.transformer(self.input_proj(src), mask, self.query_embed.weight, pos[-1])[0]
         if self.dataset_mode == 'ava':
             outputs_class_b = self.class_embed_b(hs)
         else:
             outputs_class_b = self.class_embed_b(self.avg_s(xt).squeeze(-1).squeeze(-1).squeeze(-1))
             outputs_class_b = outputs_class_b.unsqueeze(0).repeat(6, 1, 1)
-        #############momentum
-        lay_n, bs, nb, dim = hs.shape
+        ############# momentum
+        lay_n, boxes, nb, dim = hs.shape #bs: no longer a batch size;--> boxes
 
         src_c = self.class_proj(xt)
 
-        hs_t_agg = hs.contiguous().view(lay_n, bs, 1, nb, dim)
+        hs_t_agg = hs.view(lay_n, boxes, 1, nb, dim).contiguous()
+        # src_flatten = src_c.view(1, bs, self.hidden_dim, -1).repeat(lay_n, 1, 1, 1).view(lay_n * bs, self.hidden_dim, -1).permute(2, 0, 1).contiguous()
+        src_flatten = src_c.view(1, bs, self.hidden_dim, -1).repeat(lay_n, 1, 1, 1)
+        src_flatten_ = list(src_flatten.chunk(bs, dim=1)) # 6, bs, 256, -1
+        for i, num_boxes in enumerate(num_boxes_per_batch_idx):
+            src_flatten_[i] = src_flatten_[i].repeat(1, num_boxes, 1, 1)
+        src_flatten = torch.cat(src_flatten_, dim=1).view(lay_n * boxes, self.hidden_dim, -1).permute(2, 0, 1).contiguous()
 
-        src_flatten = src_c.view(1, bs, self.hidden_dim, -1).repeat(lay_n, 1, 1, 1).view(lay_n * bs, self.hidden_dim, -1).permute(2, 0, 1).contiguous()
         if not self.is_swin:
             src_flatten, _ = self.encoder(src_flatten, orig_shape=src_c.shape)
 
-        hs_query = hs_t_agg.view(lay_n * bs, nb, dim).permute(1, 0, 2).contiguous()
+        hs_query = hs_t_agg.view(lay_n * boxes, nb, dim).permute(1, 0, 2).contiguous()
         q_class = self.cross_attn(hs_query, src_flatten, src_flatten)[0]
-        q_class = q_class.permute(1, 0, 2).contiguous().view(lay_n, bs, nb, self.hidden_dim)
+        q_class = q_class.permute(1, 0, 2).contiguous().view(lay_n, boxes, nb, self.hidden_dim)
 
         outputs_class = self.class_fc(self.dropout(q_class))
-        outputs_coord = self.bbox_embed(hs).sigmoid()
+        # outputs_coord = self.bbox_embed(hs).sigmoid()
+        outputs_coord = tgt_bboxes.repeat(nb, 1).view(boxes, nb, 4).unsqueeze(0) #need to check the order of the axis
 
         out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1], 'pred_logits_b': outputs_class_b[-1],}
         if self.aux_loss:

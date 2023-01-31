@@ -148,9 +148,9 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
                     outputs = model(samples, lfb_features)
             else:
                 # outputs = model(samples)
-                outputs = model(targets, samples)
-        if not math.isfinite(outputs["pred_logits"][0].data.cpu().numpy()[0,0]):
-            print(outputs["pred_logits"][0].data.cpu().numpy())
+                outputs = model(targets, samples) # to use DETR_GT
+        # if not math.isfinite(outputs["pred_logits"][0].data.cpu().numpy()[0,0]):
+            # print(outputs["pred_logits"][0].data.cpu().numpy())
         loss_dict = criterion(outputs, targets)
         # loss_dict, sidx = criterion(outputs, targets)
         weight_dict = criterion.weight_dict

@@ -94,7 +94,7 @@ def main_worker(cfg):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train video action recognition transformer models.')
     parser.add_argument('--config-file',
-                        default='/xxx/TubeR_AVA_v2.1_CSN-152.yaml',
+                        default='./configuration/TubeR_CSN50_AVA21.yaml',
                         help='path to config file.')
     args = parser.parse_args()
 
