@@ -27,7 +27,7 @@ CONFIG:
     USE_WARMUP: True
     WARMUP_START_LR: 1e-5
     WARMUP_EPOCHS: 4
-    LR_MILESTONE: [ 40, 80 ]
+    LR_MILESTONE: [10, 15] #[ 40, 80 ]
     STEP: 0.1
     OPTIMIZER:
       NAME: SGD
@@ -43,7 +43,6 @@ CONFIG:
     LABEL_PATH: '/home/nsml/assets/ava_action_list_v2.1_for_activitynet_2018.pbtxt'
     ANNO_PATH: '/home/nsml/assets/ava_{}_v21.json'
     DATA_PATH: '/mnt/tmp/frames/{}/'
-    # DATA_PATH: '/mnt/tmp/ava/frames/{}/'
     NUM_CLASSES: 80
     MULTIGRID: False
     IMG_SIZE: 256

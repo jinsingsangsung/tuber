@@ -1,7 +1,7 @@
 DDP_CONFIG:
   WORLD_SIZE: 1
   WORLD_RANK: 0
-  GPU_WORLD_SIZE: 8
+  GPU_WORLD_SIZE: 4
   GPU_WORLD_RANK: 0
   DIST_URL: 'tcp://{}:11588'
   WOLRD_URLS: ['{}']
@@ -36,6 +36,7 @@ CONFIG:
   VAL:
     BATCH_SIZE: 1
     FREQ: 2
+    PUT_GT: False
 
   DATA:
     DATASET_NAME: 'ava'
@@ -72,8 +73,8 @@ CONFIG:
     PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_152_ft_kinetics_from_ig65m_f126851907.mat"
     PRETRAIN_TRANSFORMER_DIR: "../pretrained_models/transformer/detr.pth"
     PRETRAINED_PATH: "../pretrained_models/main/TubeR_CSN152_AVA22.pth"
-    LOAD: True
-    LOAD_FC: True
+    LOAD: False
+    LOAD_FC: False
     LOAD_DETR: False
 
   MATCHER:
@@ -101,4 +102,5 @@ CONFIG:
     EVAL_DIR: '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/AVA_Tuber/eval'
     SAVE_FREQ: 1
     RES_DIR: 'tmp4_train'
+    EXP_NAME: cls_only
     DISPLAY_FREQ: 1000

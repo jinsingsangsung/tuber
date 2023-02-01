@@ -11,7 +11,7 @@ DDP_CONFIG:
   DISTRIBUTED: True
 
 CONFIG:
-  EVAL_ONLY: True
+  EVAL_ONLY: False
   TWO_STREAM: False
   USE_LFB: False
   USE_LOCATION: False
@@ -73,9 +73,9 @@ CONFIG:
     PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_152_ft_kinetics_from_ig65m_f126851907.mat"
     PRETRAIN_TRANSFORMER_DIR: "../pretrained_models/transformer/detr.pth"
     PRETRAINED_PATH: "../pretrained_models/main/TubeR_CSN152_AVA21.pth"
-    LOAD: True
-    LOAD_FC: True
-    LOAD_DETR: True
+    LOAD: False
+    LOAD_FC: False
+    LOAD_DETR: False
 
   MATCHER:
     COST_CLASS: 12
@@ -102,4 +102,5 @@ CONFIG:
     EVAL_DIR: '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/AVA_Tuber/eval'
     SAVE_FREQ: 1
     RES_DIR: 'tmp3_train'
+    EXP_NAME: cls_only
     DISPLAY_FREQ: 1000
