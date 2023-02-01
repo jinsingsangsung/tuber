@@ -180,7 +180,7 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
 
         if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
             if idx % cfg.CONFIG.LOG.DISPLAY_FREQ == 0:
-                print_string = 'Epoch: [{0}][{1}/{2}]'.format(epoch, idx + 1, len(data_loader))
+                print_string = '(train) Epoch: [{0}][{1}/{2}]'.format(epoch, idx + 1, len(data_loader))
                 print(print_string)
                 for param in optimizer.param_groups:
                     lr = param['lr']
@@ -398,7 +398,7 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
 
         if (cfg.DDP_CONFIG.GPU_WORLD_RANK == 0):
             if idx % cfg.CONFIG.LOG.DISPLAY_FREQ == 0:
-                print_string = 'Epoch: [{0}][{1}/{2}]'.format(epoch, idx + 1, len(data_loader))
+                print_string = '(val) Epoch: [{0}][{1}/{2}]'.format(epoch, idx + 1, len(data_loader))
                 print(print_string)
                 print_string = 'data_time: {data_time:.3f}, batch time: {batch_time:.3f}'.format(
                     data_time=data_time.val,
