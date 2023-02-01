@@ -373,7 +373,7 @@ class DETR_GT(nn.Module):
         if self.aux_loss:
             out['aux_outputs'] = self._set_aux_loss(outputs_class, outputs_coord, outputs_class_b)
 
-        return out
+        return out, num_boxes_per_batch_idx
     @torch.jit.unused
     def _set_aux_loss(self, outputs_class, outputs_coord, outputs_class_b):
         # this is a workaround to make torchscript happy, as torchscript

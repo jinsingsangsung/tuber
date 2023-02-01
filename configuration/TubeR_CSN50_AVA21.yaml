@@ -103,4 +103,5 @@ CONFIG:
     EVAL_DIR: '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/AVA_Tuber/eval'
     SAVE_FREQ: 1
     RES_DIR: 'tmp2_train'
+    EXP_NAME: cls_only
     DISPLAY_FREQ: 1000

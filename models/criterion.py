@@ -463,8 +463,10 @@ class PostProcessAVA(nn.Module):
 
         out_logits_b, out_logits, out_bbox = outputs['pred_logits_b'], outputs['pred_logits'], outputs['pred_boxes']
 
-
-        assert len(out_logits) == len(target_sizes)
+        # print("out_logits shape: ", out_logits.shape)
+        # print("target_sizes shape: ", target_sizes.shape)
+        ## TODO: need to uncomment below
+        # assert len(out_logits) == len(target_sizes) # out_logit이 sum of num_boxes over batches 개수임
         assert target_sizes.shape[1] == 2
 
 

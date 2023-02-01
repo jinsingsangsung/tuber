@@ -148,7 +148,7 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
                     outputs = model(samples, lfb_features)
             else:
                 # outputs = model(samples)
-                outputs = model(targets, samples) # to use DETR_GT
+                outputs, _ = model(targets, samples) # to use DETR_GT
         # if not math.isfinite(outputs["pred_logits"][0].data.cpu().numpy()[0,0]):
             # print(outputs["pred_logits"][0].data.cpu().numpy())
         loss_dict = criterion(outputs, targets)
@@ -336,7 +336,8 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
                 else:
                     outputs = model(samples, lfb_features)
             else:
-                outputs = model(samples)
+                # outputs = model(samples)
+                outputs, num_boxes_per_batch_idx = model(targets, samples)
 
         loss_dict = criterion(outputs, targets)
 
@@ -344,9 +345,14 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
 
         orig_target_sizes = torch.stack([t["size"] for t in targets], dim=0)
         scores, boxes, output_b = postprocessors['bbox'](outputs, orig_target_sizes)
-        for bidx in range(scores.shape[0]):
-            frame_id = batch_id[bidx][0]
-            key_pos = batch_id[bidx][1]
+        for bidx in range(scores.shape[0]): 
+            batch_pointer = 0
+            if bidx >= num_boxes_per_batch_idx[batch_pointer]:
+                batch_pointer += 1
+            # frame_id = batch_id[bidx][0]
+            # key_pos = batch_id[bidx][1]
+            frame_id = batch_id[batch_pointer][0]
+            key_pos = batch_id[batch_pointer][1]
 
             if not cfg.CONFIG.MODEL.SINGLE_FRAME:
                 out_key_pos = key_pos // cfg.CONFIG.MODEL.DS_RATE
@@ -362,11 +368,14 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
             for l in range(cfg.CONFIG.MODEL.QUERY_NUM):
                 buff_id.extend([frame_id])
 
-            raw_idx = (targets[bidx]["raw_boxes"][:, 1] == key_pos).nonzero().squeeze()
+            # raw_idx = (targets[bidx]["raw_boxes"][:, 1] == key_pos).nonzero().squeeze()
+            raw_idx = (targets[batch_pointer]["raw_boxes"][:, 1] == key_pos).nonzero().squeeze()
 
-            val_label = targets[bidx]["labels"][raw_idx]
+            # val_label = targets[bidx]["labels"][raw_idx]
+            val_label = targets[batch_pointer]["labels"][raw_idx]
             val_label = val_label.reshape(-1, val_label.shape[-1])
-            raw_boxes = targets[bidx]["raw_boxes"][raw_idx]
+            # raw_boxes = targets[bidx]["raw_boxes"][raw_idx]
+            raw_boxes = targets[batch_pointer]["raw_boxes"][raw_idx]
             raw_boxes = raw_boxes.reshape(-1, raw_boxes.shape[-1])
             # print('raw_boxes',raw_boxes.shape)
 
@@ -380,6 +389,7 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
                            range(len(raw_boxes))]
 
             buff_GT_id.extend(img_id_item)
+            
 
         batch_time.update(time.time() - end)
         end = time.time()
@@ -608,8 +618,8 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
 
         orig_target_sizes = torch.stack([t["size"] for t in targets], dim=0)
         scores, boxes, output_b = postprocessors['bbox'](outputs, orig_target_sizes)
+        
         for bidx in range(scores.shape[0]):
-
             if len(targets[bidx]["raw_boxes"]) == 0:
                 continue
 
