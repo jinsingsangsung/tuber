@@ -157,7 +157,9 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
         if epoch > cfg.CONFIG.LOSS_COFS.WEIGHT_CHANGE:
             weight_dict['loss_ce'] = cfg.CONFIG.LOSS_COFS.LOSS_CHANGE_COF
 
-        losses = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
+        # losses = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
+        losses = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if (k in weight_dict and "bbox" not in k and "giou" not in k))
+        # loss_dict.keys(): dict_keys(['loss_ce', 'loss_ce_b', 'class_error', 'loss_bbox', 'loss_giou'])  
 
         optimizer.zero_grad()
         # optimizer_c.zero_grad()
