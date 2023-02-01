@@ -4,7 +4,8 @@ This repo copied the supported code of [TubeR: Tubelet Transformer for Video Act
 
 ```
 # execute for nsml setup
-sh nsml_setup.sh
+sh nsml_setup_a100.sh
+sh nsml_setup_v100.sh
 
 # example running command
 python3 train_tuber_ava.py --config-file ./configuration/TubeR_CSN152_AVA21.yaml
