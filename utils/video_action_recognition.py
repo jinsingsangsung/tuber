@@ -251,7 +251,7 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
             })
     try:
         # Report JSON data to the NSML metric API server with a simple HTTP POST request.
-        requests.post(os.environ['NSML_METRIC_API'], data=metrics_data).raise_for_status()
+        requests.post(os.environ['NSML_METRIC_API'], data=metrics_data)
     except requests.exceptions.RequestException:
         # Sometimes, the HTTP request might fail, but the training process should not be stopped.
         traceback.print_exc()
@@ -524,7 +524,7 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
             })
     try:
         # Report JSON data to the NSML metric API server with a simple HTTP POST request.
-        requests.post(os.environ['NSML_METRIC_API'], data=metrics_data).raise_for_status()
+        requests.post(os.environ['NSML_METRIC_API'], data=metrics_data)
     except requests.exceptions.RequestException:
         # Sometimes, the HTTP request might fail, but the training process should not be stopped.
         traceback.print_exc()    
