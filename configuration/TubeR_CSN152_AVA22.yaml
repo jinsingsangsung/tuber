@@ -75,7 +75,7 @@ CONFIG:
     PRETRAINED_PATH: "../pretrained_models/main/TubeR_CSN152_AVA22.pth"
     LOAD: False
     LOAD_FC: False
-    LOAD_DETR: False
+    LOAD_DETR: True
 
   MATCHER:
     COST_CLASS: 12
