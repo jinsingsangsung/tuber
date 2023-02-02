@@ -520,7 +520,7 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
             'val_loss_giou': losses_giou.avg,
             'val_loss_ce': losses_ce.avg,
             'val_loss_ce_b': losses_ce_b.avg,
-            'val_mAP': mAP[0]
+            'val_mAP': Map_
             })
     try:
         # Report JSON data to the NSML metric API server with a simple HTTP POST request.
