@@ -475,6 +475,7 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
         for x in range(len(buff_GT_id)):
             data = np.concatenate([buff_GT_anno[x], buff_GT_label[x]])
             f.write("{} {}\n".format(buff_GT_id[x], data.tolist()))
+    print("tmp files are all loaded")
 
     # write files and align all workers
     torch.distributed.barrier()
