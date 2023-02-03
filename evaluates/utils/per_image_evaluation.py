@@ -25,41 +25,6 @@ import numpy as np
 import evaluates.utils.np_box_list as np_box_list
 import evaluates.utils.np_box_list_ops as np_box_list_ops
 
-import copy
-
-def detected_class_corrector(
-    detected_boxes,
-    detected_class_labels,
-    detected_scores,
-    groundtruth_boxes,
-    groundtruth_class_labels,
-    groundtruth_is_group_of_list): # copied from _get_overlaps_and_scores_box_mode()
-
-  detected_boxlist = np_box_list.BoxList(detected_boxes)
-  gt_non_group_of_boxlist = np_box_list.BoxList(
-      groundtruth_boxes[~groundtruth_is_group_of_list])
-  iou = np_box_list_ops.iou(detected_boxlist, gt_non_group_of_boxlist)
-  if iou.shape[1] > 0:
-    max_overlap_gt_ids = np.argmax(iou, axis=1) # which gt box does the detected box indicate?
-    # new_labels = copy.deepcopy(detected_class_labels)
-    new_scores = copy.deepcopy(detected_scores)
-    for i, label in enumerate(detected_class_labels):
-      if iou[i, max_overlap_gt_ids[i]] >= 0.8 and groundtruth_class_labels[max_overlap_gt_ids[i]] == label:
-        # new_labels[i] = groundtruth_class_labels[max_overlap_gt_ids[i]]
-        new_scores[i] = 1.0
-    corrected_detected_scores = np.array(new_scores)
-    # print("iou shape: ", iou.shape)
-    # print("max_overlap_gt_ids shape: ", max_overlap_gt_ids.shape)
-    # how_many_are_corrected = (detected_class_labels == corrected_detected_class_labels)
-    # print("amount of correction: ", len(how_many_are_corrected) - sum(how_many_are_corrected), '/', len(how_many_are_corrected))
-    # print("detected_class_labels: ", detected_class_labels)
-    # print("corrected_detected_class_labels: ", corrected_detected_class_labels)
-
-  else:
-    # corrected_detected_scores = detected_scores
-    corrected_detected_scores = np.zeros_like(detected_scores)
-
-  return corrected_detected_scores
 
 class PerImageEvaluation(object):
   """Evaluate detection result of a single image."""
@@ -126,8 +91,7 @@ class PerImageEvaluation(object):
 
     ## in order to replace the class label of the detection box, the things should happen here:
     ## replace detected_class_labels with GT labels of the box with the highest IoU: line below
-    # detected_class_labels = detected_class_corrector(detected_boxes, detected_class_labels, detected_scores, groundtruth_boxes, groundtruth_class_labels, groundtruth_is_group_of_list)
-    # detected_scores = detected_class_corrector(detected_boxes, detected_class_labels, detected_scores, groundtruth_boxes, groundtruth_class_labels, groundtruth_is_group_of_list)
+
     # print("------------------------------------------------")
     # print("length of detected_boxes: ", len(detected_boxes))
     # print("length of detected_scores: ", len(detected_scores))

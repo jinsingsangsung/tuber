@@ -16,6 +16,9 @@ from evaluates.evaluate_ava import STDetectionEvaluater, STDetectionEvaluaterSin
 from evaluates.evaluate_ucf import STDetectionEvaluaterUCF
 import tqdm
 
+import requests
+import traceback
+
 def merge_jsons(result_dict, key, output_arr, gt_arr):
     if key not in result_dict.keys():
         result_dict[key] = {"preds": output_arr, "gts": gt_arr}
@@ -145,8 +148,8 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
                     outputs = model(samples, lfb_features)
             else:
                 outputs = model(samples)
-        if not math.isfinite(outputs["pred_logits"][0].data.cpu().numpy()[0,0]):
-            print(outputs["pred_logits"][0].data.cpu().numpy())
+        # if not math.isfinite(outputs["pred_logits"][0].data.cpu().numpy()[0,0]):
+            # print(outputs["pred_logits"][0].data.cpu().numpy())
         loss_dict = criterion(outputs, targets)
         # loss_dict, sidx = criterion(outputs, targets)
         weight_dict = criterion.weight_dict
@@ -154,6 +157,8 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
             weight_dict['loss_ce'] = cfg.CONFIG.LOSS_COFS.LOSS_CHANGE_COF
 
         losses = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
+        # losses = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if (k in weight_dict and "bbox" not in k and "giou" not in k))
+        # loss_dict.keys(): dict_keys(['loss_ce', 'loss_ce_b', 'class_error', 'loss_bbox', 'loss_giou'])  
 
         optimizer.zero_grad()
         # optimizer_c.zero_grad()
@@ -173,16 +178,17 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
         # batch_bar.update()
 
         if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
-            print_string = 'Epoch: [{0}][{1}/{2}]'.format(epoch, idx + 1, len(data_loader))
-            print(print_string)
-            for param in optimizer.param_groups:
-                lr = param['lr']
-            print('lr: ', lr)
+            if idx % cfg.CONFIG.LOG.DISPLAY_FREQ == 0:
+                print_string = '(train) Epoch: [{0}][{1}/{2}]'.format(epoch, idx + 1, len(data_loader))
+                print(print_string)
+                for param in optimizer.param_groups:
+                    lr = param['lr']
+                print('lr: ', lr)
 
-            print_string = 'data_time: {data_time:.3f}, batch time: {batch_time:.3f}'.format(
-                data_time=data_time.val,
-                batch_time=batch_time.val)
-            print(print_string)
+                print_string = 'data_time: {data_time:.3f}, batch time: {batch_time:.3f}'.format(
+                    data_time=data_time.val,
+                    batch_time=batch_time.val)
+                print(print_string)
 
             # reduce on single GPU
             loss_dict_reduced = loss_dict
@@ -213,17 +219,17 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
             # metric_logger.update(loss=loss_value, **loss_dict_reduced_scaled, **loss_dict_reduced_unscaled)
             # metric_logger.update(class_error=loss_dict_reduced['class_error'])
             # metric_logger.update(lr=optimizer.param_groups[0]["lr"])
-
-            print_string = 'class_error: {class_error:.3f}, loss: {loss:.3f}, loss_bbox: {loss_bbox:.3f}, loss_giou: {loss_giou:.3f}, loss_ce: {loss_ce:.3f}, loss_ce_b: {loss_ce_b:.3f}'.format(
-                class_error=class_err.avg,
-                loss=losses_avg.avg,
-                loss_bbox=losses_box.avg,
-                loss_giou=losses_giou.avg,
-                loss_ce=losses_ce.avg,
-                loss_ce_b=losses_ce_b.avg,
-                # cardinality_error=loss_dict_reduced['cardinality_error']
-            )
-            print(print_string)
+            if idx % cfg.CONFIG.LOG.DISPLAY_FREQ == 0:
+                print_string = 'class_error: {class_error:.3f}, loss: {loss:.3f}, loss_bbox: {loss_bbox:.3f}, loss_giou: {loss_giou:.3f}, loss_ce: {loss_ce:.3f}, loss_ce_b: {loss_ce_b:.3f}'.format(
+                    class_error=class_err.avg,
+                    loss=losses_avg.avg,
+                    loss_bbox=losses_box.avg,
+                    loss_giou=losses_giou.avg,
+                    loss_ce=losses_ce.avg,
+                    loss_ce_b=losses_ce_b.avg,
+                    # cardinality_error=loss_dict_reduced['cardinality_error']
+                )
+                print(print_string)
 
             writer.add_scalar('train/class_error', class_err.avg, idx + epoch * len(data_loader))
             writer.add_scalar('train/totall_loss', losses_avg.avg, idx + epoch * len(data_loader))
@@ -231,6 +237,23 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
             writer.add_scalar('train/loss_giou', losses_giou.avg, idx + epoch * len(data_loader))
             writer.add_scalar('train/loss_ce', losses_ce.avg, idx + epoch * len(data_loader))
             writer.add_scalar('train/loss_ce_b', losses_ce_b.avg, idx + epoch * len(data_loader))
+    
+    metrics_data = json.dumps({
+            '@epoch': epoch,
+            '@step': epoch, # actually epoch
+            '@time': time.time(),
+            'class_error': class_err.avg,
+            'loss': losses_avg.avg,
+            'loss_giou': losses_giou.avg,
+            'loss_ce': losses_ce.avg,
+            'loss_ce_b': losses_ce_b.avg,
+            })
+    try:
+        # Report JSON data to the NSML metric API server with a simple HTTP POST request.
+        requests.post(os.environ['NSML_METRIC_API'], data=metrics_data)
+    except requests.exceptions.RequestException:
+        # Sometimes, the HTTP request might fail, but the training process should not be stopped.
+        traceback.print_exc()
     # batch_bar.close()
 
 @torch.no_grad()
@@ -315,6 +338,7 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
                     outputs = model(samples, lfb_features)
             else:
                 outputs = model(samples)
+                # outputs, num_boxes_per_batch_idx = model(targets, samples)
 
         loss_dict = criterion(outputs, targets)
 
@@ -322,9 +346,14 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
 
         orig_target_sizes = torch.stack([t["size"] for t in targets], dim=0)
         scores, boxes, output_b = postprocessors['bbox'](outputs, orig_target_sizes)
-        for bidx in range(scores.shape[0]):
+        for bidx in range(scores.shape[0]): 
+            # batch_pointer = 0
+            # if bidx >= num_boxes_per_batch_idx[batch_pointer]:
+                # batch_pointer += 1
             frame_id = batch_id[bidx][0]
             key_pos = batch_id[bidx][1]
+            # frame_id = batch_id[batch_pointer][0]
+            # key_pos = batch_id[batch_pointer][1]
 
             if not cfg.CONFIG.MODEL.SINGLE_FRAME:
                 out_key_pos = key_pos // cfg.CONFIG.MODEL.DS_RATE
@@ -341,10 +370,13 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
                 buff_id.extend([frame_id])
 
             raw_idx = (targets[bidx]["raw_boxes"][:, 1] == key_pos).nonzero().squeeze()
+            # raw_idx = (targets[batch_pointer]["raw_boxes"][:, 1] == key_pos).nonzero().squeeze()
 
             val_label = targets[bidx]["labels"][raw_idx]
+            # val_label = targets[batch_pointer]["labels"][raw_idx]
             val_label = val_label.reshape(-1, val_label.shape[-1])
             raw_boxes = targets[bidx]["raw_boxes"][raw_idx]
+            # raw_boxes = targets[batch_pointer]["raw_boxes"][raw_idx]
             raw_boxes = raw_boxes.reshape(-1, raw_boxes.shape[-1])
             # print('raw_boxes',raw_boxes.shape)
 
@@ -358,13 +390,14 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
                            range(len(raw_boxes))]
 
             buff_GT_id.extend(img_id_item)
+            
 
         batch_time.update(time.time() - end)
         end = time.time()
 
         if (cfg.DDP_CONFIG.GPU_WORLD_RANK == 0):
             if idx % cfg.CONFIG.LOG.DISPLAY_FREQ == 0:
-                print_string = 'Epoch: [{0}][{1}/{2}]'.format(epoch, idx + 1, len(data_loader))
+                print_string = '(val) Epoch: [{0}][{1}/{2}]'.format(epoch, idx + 1, len(data_loader))
                 print(print_string)
                 print_string = 'data_time: {data_time:.3f}, batch time: {batch_time:.3f}'.format(
                     data_time=data_time.val,
@@ -429,7 +462,7 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
     buff_binary = np.concatenate(buff_binary, axis=0)
     buff_GT_label = np.concatenate(buff_GT_label, axis=0)
     buff_GT_anno = np.concatenate(buff_GT_anno, axis=0)
-    print(buff_output.shape, buff_anno.shape, buff_binary.shape, len(buff_id), buff_GT_anno.shape, buff_GT_label.shape, len(buff_GT_id))
+    # print(buff_output.shape, buff_anno.shape, buff_binary.shape, len(buff_id), buff_GT_anno.shape, buff_GT_label.shape, len(buff_GT_id))
     
     tmp_path = '{}/{}/{}.txt'
     with open(tmp_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, cfg.DDP_CONFIG.GPU_WORLD_RANK), 'w') as f:
@@ -441,6 +474,7 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
         for x in range(len(buff_GT_id)):
             data = np.concatenate([buff_GT_anno[x], buff_GT_label[x]])
             f.write("{} {}\n".format(buff_GT_id[x], data.tolist()))
+    print("tmp files are all loaded")
 
     # write files and align all workers
     torch.distributed.barrier()
@@ -477,6 +511,23 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
         # print_string = 'person AP: {mAP:.5f}'.format(mAP=mAP[0])
         # print(print_string)
         # writer.add_scalar('val/val_person_AP_epoch', mAP[0], epoch)
+    metrics_data = json.dumps({
+            '@epoch': epoch,
+            '@step': epoch, # actually epoch
+            '@time': time.time(),
+            'val_class_error': class_err.avg,
+            'val_loss': losses_avg.avg,
+            'val_loss_giou': losses_giou.avg,
+            'val_loss_ce': losses_ce.avg,
+            'val_loss_ce_b': losses_ce_b.avg,
+            'val_mAP': Map_
+            })
+    try:
+        # Report JSON data to the NSML metric API server with a simple HTTP POST request.
+        requests.post(os.environ['NSML_METRIC_API'], data=metrics_data)
+    except requests.exceptions.RequestException:
+        # Sometimes, the HTTP request might fail, but the training process should not be stopped.
+        traceback.print_exc()    
     torch.distributed.barrier()
     time.sleep(30)
     return Map_

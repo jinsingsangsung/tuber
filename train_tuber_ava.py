@@ -94,10 +94,17 @@ def main_worker(cfg):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train video action recognition transformer models.')
     parser.add_argument('--config-file',
-                        default='/xxx/TubeR_AVA_v2.1_CSN-152.yaml',
+                        default='./configuration/TubeR_CSN50_AVA21.yaml',
                         help='path to config file.')
     args = parser.parse_args()
 
     cfg = get_cfg_defaults()
     cfg.merge_from_file(args.config_file)
+    import socket 
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.connect(("8.8.8.8", 80))
+    this_ip = s.getsockname()[0] # put this to world_url
+    cfg.DDP_CONFIG.DIST_URL = cfg.DDP_CONFIG.DIST_URL.format(this_ip)
+    cfg.DDP_CONFIG.WOLRD_URLS[0] = cfg.DDP_CONFIG.WOLRD_URLS[0].format(this_ip)
+    s.close() 
     spawn_workers(main_worker, cfg)
