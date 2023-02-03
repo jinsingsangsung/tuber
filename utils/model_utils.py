@@ -130,7 +130,9 @@ def save_checkpoint(cfg, epoch, model, max_accuracy, optimizer, lr_scheduler):
 
     model_save_dir = os.path.join(cfg.CONFIG.LOG.BASE_PATH,
                                   cfg.CONFIG.LOG.EXP_NAME,
-                                  cfg.CONFIG.LOG.SAVE_DIR)
+                                  cfg.CONFIG.LOG.SAVE_DIR,
+                                  cfg.CONFIG.LOG.SAVE_SPEC
+                                  )
     if not os.path.exists(model_save_dir):
         os.makedirs(model_save_dir)
     print('Saving model at epoch %d to %s' % (epoch, model_save_dir))

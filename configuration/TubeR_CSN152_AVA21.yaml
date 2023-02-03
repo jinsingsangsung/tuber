@@ -103,4 +103,5 @@ CONFIG:
     SAVE_FREQ: 1
     RES_DIR: 'tmp3_train'
     EXP_NAME: cls_only
+    EXP_SPEC: "csn152_ava21"
     DISPLAY_FREQ: 1000
