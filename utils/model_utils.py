@@ -107,7 +107,8 @@ def save_model(model, optimizer, epoch, cfg):
     """
     model_save_dir = os.path.join(cfg.CONFIG.LOG.BASE_PATH,
                                   cfg.CONFIG.LOG.EXP_NAME,
-                                  cfg.CONFIG.LOG.SAVE_DIR)
+                                  cfg.CONFIG.LOG.SAVE_DIR,
+                                  cfg.CONFIG.LOG.EXP_SPEC)
     if not os.path.exists(model_save_dir):
         os.makedirs(model_save_dir)
     ckpt_name = "f{}_s{}_ckpt_epoch{}.pth".format(cfg.CONFIG.DATA.CLIP_LEN, cfg.CONFIG.DATA.FRAME_RATE, epoch)
