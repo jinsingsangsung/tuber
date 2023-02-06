@@ -367,13 +367,17 @@ class DETR_GT(nn.Module):
 
         outputs_class = self.class_fc(self.dropout(q_class))
         # outputs_coord = self.bbox_embed(hs).sigmoid()
-        outputs_coord = tgt_bboxes.repeat(nb, 1).view(boxes, nb, 4).unsqueeze(0) #need to check the order of the axis
+        # outputs_coord = tgt_bboxes.repeat(nb, 1).view(boxes, nb, 4).unsqueeze(0) #need to check the order of the axis
+        outputs_coord = tgt_bboxes.unsqueeze(1).repeat(1, nb, 1).view(boxes, nb, 4).unsqueeze(0)
+        # print(outputs_coord.shape)
+        # print(outputs_coord[0, :, :3, :])
 
         out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1], 'pred_logits_b': outputs_class_b[-1],}
         if self.aux_loss:
             out['aux_outputs'] = self._set_aux_loss(outputs_class, outputs_coord, outputs_class_b)
 
         return out, num_boxes_per_batch_idx
+    
     @torch.jit.unused
     def _set_aux_loss(self, outputs_class, outputs_coord, outputs_class_b):
         # this is a workaround to make torchscript happy, as torchscript
