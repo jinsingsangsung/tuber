@@ -221,8 +221,8 @@ class DETR_GT(nn.Module):
         self.generate_lfb = generate_lfb
         self.last_stride = last_stride
 
-        self.pool_size = 7 # add this to cfg
-        self.downsample_rate = 16 # add this to cfg
+        self.pool_size = 10 # add this to cfg
+        self.downsample_rate = 15 # add this to cfg
         self.object_roi_pool = PrRoIPool2D(self.pool_size, self.pool_size, 1.0 / self.downsample_rate)
         self.context_roi_pool = PrRoIPool2D(self.pool_size, self.pool_size, 1.0 / self.downsample_rate)       
         self.context_concat = context_concat
@@ -369,8 +369,6 @@ class DETR_GT(nn.Module):
         # outputs_coord = self.bbox_embed(hs).sigmoid()
         # outputs_coord = tgt_bboxes.repeat(nb, 1).view(boxes, nb, 4).unsqueeze(0) #need to check the order of the axis
         outputs_coord = tgt_bboxes.unsqueeze(1).repeat(1, nb, 1).view(boxes, nb, 4).unsqueeze(0)
-        # print(outputs_coord.shape)
-        # print(outputs_coord[0, :, :3, :])
 
         out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1], 'pred_logits_b': outputs_class_b[-1],}
         if self.aux_loss:
