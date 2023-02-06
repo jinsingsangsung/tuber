@@ -511,23 +511,24 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
         # print_string = 'person AP: {mAP:.5f}'.format(mAP=mAP[0])
         # print(print_string)
         # writer.add_scalar('val/val_person_AP_epoch', mAP[0], epoch)
-    metrics_data = json.dumps({
-            '@epoch': epoch,
-            '@step': epoch, # actually epoch
-            '@time': time.time(),
-            'val_class_error': class_err.avg,
-            'val_loss': losses_avg.avg,
-            'val_loss_giou': losses_giou.avg,
-            'val_loss_ce': losses_ce.avg,
-            'val_loss_ce_b': losses_ce_b.avg,
-            'val_mAP': Map_
-            })
-    try:
-        # Report JSON data to the NSML metric API server with a simple HTTP POST request.
-        requests.post(os.environ['NSML_METRIC_API'], data=metrics_data)
-    except requests.exceptions.RequestException:
-        # Sometimes, the HTTP request might fail, but the training process should not be stopped.
-        traceback.print_exc()    
+    if Map_ != 0:
+        metrics_data = json.dumps({
+                '@epoch': epoch,
+                '@step': epoch, # actually epoch
+                '@time': time.time(),
+                'val_class_error': class_err.avg,
+                'val_loss': losses_avg.avg,
+                'val_loss_giou': losses_giou.avg,
+                'val_loss_ce': losses_ce.avg,
+                'val_loss_ce_b': losses_ce_b.avg,
+                'val_mAP': Map_
+                })
+        try:
+            # Report JSON data to the NSML metric API server with a simple HTTP POST request.
+            requests.post(os.environ['NSML_METRIC_API'], data=metrics_data)
+        except requests.exceptions.RequestException:
+            # Sometimes, the HTTP request might fail, but the training process should not be stopped.
+            traceback.print_exc()    
     torch.distributed.barrier()
     time.sleep(30)
     return Map_

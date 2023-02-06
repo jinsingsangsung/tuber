@@ -356,8 +356,8 @@ class PerImageEvaluation(object):
          groundtruth_is_group_of_list=groundtruth_is_group_of_list)
 
     if groundtruth_boxes.size == 0:
-      # return scores, np.zeros(num_detected_boxes, dtype=bool)
-      return np.zeros_like(scores), np.zeros(num_detected_boxes, dtype=bool)
+      return scores, np.zeros(num_detected_boxes, dtype=bool)
+      # return np.zeros_like(scores), np.zeros(num_detected_boxes, dtype=bool)
 
     tp_fp_labels = np.zeros(num_detected_boxes, dtype=bool)
     is_matched_to_difficult_box = np.zeros(num_detected_boxes, dtype=bool)
@@ -384,8 +384,8 @@ class PerImageEvaluation(object):
               is_gt_box_detected[gt_id] = True
           else:
             is_matched_to_difficult_box[i] = True
-        else:
-          scores[i] = 0 # no box - no score
+        # else:
+        #   scores[i] = 0 # no box - no score
 
     return scores[~is_matched_to_difficult_box
                   & ~is_matched_to_group_of_box], tp_fp_labels[
