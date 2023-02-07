@@ -21,6 +21,7 @@ from models.criterion import SetCriterion, PostProcess, SetCriterionAVA, PostPro
 from .prroi_pool import PrRoIPool2D
 from .functional import generate_intersection_map
 from models.transformer.position_encoding import build_position_encoding
+from models.decoder_only import Transformer
 import copy
 
 class DETR(nn.Module):
@@ -337,8 +338,10 @@ class DETR_GT(nn.Module):
         # print(len(targets))
         # print(tgt_bbox.shape, features[0].tensors.shape)
         mask = torch.ones(input_object_features.size(0), 1, self.pool_size, self.pool_size, device=input_object_features.device)<1
-        pos = self.position_encoding(NestedTensor(input_object_features, mask))
-        hs = self.transformer(self.input_proj(input_object_features), mask, self.query_embed.weight, pos)[0] # layer_num, num_boxes(sum over all batch), num_query, hidden_dim
+        # pos = self.position_encoding(NestedTensor(input_object_features, mask))
+        pos = self.position_encoding(NestedTensor(input_object_features, mask)).squeeze(2)
+        hs, _ = self.transformer(self.input_proj(input_object_features).squeeze(2), None, self.query_embed.weight, pos)
+        # hs = self.transformer(self.input_proj(input_object_features), mask, self.query_embed.weight, pos)[0] # layer_num, num_boxes(sum over all batch), num_query, hidden_dim
         # hs = self.transformer(self.input_proj(src), mask, self.query_embed.weight, pos[-1])[0]
         if self.dataset_mode == 'ava':
             outputs_class_b = self.class_embed_b(hs)
@@ -394,8 +397,11 @@ def build_model(cfg):
     print('num_classes', num_classes)
 
     backbone = build_backbone(cfg)
-    transformer = build_transformer(cfg)
-
+    # transformer = build_transformer(cfg)
+    transformer = Transformer(
+        d_model=cfg.CONFIG.MODEL.D_MODEL,
+        dropout=cfg.CONFIG.MODEL.DROPOUT,
+    )
     model = DETR_GT(backbone,
                  transformer,
                  num_classes=cfg.CONFIG.DATA.NUM_CLASSES,
