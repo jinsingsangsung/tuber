@@ -10,8 +10,12 @@ This branch is to reproduce the training accuracy of the official code, so small
 This repo copied the supported code of [TubeR: Tubelet Transformer for Video Action Detection](https://openaccess.thecvf.com/content/CVPR2022/papers/Zhao_TubeR_Tubelet_Transformer_for_Video_Action_Detection_CVPR_2022_paper.pdf). 
 
 ```
-# execute for nsml setup
-sh nsml_setup.sh
+# if running this code other than nsml, you can use docker image that contains pretrained models and files as well
+docker run -it -v /data02/ava:/datasets  -v /home/jinsung/tuber:/tuber --gpus all --shm-size 32g --name tuber jinsingsangsung/tuber:1.2 /bin/bash 
+
+# if running in nsml,
+sh nsml_setup # brings pretrained models
+sh nsml_setup_{gpu type} # brings AVA dataset to scratchpad
 
 # example running command
 python3 train_tuber_ava.py --config-file ./configuration/TubeR_CSN152_AVA21.yaml
