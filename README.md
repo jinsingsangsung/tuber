@@ -18,10 +18,11 @@ python3 train_tuber_ava.py --config-file ./configuration/TubeR_CSN152_AVA21.yaml
 ```
 # Reproduction result
 
-| Backbone | Pretrain |  #view | Original mAP | Reproduced mAP | config |
-| :---: | :---: |  :---: |:----:| :---: | :---: |
-| CSN-50 | Kinetics-400 | 1 view | 27.2 |  26.1 | [config](configuration/TubeR_CSN50_AVA21.yaml) |
+| Dataset | Backbone | Backbone Pretrained on | DETR trained on | #view | Original mAP | Reproduced mAP | config |
+| :---: | :---: | :-----: | :-----: |  :---: | :----: | :---: | :---: |
+| AVA 2.1 | CSN-50 | Kinetics-400 | COCO, AVA | 1 view | 27.2 |  *26.1* | [config](configuration/TubeR_CSN50_AVA21.yaml) |
 
+Still have no idea where the 1% drop comes from. 
 
 ## Citing TubeR
 ```
