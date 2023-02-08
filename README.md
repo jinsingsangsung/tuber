@@ -1,4 +1,6 @@
-# this branch is purely the reproduction code of the paper
+# main_nsml
+
+This branch is to reproduce the training accuracy of the official code, so small edit was done to debug some errors in the original code, no significant change in the model structure was added.
 
 # TubeR: Tubelet Transformer for Video Action Detection
 
