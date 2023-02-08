@@ -2,6 +2,9 @@
 
 This branch is to reproduce the training accuracy of the official code, so small edit was done to debug some errors in the original code, no significant change in the model structure was added.
 
+![Screen Shot 2023-02-08 at 10 28 56 AM](https://media.oss.navercorp.com/user/36297/files/62f540a0-e4c4-40e0-af17-88b219444bd9)
+
+
 # TubeR: Tubelet Transformer for Video Action Detection
 
 This repo copied the supported code of [TubeR: Tubelet Transformer for Video Action Detection](https://openaccess.thecvf.com/content/CVPR2022/papers/Zhao_TubeR_Tubelet_Transformer_for_Video_Action_Detection_CVPR_2022_paper.pdf). 
@@ -13,6 +16,8 @@ sh nsml_setup.sh
 # example running command
 python3 train_tuber_ava.py --config-file ./configuration/TubeR_CSN152_AVA21.yaml
 ```
+
+
 
 ## Citing TubeR
 ```
