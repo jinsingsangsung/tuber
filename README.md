@@ -1,3 +1,5 @@
+# this branch is purely the reproduction code of the paper
+
 # TubeR: Tubelet Transformer for Video Action Detection
 
 This repo copied the supported code of [TubeR: Tubelet Transformer for Video Action Detection](https://openaccess.thecvf.com/content/CVPR2022/papers/Zhao_TubeR_Tubelet_Transformer_for_Video_Action_Detection_CVPR_2022_paper.pdf). 
