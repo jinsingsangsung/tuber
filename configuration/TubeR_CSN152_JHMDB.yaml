@@ -5,8 +5,8 @@ DDP_CONFIG:
   WORLD_RANK: 0
   GPU_WORLD_SIZE: 4 #number of gpus per node * number of nodes
   GPU_WORLD_RANK: 0
-  DIST_URL: 'tcp://172.21.186.167:11588' #'tcp://127.0.0.1:11588' #'tcp://10.269.41.145:11588'
-  WOLRD_URLS: ["172.21.186.167"] #["127.0.0.1"] #["10.269.41.145"] #,'172.21.186.167'] # node
+  DIST_URL: 'tcp://{}:11588' #'tcp://127.0.0.1:11588' #'tcp://10.269.41.145:11588'
+  WOLRD_URLS: ["{}"] #["127.0.0.1"] #["10.269.41.145"] #,'172.21.186.167'] # node
   AUTO_RANK_MATCH: True
   DIST_BACKEND: 'nccl'
   GPU: 0
@@ -66,15 +66,15 @@ CONFIG:
     QUERY_NUM: 10
     NORMALIZE_BEFORE: False
     DROPOUT: 0.1
-    DS_RATE: 1 #8
+    DS_RATE: 8 #1
     TEMP_LEN: 32
     SAMPLE_RATE: 2
-    PRETRAINED: False
+    PRETRAINED: True
     PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_152_ft_kinetics_from_ig65m_f126851907.mat"
     PRETRAIN_TRANSFORMER_DIR: "../pretrained_models/transformer/detr.pth"
     PRETRAINED_PATH: "../pretrained_models/main/TubeR_CSN152_JHMDB.pth"
-    LOAD_DETR: False
-    LOAD: False
+    LOAD_DETR: True
+    LOAD: True
     LOAD_FC: True
 
   MATCHER:
@@ -102,3 +102,5 @@ CONFIG:
     EVAL_DIR: '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/JHBDM_Tuber/eval'
     SAVE_FREQ: 1
     RES_DIR: 'tmp_jhmdb'
+    DISPLAY_FREQ: 1000
+    EXP_NAME: original

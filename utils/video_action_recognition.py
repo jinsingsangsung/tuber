@@ -642,7 +642,7 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
                 buff_binary.append(output_b[..., 0])
 
             val_label = targets[bidx]["labels"]
-            val_category = torch.full((len(val_label), 21), 0)
+            val_category = torch.full((len(val_label), cfg.CONFIG.DATA.NUM_CLASSES), 0)
             for vl in range(len(val_label)):
                 label = int(val_label[vl])
                 val_category[vl, label] = 1
@@ -664,12 +664,13 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
         end = time.time()
 
         if (cfg.DDP_CONFIG.GPU_WORLD_RANK == 0):
-            print_string = 'Epoch: [{0}][{1}/{2}]'.format(epoch, idx + 1, len(data_loader))
-            print(print_string)
-            print_string = 'data_time: {data_time:.3f}, batch time: {batch_time:.3f}'.format(
-                data_time=data_time.val,
-                batch_time=batch_time.val)
-            print(print_string)
+            if idx % cfg.CONFIG.LOG.DISPLAY_FREQ == 0:
+                print_string = '(val) Epoch: [{0}][{1}/{2}]'.format(epoch, idx + 1, len(data_loader))
+                print(print_string)
+                print_string = 'data_time: {data_time:.3f}, batch time: {batch_time:.3f}'.format(
+                    data_time=data_time.val,
+                    batch_time=batch_time.val)
+                print(print_string)
 
             # reduce losses over all GPUs for logging purposes
             # loss_dict_reduced = utils.reduce_dict(loss_dict)
@@ -692,14 +693,15 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
                 print("Loss is {}, stopping eval".format(loss_value))
                 print(loss_dict_reduced)
                 exit(1)
-            print_string = 'class_error: {class_error:.3f}, loss: {loss:.3f}, loss_bbox: {loss_bbox:.3f}, loss_giou: {loss_giou:.3f}, loss_ce: {loss_ce:.3f}'.format(
-                class_error=class_err.avg,
-                loss=losses_avg.avg,
-                loss_bbox=losses_box.avg,
-                loss_giou=losses_giou.avg,
-                loss_ce=losses_ce.avg
-            )
-            print(print_string)
+            if idx % cfg.CONFIG.LOG.DISPLAY_FREQ == 0:
+                print_string = 'class_error: {class_error:.3f}, loss: {loss:.3f}, loss_bbox: {loss_bbox:.3f}, loss_giou: {loss_giou:.3f}, loss_ce: {loss_ce:.3f}'.format(
+                    class_error=class_err.avg,
+                    loss=losses_avg.avg,
+                    loss_bbox=losses_box.avg,
+                    loss_giou=losses_giou.avg,
+                    loss_ce=losses_ce.avg
+                )
+                print(print_string)
 
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
         writer.add_scalar('val/class_error', class_err.avg, epoch)
