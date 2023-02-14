@@ -1,11 +1,12 @@
-# main_nsml
+# main_all
 
-This branch is to reproduce the training accuracy of the official code, so small edit was done to debug some errors in the original code, no significant change in the model structure was added.
+This branch is to try different architectures to the video action detection task.
+Total three models are try-able:
+## TubeR: Tubelet Transformer for Video Action Detection
+## SeqFormer
+## Sparse R-CNN
 
-![Screen Shot 2023-02-08 at 10 28 56 AM](https://media.oss.navercorp.com/user/36297/files/62f540a0-e4c4-40e0-af17-88b219444bd9)
-
-
-# TubeR: Tubelet Transformer for Video Action Detection
+Note that debugging is still ongoing.
 
 This repo copied the supported code of [TubeR: Tubelet Transformer for Video Action Detection](https://openaccess.thecvf.com/content/CVPR2022/papers/Zhao_TubeR_Tubelet_Transformer_for_Video_Action_Detection_CVPR_2022_paper.pdf). 
 
@@ -18,9 +19,11 @@ sh nsml_setup # brings pretrained models
 sh nsml_setup_{gpu type} # brings AVA dataset to scratchpad
 
 # example running command
-python3 train_tuber_ava.py --config-file ./configuration/TubeR_CSN152_AVA21.yaml
+python3 train_tuber_ava.py --config-file ./configuration/TubeR_CSN50_AVA21.yaml --num_gpu 4
+python3 train_sparse_ava.py --config-file ./configuration/Sparse_CSN50_AVA21.yaml --num_gpu 4
+python3 train_seqformer_ava.py --config-file ./configuration/SeqFormer_CSN50_AVA21.yaml --num_gpu 4
 ```
-# Reproduction result
+# Reproduction result of TubeR
 
 | Dataset | Backbone | Backbone pretrained on | DETR pretrained on | #view | Original mAP | Reproduced mAP | config |
 | :---: | :---: | :-----: | :-----: |  :---: | :----: | :---: | :---: |
