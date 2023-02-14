@@ -13,7 +13,7 @@ DDP_CONFIG:
   DISTRIBUTED: True
 
 CONFIG:
-  EVAL_ONLY: True
+  EVAL_ONLY: False
   TWO_STREAM: False
   USE_LFB: False
   USE_LOCATION: False
@@ -28,7 +28,7 @@ CONFIG:
     LR_POLICY: 'step'
     USE_WARMUP: True
     WARMUP_START_LR: 1e-5
-    WARMUP_EPOCHS: 4
+    WARMUP_EPOCHS: 3
     LR_MILESTONE: [10, 15]
     STEP: 0.1
     OPTIMIZER:

@@ -56,7 +56,7 @@ class HungarianMatcher(nn.Module):
                 len(index_i) = len(index_j) = min(num_queries, num_target_boxes)
         """
 
-        bs, num_queries = outputs["pred_logits_b"].shape[:2]
+        bs, num_queries = outputs["pred_logits"].shape[:2]
 
         out_bbox = outputs["pred_boxes"].flatten(0, 1)
         # Also concat the target labels

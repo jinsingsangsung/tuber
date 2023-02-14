@@ -14,10 +14,11 @@ import math
 from .utils import AverageMeter, accuracy, calculate_mAP, read_labelmap
 from evaluates.evaluate_ava import STDetectionEvaluater, STDetectionEvaluaterSinglePerson
 from evaluates.evaluate_ucf import STDetectionEvaluaterUCF
-import tqdm
 
 import requests
 import traceback
+
+__all__ = ["merge_jsons", "train_classification", "train_tuber_detection", "validate_tuber_detection", "validate_tuber_ucf_detection"]
 
 def merge_jsons(result_dict, key, output_arr, gt_arr):
     if key not in result_dict.keys():
@@ -98,9 +99,6 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
     end = time.time()
     model.train()
     criterion.train()
-    # metric_logger = utils.MetricLogger(delimiter="  ")
-    # metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
-    # metric_logger.add_meter('class_error', utils.SmoothedValue(window_size=1, fmt='{value:.2f}'))
     header = 'Epoch: [{}]'.format(epoch)
     print_freq = 10
     # batch_bar = tqdm(total=len(data_loader), dynamic_ncols=True, leave=False, position=0, desc='train_detection')
@@ -149,9 +147,8 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
             else:
                 outputs = model(samples)
         # if not math.isfinite(outputs["pred_logits"][0].data.cpu().numpy()[0,0]):
-            # print(outputs["pred_logits"][0].data.cpu().numpy())
+        #     print(outputs["pred_logits"][0].data.cpu().numpy())
         loss_dict = criterion(outputs, targets)
-        # loss_dict, sidx = criterion(outputs, targets)
         weight_dict = criterion.weight_dict
         if epoch > cfg.CONFIG.LOSS_COFS.WEIGHT_CHANGE:
             weight_dict['loss_ce'] = cfg.CONFIG.LOSS_COFS.LOSS_CHANGE_COF
@@ -216,9 +213,6 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
                 print(loss_dict_reduced)
                 exit(1)
 
-            # metric_logger.update(loss=loss_value, **loss_dict_reduced_scaled, **loss_dict_reduced_unscaled)
-            # metric_logger.update(class_error=loss_dict_reduced['class_error'])
-            # metric_logger.update(lr=optimizer.param_groups[0]["lr"])
             if idx % cfg.CONFIG.LOG.DISPLAY_FREQ == 0:
                 print_string = 'class_error: {class_error:.3f}, loss: {loss:.3f}, loss_bbox: {loss_bbox:.3f}, loss_giou: {loss_giou:.3f}, loss_ce: {loss_ce:.3f}, loss_ce_b: {loss_ce_b:.3f}'.format(
                     class_error=class_err.avg,
@@ -226,8 +220,6 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
                     loss_bbox=losses_box.avg,
                     loss_giou=losses_giou.avg,
                     loss_ce=losses_ce.avg,
-                    loss_ce_b=losses_ce_b.avg,
-                    # cardinality_error=loss_dict_reduced['cardinality_error']
                 )
                 print(print_string)
 
@@ -743,16 +735,24 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
         print(mAP)
         writer.add_scalar('val/val_mAP_epoch', mAP[0], epoch)
         Map_ = mAP[0]
+    if Map_ != 0:
+        metrics_data = json.dumps({
+                '@epoch': epoch,
+                '@step': epoch, # actually epoch
+                '@time': time.time(),
+                'val_class_error': class_err.avg,
+                'val_loss': losses_avg.avg,
+                'val_loss_giou': losses_giou.avg,
+                'val_loss_ce': losses_ce.avg,
+                'val_loss_ce_b': losses_ce_b.avg,
+                'val_mAP': Map_
+                })
+        try:
+            # Report JSON data to the NSML metric API server with a simple HTTP POST request.
+            requests.post(os.environ['NSML_METRIC_API'], data=metrics_data)
+        except requests.exceptions.RequestException:
+            # Sometimes, the HTTP request might fail, but the training process should not be stopped.
+            traceback.print_exc()  
 
-        # evaluater = STDetectionEvaluaterSinglePerson(cfg.CONFIG.DATA.LABEL_PATH)
-        # file_path_lst = [tmp_GT_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, x) for x in range(cfg.DDP_CONFIG.GPU_WORLD_SIZE)]
-        # evaluater.load_GT_from_path(file_path_lst)
-        # file_path_lst = [tmp_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, x) for x in range(cfg.DDP_CONFIG.GPU_WORLD_SIZE)]
-        # evaluater.load_detection_from_path(file_path_lst)
-        # mAP, metrics = evaluater.evaluate()
-        # print(metrics)
-        # print_string = 'person AP: {mAP:.5f}'.format(mAP=mAP[0])
-        # print(print_string)
-        # writer.add_scalar('val/val_person_AP_epoch', mAP[0], epoch)
     torch.distributed.barrier()
     return Map_

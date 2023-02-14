@@ -5,7 +5,7 @@ import time
 import torch
 import torch.optim
 from tensorboardX import SummaryWriter
-
+from models.tuber_ava import build_model
 from utils.model_utils import deploy_model, load_model, save_checkpoint
 from utils.video_action_recognition import train_tuber_detection, validate_tuber_detection
 from pipelines.video_action_recognition_config import get_cfg_defaults
@@ -27,10 +27,6 @@ def main_worker(cfg):
     # create model
     print('Creating TubeR model: %s' % cfg.CONFIG.MODEL.NAME)
     print(cfg.CONFIG.MODEL.SINGLE_FRAME)
-    if not cfg.CONFIG.MODEL.SparseRCNN.USE:
-        from models.tuber_ava import build_model
-    else:
-        from models.sparse_ava import build_model
     model, criterion, postprocessors = build_model(cfg)
     model = deploy_model(model, cfg, is_tuber=True)
     num_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -100,10 +96,12 @@ if __name__ == '__main__':
     parser.add_argument('--config-file',
                         default='./configuration/TubeR_CSN50_AVA21.yaml',
                         help='path to config file.')
+    parser.add_argument('--num_gpu', default=4, type=int)
     args = parser.parse_args()
 
     cfg = get_cfg_defaults()
     cfg.merge_from_file(args.config_file)
+    cfg.DDP_CONFIG.GPU_WORLD_SIZE = args.num_gpu
     import socket 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.connect(("8.8.8.8", 80))

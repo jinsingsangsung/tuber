@@ -85,9 +85,9 @@ def main_worker(cfg):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train video action recognition transformer models.')
     parser.add_argument('--config-file',
-                        default='/xxx/Tuber_JHMDB_CSN-152.yaml',
+                        default='./configuration/Tuber_CSN152_JHMDB.yaml',
                         help='path to config file.')
-
+    parser.add_argument('--num_gpu', default=4, type=int)
     args = parser.parse_args()
 
     cfg = get_cfg_defaults()
