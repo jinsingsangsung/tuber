@@ -238,7 +238,8 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
             writer.add_scalar('train/loss_ce', losses_ce.avg, idx + epoch * len(data_loader))
             writer.add_scalar('train/loss_ce_b', losses_ce_b.avg, idx + epoch * len(data_loader))
     
-    metrics_data = json.dumps({
+    try:
+        metrics_data = json.dumps({
             '@epoch': epoch,
             '@step': epoch, # actually epoch
             '@time': time.time(),
@@ -248,7 +249,6 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
             'loss_ce': losses_ce.avg,
             'loss_ce_b': losses_ce_b.avg,
             })
-    try:
         # Report JSON data to the NSML metric API server with a simple HTTP POST request.
         requests.post(os.environ['NSML_METRIC_API'], data=metrics_data)
     except requests.exceptions.RequestException:
@@ -341,7 +341,6 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
                 # outputs, num_boxes_per_batch_idx = model(targets, samples)
 
         loss_dict = criterion(outputs, targets)
-
         weight_dict = criterion.weight_dict
 
         orig_target_sizes = torch.stack([t["size"] for t in targets], dim=0)
@@ -498,19 +497,7 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
         print(mAP)
         writer.add_scalar('val/val_mAP_epoch', mAP[0], epoch)
         Map_ = mAP[0]
-        # if cfg.CONFIG.VAL.PUT_GT:
-        #     evaluater = STDetectionEvaluaterSinglePerson(cfg.CONFIG.DATA.LABEL_PATH, tiou_thresholds=[1e-8])
-        # else:
-        #     evaluater = STDetectionEvaluaterSinglePerson(cfg.CONFIG.DATA.LABEL_PATH)
-        # file_path_lst = [tmp_GT_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, x) for x in range(cfg.DDP_CONFIG.GPU_WORLD_SIZE)]
-        # evaluater.load_GT_from_path(file_path_lst)
-        # file_path_lst = [tmp_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, x) for x in range(cfg.DDP_CONFIG.GPU_WORLD_SIZE)]
-        # evaluater.load_detection_from_path(file_path_lst)
-        # mAP, metrics = evaluater.evaluate()
-        # print(metrics)
-        # print_string = 'person AP: {mAP:.5f}'.format(mAP=mAP[0])
-        # print(print_string)
-        # writer.add_scalar('val/val_person_AP_epoch', mAP[0], epoch)
+
     if Map_ != 0:
         metrics_data = json.dumps({
                 '@epoch': epoch,

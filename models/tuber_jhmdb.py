@@ -43,7 +43,7 @@ class DETR(nn.Module):
         self.avg = nn.AvgPool3d(kernel_size=(temporal_length, 1, 1))
         self.avg_s = nn.AdaptiveAvgPool3d((1, 1, 1))
         # self.query_embed = nn.Embedding(num_queries * temporal_length, hidden_dim)
-        self.query_embed = nn.Embedding(num_queries, hidden_dim)
+        self.query_embed = nn.Embedding(num_queries*8, hidden_dim)
         if "SWIN" in backbone_name:
             print("using swin")
             self.input_proj = nn.Conv3d(1024, hidden_dim, kernel_size=1)

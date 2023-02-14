@@ -25,7 +25,7 @@ def load_detr_weights(model, pretrain_dir, cfg):
                 query_size = cfg.CONFIG.MODEL.QUERY_NUM
                 pretrained_dict.update({k:v[:query_size]})
             # print(v.shape) # v의 len이 135임! 따라서 query size > 135면 error남
-            # print(query_size)
+            print("query_size:", query_size)
             # pretrained_dict.update({k: v[:query_size]})
     pretrained_dict_ = {k: v for k, v in pretrained_dict.items() if k in model_dict} # model_dict에는 "module.query_embed.weight"라는 key가 있음
     unused_dict = {k: v for k, v in pretrained_dict.items() if not k in model_dict}

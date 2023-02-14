@@ -18,7 +18,7 @@ CONFIG:
   USE_LFB: False
   USE_LOCATION: False
   TRAIN:
-    EPOCH_NUM: 20
+    EPOCH_NUM: 30
     BATCH_SIZE: 2
     LR: 1e-4
     MIN_LR: 1e-5
@@ -32,7 +32,7 @@ CONFIG:
     LR_MILESTONE: [10, 15]
     STEP: 0.1
     OPTIMIZER:
-      NAME: SGD
+      NAME: ADAMW
     AUX_LOSS: True
 
   VAL:
@@ -69,13 +69,13 @@ CONFIG:
     DS_RATE: 8 #1
     TEMP_LEN: 32
     SAMPLE_RATE: 2
-    PRETRAINED: True
+    PRETRAINED: False
     PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_152_ft_kinetics_from_ig65m_f126851907.mat"
     PRETRAIN_TRANSFORMER_DIR: "../pretrained_models/transformer/detr.pth"
     PRETRAINED_PATH: "../pretrained_models/main/TubeR_CSN152_JHMDB.pth"
-    LOAD_DETR: True
-    LOAD: True
-    LOAD_FC: True
+    LOAD_DETR: False
+    LOAD: False
+    LOAD_FC: False
 
   MATCHER:
     COST_CLASS: 1

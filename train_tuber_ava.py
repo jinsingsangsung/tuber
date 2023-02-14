@@ -6,7 +6,6 @@ import torch
 import torch.optim
 from tensorboardX import SummaryWriter
 
-from models.tuber_ava import build_model
 from utils.model_utils import deploy_model, load_model, save_checkpoint
 from utils.video_action_recognition import train_tuber_detection, validate_tuber_detection
 from pipelines.video_action_recognition_config import get_cfg_defaults
@@ -27,6 +26,11 @@ def main_worker(cfg):
 
     # create model
     print('Creating TubeR model: %s' % cfg.CONFIG.MODEL.NAME)
+    print(cfg.CONFIG.MODEL.SINGLE_FRAME)
+    if not cfg.CONFIG.MODEL.SparseRCNN.USE:
+        from models.tuber_ava import build_model
+    else:
+        from models.sparse_ava import build_model
     model, criterion, postprocessors = build_model(cfg)
     model = deploy_model(model, cfg, is_tuber=True)
     num_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
