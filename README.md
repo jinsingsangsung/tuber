@@ -2,9 +2,9 @@
 
 This branch is to try different architectures to the video action detection task.
 Total three models are try-able:
-## TubeR: Tubelet Transformer for Video Action Detection
-## SeqFormer
-## Sparse R-CNN
+- TubeR: Tubelet Transformer for Video Action Detection
+- SeqFormer
+- Sparse R-CNN
 
 Note that debugging is still ongoing.
 
