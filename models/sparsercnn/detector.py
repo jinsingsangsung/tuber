@@ -27,6 +27,7 @@ from utils.box_ops import box_cxcywh_to_xyxy, box_xyxy_to_cxcywh
 from utils.misc import (NestedTensor, nested_tensor_from_tensor_list,
                        accuracy, get_world_size, interpolate,
                        is_dist_avail_and_initialized)
+from detectron2.layers import ShapeSpec
 
 __all__ = ["SparseRCNN"]
 
@@ -40,21 +41,23 @@ class SparseRCNN(nn.Module):
     def __init__(self, backbone, cfg):
         super().__init__()
 
-        self.device = torch.device(cfg.CONFIG.MODEL.DEVICE)
+        # self.device = torch.device(cfg.CONFIG.MODEL.DEVICE)
 
         self.in_features = cfg.CONFIG.MODEL.SparseRCNN.ROI_HEADS.IN_FEATURES
-        self.num_classes = cfg.DATA.NUM_CLASSES
+        self.num_classes = cfg.CONFIG.DATA.NUM_CLASSES
         self.num_proposals = cfg.CONFIG.MODEL.SparseRCNN.NUM_PROPOSALS
         self.hidden_dim = cfg.CONFIG.MODEL.SparseRCNN.HIDDEN_DIM
         self.num_heads = cfg.CONFIG.MODEL.SparseRCNN.NUM_HEADS
+        self.num_frames = cfg.CONFIG.MODEL.TEMP_LEN
 
         # Build Backbone.
         self.backbone = backbone
         # self.size_divisibility = self.backbone.size_divisibility
         
         # Feature dimension matcher
-        num_feature_levels = self.in_features
-        if num_feature_level > 1:
+        num_feature_levels = len(self.in_features)
+        hidden_dim = self.hidden_dim
+        if num_feature_levels > 1:
             num_backbone_outs = len(backbone.strides)
             input_proj_list = []
             for _ in range(num_backbone_outs):
@@ -76,6 +79,15 @@ class SparseRCNN(nn.Module):
                     nn.Conv2d(backbone.num_channels[0], hidden_dim, kernel_size=1),
                     nn.GroupNorm(32, hidden_dim),
                 )])
+        self.output_shape = {
+            name: (ShapeSpec(
+                channels=hidden_dim, stride=backbone.strides[l]
+            ) if (l < len(backbone.num_channels))
+                else ShapeSpec(
+                    channels=hidden_dim, stride=backbone.strides[-1]*2
+                ))
+            for l, name in enumerate(self.in_features)
+        }
         
         # Build Proposals.
         self.init_proposal_features = nn.Embedding(self.num_proposals, self.hidden_dim)
@@ -84,7 +96,7 @@ class SparseRCNN(nn.Module):
         nn.init.constant_(self.init_proposal_boxes.weight[:, 2:], 1.0)
         
         # Build Dynamic Head.
-        self.head = DynamicHead(cfg=cfg, roi_input_shape=self.backbone.output_shape())
+        self.head = DynamicHead(cfg=cfg, roi_input_shape=self.output_shape)
 
         # Loss parameters:
         class_weight = cfg.CONFIG.MODEL.SparseRCNN.CLASS_WEIGHT
@@ -111,49 +123,42 @@ class SparseRCNN(nn.Module):
 
 
 
-        pixel_mean = torch.Tensor(cfg.CONFIG.MODEL.PIXEL_MEAN).to(self.device).view(3, 1, 1)
-        pixel_std = torch.Tensor(cfg.CONFIG.MODEL.PIXEL_STD).to(self.device).view(3, 1, 1)
-        self.normalizer = lambda x: (x - pixel_mean) / pixel_std
-        self.to(self.device)
+        # pixel_mean = torch.Tensor(cfg.CONFIG.MODEL.PIXEL_MEAN).to(self.device).view(3, 1, 1)
+        # pixel_std = torch.Tensor(cfg.CONFIG.MODEL.PIXEL_STD).to(self.device).view(3, 1, 1)
+        # self.normalizer = lambda x: (x - pixel_mean) / pixel_std
+        # self.to(self.device)
 
 
     def forward(self, images: NestedTensor):
-        """
-        Args:
-            batched_inputs: a list, batched outputs of :class:`DatasetMapper` .
-                Each item in the list contains the inputs for one image.
-                For now, each item in the list is a dict that contains:
 
-                * image: Tensor, image in (C, H, W) format.
-                * instances: Instances
-
-                Other information that's included in the original dicts, such as:
-
-                * "height", "width" (int): the output resolution of the model, used in inference.
-                  See :meth:`postprocess` for details.
-        """
         # images, images_whwh = self.preprocess_image(batched_inputs)
         if not isinstance(images, NestedTensor):
             images = nested_tensor_from_tensor_list(images)
-
+        # print("images.tensors.shape: ", images.tensors.shape)
         # Feature Extraction.
-        src, _, _ = self.backbone(images.tensor)
-        features = list()        
+        features, _ = self.backbone(images)
+        images_whwh = self.images_whwh_creator(images)
+        srcs = list()
+
         for l, feat in enumerate(features[1:]):
             src, _ = feat.decompose()
             src_proj_l = self.input_proj[l](src)
             n,c,h,w = src_proj_l.shape
             src_proj_l = src_proj_l.reshape(n//self.num_frames, self.num_frames, c, h, w)
-            features.append(src_proj_l)
-
-        if self.in_features > (len(features) - 1): # the last feature map is a projection of the previous map
-            _len_srcs = len(features) - 1
-            for l in range(_len_srcs, self.in_features):
+            # TODO: how to pool temporal frames? Naively, take max as of now
+            src_proj_l = src_proj_l.max(dim=1).values
+            srcs.append(src_proj_l)
+        num_feature_levels = len(self.in_features) # 4
+        if num_feature_levels > (len(features) - 1): # the last feature map is a projection of the previous map
+            _len_srcs = len(features) - 1 # 2
+            for l in range(_len_srcs, num_feature_levels):
                 if l == _len_srcs:
+                    # print("l:", l)
+                    # print("len(self.input_proj):", len(self.input_proj))
                     src = self.input_proj[l](features[-1].tensors)
                 else:
                     src = self.input_proj[l](srcs[-1])
-                features.append(src)
+                srcs.append(src)
 
         # Prepare Proposals.
         proposal_boxes = self.init_proposal_boxes.weight.clone()
@@ -161,7 +166,7 @@ class SparseRCNN(nn.Module):
         proposal_boxes = proposal_boxes[None] * images_whwh[:, None, :]
 
         # Prediction.
-        outputs_class, outputs_coord = self.head(features, proposal_boxes, self.init_proposal_features.weight)
+        outputs_class, outputs_coord = self.head(srcs, proposal_boxes, self.init_proposal_features.weight)
         output = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1]}
         
         return output
@@ -261,7 +266,8 @@ class SparseRCNN(nn.Module):
     #     """
     #     Normalize, pad and batch the input images.
     #     """
-    #     images = [self.normalizer(x["image"].to(self.device)) for x in batched_inputs]
+    #     # images = [self.normalizer(x["image"].to(self.device)) for x in batched_inputs]
+    #     images = x["image"].to(self.device) for x in batched_inputs]
     #     images = ImageList.from_tensors(images, self.size_divisibility)
 
     #     images_whwh = list()
@@ -271,3 +277,13 @@ class SparseRCNN(nn.Module):
     #     images_whwh = torch.stack(images_whwh)
 
     #     return images, images_whwh
+    
+    def images_whwh_creator(self, images: NestedTensor):
+        batched_image = images.tensors
+        bs, c, t, h, w = batched_image.shape
+        images_whwh = list()
+        for bi in batched_image:
+            images_whwh.append(torch.tensor([w, h, w, h], dtype=torch.float32, device=batched_image.device))
+        images_whwh = torch.stack(images_whwh)
+        return images_whwh
+

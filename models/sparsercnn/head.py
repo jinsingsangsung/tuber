@@ -36,22 +36,22 @@ class DynamicHead(nn.Module):
         self.box_pooler = box_pooler
         
         # Build heads.
-        num_classes = cfg.MODEL.SparseRCNN.NUM_CLASSES
-        d_model = cfg.MODEL.SparseRCNN.HIDDEN_DIM
-        dim_feedforward = cfg.MODEL.SparseRCNN.DIM_FEEDFORWARD
-        nhead = cfg.MODEL.SparseRCNN.NHEADS
-        dropout = cfg.MODEL.SparseRCNN.DROPOUT
-        activation = cfg.MODEL.SparseRCNN.ACTIVATION
-        num_heads = cfg.MODEL.SparseRCNN.NUM_HEADS
-        rcnn_head = RCNNHead(cfg, d_model, num_classes, dim_feedforward, nhead, dropout, activation)        
+        num_classes = cfg.CONFIG.DATA.NUM_CLASSES
+        d_model = cfg.CONFIG.MODEL.SparseRCNN.HIDDEN_DIM
+        dim_feedforward = cfg.CONFIG.MODEL.DIM_FEEDFORWARD
+        nhead = cfg.CONFIG.MODEL.NHEAD
+        dropout = cfg.CONFIG.MODEL.DROPOUT
+        activation = cfg.CONFIG.MODEL.SparseRCNN.ACTIVATION
+        num_heads = cfg.CONFIG.MODEL.SparseRCNN.NUM_HEADS
+        rcnn_head = RCNNHead(cfg, d_model, num_classes, dim_feedforward, nhead, dropout, activation)
         self.head_series = _get_clones(rcnn_head, num_heads)
-        self.return_intermediate = cfg.MODEL.SparseRCNN.DEEP_SUPERVISION
+        self.return_intermediate = cfg.CONFIG.MODEL.SparseRCNN.DEEP_SUPERVISION
         
         # Init parameters.
-        self.use_focal = cfg.MODEL.SparseRCNN.USE_FOCAL
+        self.use_focal = cfg.CONFIG.MODEL.SparseRCNN.USE_FOCAL
         self.num_classes = num_classes
         if self.use_focal:
-            prior_prob = cfg.MODEL.SparseRCNN.PRIOR_PROB
+            prior_prob = cfg.CONFIG.MODEL.SparseRCNN.PRIOR_PROB
             self.bias_value = -math.log((1 - prior_prob) / prior_prob)
         self._reset_parameters()
 
@@ -69,11 +69,11 @@ class DynamicHead(nn.Module):
     @staticmethod
     def _init_box_pooler(cfg, input_shape):
 
-        in_features = cfg.MODEL.ROI_HEADS.IN_FEATURES
-        pooler_resolution = cfg.MODEL.ROI_BOX_HEAD.POOLER_RESOLUTION
+        in_features = cfg.CONFIG.MODEL.SparseRCNN.ROI_HEADS.IN_FEATURES
+        pooler_resolution = cfg.CONFIG.MODEL.SparseRCNN.ROI_BOX_HEAD.POOLER_RESOLUTION
         pooler_scales = tuple(1.0 / input_shape[k].stride for k in in_features)
-        sampling_ratio = cfg.MODEL.ROI_BOX_HEAD.POOLER_SAMPLING_RATIO
-        pooler_type = cfg.MODEL.ROI_BOX_HEAD.POOLER_TYPE
+        sampling_ratio = cfg.CONFIG.MODEL.SparseRCNN.ROI_BOX_HEAD.POOLER_SAMPLING_RATIO
+        pooler_type = cfg.CONFIG.MODEL.SparseRCNN.ROI_BOX_HEAD.POOLER_TYPE
 
         # If StandardROIHeads is applied on multiple feature maps (as in FPN),
         # then we share the same predictors and therefore the channel counts must be the same
@@ -140,7 +140,7 @@ class RCNNHead(nn.Module):
         self.activation = _get_activation_fn(activation)
 
         # cls.
-        num_cls = cfg.MODEL.SparseRCNN.NUM_CLS
+        num_cls = cfg.CONFIG.MODEL.SparseRCNN.NUM_CLS
         cls_module = list()
         for _ in range(num_cls):
             cls_module.append(nn.Linear(d_model, d_model, False))
@@ -149,7 +149,7 @@ class RCNNHead(nn.Module):
         self.cls_module = nn.ModuleList(cls_module)
 
         # reg.
-        num_reg = cfg.MODEL.SparseRCNN.NUM_REG
+        num_reg = cfg.CONFIG.MODEL.SparseRCNN.NUM_REG
         reg_module = list()
         for _ in range(num_reg):
             reg_module.append(nn.Linear(d_model, d_model, False))
@@ -158,7 +158,7 @@ class RCNNHead(nn.Module):
         self.reg_module = nn.ModuleList(reg_module)
         
         # pred.
-        self.use_focal = cfg.MODEL.SparseRCNN.USE_FOCAL
+        self.use_focal = cfg.CONFIG.MODEL.SparseRCNN.USE_FOCAL
         if self.use_focal:
             self.class_logits = nn.Linear(d_model, num_classes)
         else:
@@ -180,7 +180,7 @@ class RCNNHead(nn.Module):
         proposal_boxes = list()
         for b in range(N):
             proposal_boxes.append(Boxes(bboxes[b]))
-        roi_features = pooler(features, proposal_boxes)            
+        roi_features = pooler(features, proposal_boxes) 
         roi_features = roi_features.view(N * nr_boxes, self.d_model, -1).permute(2, 0, 1)        
 
         # self_att.
@@ -260,9 +260,9 @@ class DynamicConv(nn.Module):
     def __init__(self, cfg):
         super().__init__()
 
-        self.hidden_dim = cfg.MODEL.SparseRCNN.HIDDEN_DIM
-        self.dim_dynamic = cfg.MODEL.SparseRCNN.DIM_DYNAMIC
-        self.num_dynamic = cfg.MODEL.SparseRCNN.NUM_DYNAMIC
+        self.hidden_dim = cfg.CONFIG.MODEL.SparseRCNN.HIDDEN_DIM
+        self.dim_dynamic = cfg.CONFIG.MODEL.SparseRCNN.DIM_DYNAMIC
+        self.num_dynamic = cfg.CONFIG.MODEL.SparseRCNN.NUM_DYNAMIC
         self.num_params = self.hidden_dim * self.dim_dynamic
         self.dynamic_layer = nn.Linear(self.hidden_dim, self.num_dynamic * self.num_params)
 
@@ -271,7 +271,7 @@ class DynamicConv(nn.Module):
 
         self.activation = nn.ReLU(inplace=True)
 
-        pooler_resolution = cfg.MODEL.ROI_BOX_HEAD.POOLER_RESOLUTION
+        pooler_resolution = cfg.CONFIG.MODEL.SparseRCNN.ROI_BOX_HEAD.POOLER_RESOLUTION
         num_output = self.hidden_dim * pooler_resolution ** 2
         self.out_layer = nn.Linear(num_output, self.hidden_dim)
         self.norm3 = nn.LayerNorm(self.hidden_dim)

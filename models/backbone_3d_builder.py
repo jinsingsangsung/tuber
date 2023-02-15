@@ -20,7 +20,7 @@ from models.seqformer.position_encoding import build_position_encoding
 from models.backbones.ir_CSN_50_variant import build_CSN
 from models.backbones.ir_CSN_152 import build_CSN as build_CSN_152
 from models.transformer.transformer_layers import LSTRTransformerDecoder, LSTRTransformerDecoderLayer, layer_norm
-
+# from detectron2.layers import ShapeSpec
 
 class Backbone(nn.Module):
 
@@ -38,7 +38,7 @@ class Backbone(nn.Module):
             if not train_backbone:
                 parameter.requires_grad_(False)
         self.ds = cfg.CONFIG.MODEL.SINGLE_FRAME
-        if cfg.CONFIG.MODEL.SeqFormer.SINGLE_FRAME:
+        if cfg.CONFIG.MODEL.SINGLE_FRAME:
             if cfg.CONFIG.MODEL.TEMPORAL_DS_STRATEGY == 'avg':
                 self.pool = nn.AvgPool3d((cfg.CONFIG.DATA.TEMP_LEN // cfg.CONFIG.MODEL.DS_RATE, 1, 1))
                 # print("avg pool: {}".format(cfg.CONFIG.DATA.TEMP_LEN // cfg.CONFIG.MODEL.DS_RATE))
@@ -56,6 +56,7 @@ class Backbone(nn.Module):
             # return_layers = {"layer2": "0", "layer3": "1", "layer4": "2"}
             self.strides = [8, 16, 32]
             self.num_channels = [512, 1024, 2048]
+            self.in_features = cfg.CONFIG.MODEL.SparseRCNN.ROI_HEADS.IN_FEATURES
         else:
             return_layers = {'layer4': "0"}
             self.strides = [32]
@@ -117,6 +118,15 @@ class Joiner(nn.Sequential):
         super().__init__(backbone, position_embedding)
         self.strides = backbone.strides
         self.num_channels = backbone.num_channels
+        # self.output_shape = {
+        #     name: (ShapeSpec(
+        #         channels=self.num_channels[l], stride=backbone.strides[l]
+        #     ) if (l < len(self.num_channels))
+        #         else ShapeSpec(
+        #             channels=self.num_channels[-1], stride=backbone.strides[-1]
+        #         ))
+        #     for l, name in enumerate(backbone.in_features)
+        # }
 
     def forward(self, tensor_list: NestedTensor):
         xs = self[0](tensor_list)

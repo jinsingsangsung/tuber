@@ -50,7 +50,7 @@ CONFIG:
     FRAME_RATE: 2
 
   MODEL:
-    SINGLE_FRAME: False #True
+    SINGLE_FRAME: True
     BACKBONE_NAME: CSN-50
     TEMPORAL_DS_STRATEGY: decode
     LAST_STRIDE: False
@@ -79,7 +79,8 @@ CONFIG:
     SparseRCNN:
       USE: True
       ROI_HEADS:
-        IN_FEATURES: 4
+        IN_FEATURES: ["layer1", "layer2", "layer3", "layer4"]
+      HIDDEN_DIM: 256
       SINGLE_FRAME: True
       NUM_PROPOSALS: 300
       NUM_HEADS: 8
@@ -95,7 +96,12 @@ CONFIG:
       SOLVER:
         OPTIMIZER: "ADAMW"
         BACKBONE_MULTIPLIER: 1.0
-
+            ROI_HEADS:
+        IN_FEATURES: ["p2", "p3", "p4", "p5"]
+      ROI_BOX_HEAD:
+        POOLER_TYPE: "ROIAlignV2"
+        POOLER_RESOLUTION: 7
+        POOLER_SAMPLING_RATIO: 2    
 
   MATCHER:
     COST_CLASS: 1

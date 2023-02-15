@@ -68,14 +68,18 @@ class HungarianMatcher(nn.Module):
             tgt_ids = torch.cat([v["labels"] for v in targets])
             tgt_bbox = torch.cat([v["boxes"] for v in targets])
             tgt_bbox = tgt_bbox[:,1:]
-
+            tgt_ids_tensor = torch.zeros(1, tgt_ids.shape[-1], device=tgt_ids.device)
+            for i in range(len(tgt_ids)):
+                tgt_ids_tensor += tgt_ids[i, :]
+            tgt_ids_tensor = tgt_ids_tensor.clamp(max=1)     
             # Compute the classification cost.
             alpha = 0.25
             gamma = 2.0
             neg_cost_class = (1 - alpha) * (out_prob ** gamma) * (-(1 - out_prob + 1e-8).log())
             pos_cost_class = alpha * ((1 - out_prob) ** gamma) * (-(out_prob + 1e-8).log())
             # cost_class = pos_cost_class[:, tgt_ids] - neg_cost_class[:, tgt_ids]
-            cost_class = -out_prob[:, 1:2].repeat(1, len(tgt_bbox))
+            cost_class = pos_cost_class * tgt_ids_tensor - neg_cost_class * tgt_ids_tensor
+            cost_class = cost_class.sum(dim=1, keepdim=True).repeat(1, len(tgt_bbox))
             # Compute the L1 cost between boxes
             cost_bbox = torch.cdist(out_bbox, tgt_bbox, p=1)
 

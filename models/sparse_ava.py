@@ -19,6 +19,7 @@ from models.transformer.transformer_layers import TransformerEncoderLayer, Trans
 
 from models.sparsercnn.detector import SparseRCNN
 from models.sparsercnn.loss import SetCriterion, HungarianMatcher
+from models.criterion import PostProcess, PostProcessAVA, MLP
 
 def build_model(cfg):
     class_weight = cfg.CONFIG.MODEL.SparseRCNN.CLASS_WEIGHT
@@ -41,9 +42,12 @@ def build_model(cfg):
     backbone = build_3d_backbone(cfg)
     model = SparseRCNN(backbone, cfg)
 
-
-    matcher = build_matcher(cfg)
+    if cfg.CONFIG.DATA.DATASET_NAME == 'ava':
+        from models.detr.matcher import build_matcher
+    else:
+        from models.detr.matcher_ucf import build_matcher
     weight_dict = {"loss_ce": class_weight, "loss_bbox": l1_weight, "loss_giou": giou_weight}
+    losses = ['labels', 'boxes']
 
     criterion = SetCriterion(cfg=cfg,
                             num_classes=num_classes,

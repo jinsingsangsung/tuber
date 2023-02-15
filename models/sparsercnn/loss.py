@@ -51,7 +51,7 @@ class SetCriterion(nn.Module):
             empty_weight[-1] = self.eos_coef
             self.register_buffer('empty_weight', empty_weight)
 
-    def loss_labels(self, outputs, targets, indices, num_boxes, log=False):
+    def loss_labels(self, outputs, targets, indices, num_boxes, log=True):
         """Classification loss (NLL)
         targets dicts must contain the key "labels" containing a tensor of dim [nb_target_boxes]
         """
@@ -60,17 +60,23 @@ class SetCriterion(nn.Module):
 
         idx = self._get_src_permutation_idx(indices)
         target_classes_o = torch.cat([t["labels"][J] for t, (_, J) in zip(targets, indices)])
-        target_classes = torch.full(src_logits.shape[:2], self.num_classes,
-                                    dtype=torch.int64, device=src_logits.device)
+        # target_classes = torch.full(src_logits.shape[:2], self.num_classes,
+        #                             dtype=torch.int64, device=src_logits.device)
+        target_classes = torch.full(src_logits.shape, 0,
+                                    dtype=torch.float32, device=src_logits.device)        
         target_classes[idx] = target_classes_o
 
         if self.use_focal:
             src_logits = src_logits.flatten(0, 1)
             # prepare one_hot target.
-            target_classes = target_classes.flatten(0, 1)
-            pos_inds = torch.nonzero(target_classes != self.num_classes, as_tuple=True)[0]
+            target_classes = target_classes.flatten(0, 1).long()
+            # pos_inds = torch.nonzero(target_classes != self.num_classes, as_tuple=True)[0]
             labels = torch.zeros_like(src_logits)
-            labels[pos_inds, target_classes[pos_inds]] = 1
+            # print("target_classes.shape:", target_classes.shape)
+            # print("src_logits.shape:", src_logits.shape)
+            # print("pos_inds.shape:", pos_inds.shape)
+            # print("target_classes[pos_inds].shape:", target_classes[pos_inds].shape)
+            labels[target_classes] = 1
             # comp focal loss.
             class_loss = sigmoid_focal_loss_jit(
                 src_logits,
@@ -86,7 +92,8 @@ class SetCriterion(nn.Module):
 
         if log:
             # TODO this should probably be a separate loss, not hacked in this one here
-            losses['class_error'] = 100 - accuracy(src_logits[idx], target_classes_o)[0]
+            # losses['class_error'] = 100 - accuracy(src_logits[idx], target_classes_o)[0]
+            losses['class_error'] = 100
         return losses
 
 
@@ -98,18 +105,19 @@ class SetCriterion(nn.Module):
         assert 'pred_boxes' in outputs
         idx = self._get_src_permutation_idx(indices)
         src_boxes = outputs['pred_boxes'][idx]
-        target_boxes = torch.cat([t['boxes_xyxy'][i] for t, (_, i) in zip(targets, indices)], dim=0)
+        target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0)
+        target_boxes = target_boxes[:, 1:]
+
+        loss_bbox = F.l1_loss(src_boxes, target_boxes, reduction='none')
 
         losses = {}
-        loss_giou = 1 - torch.diag(box_ops.generalized_box_iou(src_boxes, target_boxes))
-        losses['loss_giou'] = loss_giou.sum() / num_boxes
-
-        image_size = torch.cat([v["image_size_xyxy_tgt"] for v in targets])
-        src_boxes_ = src_boxes / image_size
-        target_boxes_ = target_boxes / image_size
-
-        loss_bbox = F.l1_loss(src_boxes_, target_boxes_, reduction='none')
         losses['loss_bbox'] = loss_bbox.sum() / num_boxes
+
+        loss_giou = 1 - torch.diag(box_ops.generalized_box_iou(
+            # box_ops.box_cxcywh_to_xyxy(src_boxes),
+            src_boxes,
+            box_ops.box_cxcywh_to_xyxy(target_boxes)))
+        losses['loss_giou'] = loss_giou.sum() / num_boxes
 
         return losses
 
@@ -237,8 +245,18 @@ class HungarianMatcher(nn.Module):
 
         # Also concat the target labels and boxes
         tgt_ids = torch.cat([v["labels"] for v in targets])
-        tgt_bbox = torch.cat([v["boxes_xyxy"] for v in targets])
-
+        tgt_bbox = torch.cat([v["boxes"] for v in targets])
+        tgt_bbox = tgt_bbox[:,1:]
+        
+        # print("tgt_ids.shape: ", tgt_ids.shape)
+        # print("tgt_bbox.shape: ", tgt_bbox.shape)
+        # print("out_prob.shape: ", out_prob.shape)
+        # print("out_bbox_sample: ", out_bbox[:10])
+        # print("tgt_bbox_sample: ", tgt_bbox[:10])
+        tgt_ids_tensor = torch.zeros(1, tgt_ids.shape[-1], device=tgt_ids.device)
+        for i in range(len(tgt_ids)):
+            tgt_ids_tensor += tgt_ids[i, :]
+        tgt_ids_tensor = tgt_ids_tensor.clamp(max=1)        
         # Compute the classification cost. Contrary to the loss, we don't use the NLL,
         # but approximate it in 1 - proba[target class].
         # The 1 is a constant that doesn't change the matching, it can be ommitted.
@@ -248,23 +266,37 @@ class HungarianMatcher(nn.Module):
             gamma = self.focal_loss_gamma
             neg_cost_class = (1 - alpha) * (out_prob ** gamma) * (-(1 - out_prob + 1e-8).log())
             pos_cost_class = alpha * ((1 - out_prob) ** gamma) * (-(out_prob + 1e-8).log())
-            cost_class = pos_cost_class[:, tgt_ids] - neg_cost_class[:, tgt_ids]
+            # cost_class = pos_cost_class[:, tgt_ids] - neg_cost_class[:, tgt_ids]
+            cost_class = pos_cost_class * tgt_ids_tensor - neg_cost_class * tgt_ids_tensor
+            cost_class = cost_class.sum(dim=1, keepdim=True).repeat(1, len(tgt_bbox))
         else:
-            cost_class = -out_prob[:, tgt_ids]
+            # cost_class = -out_prob[:, 1:2].repeat(1, len(tgt_bbox))
+            cost_class = (-out_prob * tgt_ids_tensor).max(dim=1, keepdim=True).repeat(1, len(tgt_bbox))
 
         # Compute the L1 cost between boxes
-        image_size_out = torch.cat([v["image_size_xyxy"].unsqueeze(0) for v in targets])
+        image_size_out = torch.cat([v["size"].unsqueeze(0) for v in targets])
         image_size_out = image_size_out.unsqueeze(1).repeat(1, num_queries, 1).flatten(0, 1)
-        image_size_tgt = torch.cat([v["image_size_xyxy_tgt"] for v in targets])
-
+        image_size_out = torch.cat([image_size_out,image_size_out], dim =1)
+        image_size_tgt = torch.cat([v["orig_size"] for v in targets])
+        # print("size: ",targets[0]["size"])
+        # print("orig_size: ",targets[0]["orig_size"])
+        # print("image_size_out.shape: ", image_size_out.shape) # 600 x 2
+        # print("image_size_tgt.shape: ", image_size_tgt.shape) # 4
+        # print("out_bbox.shape: ", out_bbox.shape) # 600 x 4
+        # print("tgt_bbox.shape: ", tgt_bbox.shape) # 2 x 4
         out_bbox_ = out_bbox / image_size_out
         tgt_bbox_ = tgt_bbox / image_size_tgt
         cost_bbox = torch.cdist(out_bbox_, tgt_bbox_, p=1)
-
+        # print("is out_bbox valid output?: ", (out_bbox[:, 2:] >= out_bbox[:, :2]).all())
+        # print("is tgt_bbox valid output?: ", (tgt_bbox[:, 2:] >= tgt_bbox[:, :2]).all())
+        # print("tgt_bbox: ", tgt_bbox)
+        # assert (out_bbox[:, 2:] >= out_bbox[:, :2]).all()
+        # assert (tgt_bbox[:, 2:] >= tgt_bbox[:, :2]).all()
         # Compute the giou cost betwen boxes
         # cost_giou = -generalized_box_iou(box_cxcywh_to_xyxy(out_bbox), box_cxcywh_to_xyxy(tgt_bbox))
-        cost_giou = -generalized_box_iou(out_bbox, tgt_bbox)
-
+        cost_giou = -generalized_box_iou(out_bbox, box_cxcywh_to_xyxy(tgt_bbox))
+        # cost_giou = -generalized_box_iou(box_cxcywh_to_xyxy(out_bbox_),
+        #                                  box_cxcywh_to_xyxy(tgt_bbox_))
         # Final cost matrix
         C = self.cost_bbox * cost_bbox + self.cost_class * cost_class + self.cost_giou * cost_giou
         C = C.view(bs, num_queries, -1).cpu()

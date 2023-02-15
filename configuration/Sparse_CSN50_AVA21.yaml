@@ -81,7 +81,8 @@ CONFIG:
     SparseRCNN:
       USE: True
       ROI_HEADS:
-        IN_FEATURES: 4
+        IN_FEATURES: ["layer1", "layer2", "layer3", "layer4"]
+      HIDDEN_DIM: 256
       SINGLE_FRAME: True
       NUM_PROPOSALS: 300
       NUM_HEADS: 8
@@ -94,10 +95,20 @@ CONFIG:
       ALPHA: 0.25
       GAMMA: 2.0
       PRIOR_PROB: 0.01
+      ACTIVATION: "relu"
       SOLVER:
         OPTIMIZER: "ADAMW"
         BACKBONE_MULTIPLIER: 1.0
-
+      ROI_HEADS:
+        IN_FEATURES: ["p2", "p3", "p4", "p5"]
+      ROI_BOX_HEAD:
+        POOLER_TYPE: "ROIAlignV2"
+        POOLER_RESOLUTION: 7
+        POOLER_SAMPLING_RATIO: 2     
+      DIM_DYNAMIC: 64
+      NUM_DYNAMIC: 2
+      NUM_CLS: 1
+      NUM_REG: 3
 
   MATCHER:
     COST_CLASS: 12
