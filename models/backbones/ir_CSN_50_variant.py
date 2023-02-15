@@ -122,15 +122,15 @@ class ResNeXt(nn.Module):
                                        stride=1, expansion=4)
 
         self.layer2 = self._make_layer(block, in_planes=256, planes=128, blocks=block_nums[1],
-                                       stride=2, temporal_stride=2, expansion=4)
+                                       stride=2, temporal_stride=1, expansion=4)
 
         self.layer3 = self._make_layer(block, in_planes=512, planes=256, blocks=block_nums[2],
-                                       stride=2, temporal_stride=2, expansion=4)
+                                       stride=2, temporal_stride=1, expansion=4)
 
         last_stride = 2 if last_stride else 1
         print("last stride: {}".format(last_stride))
         self.layer4 = self._make_layer(block, in_planes=1024, planes=512, blocks=block_nums[3],
-                                       stride=last_stride, temporal_stride=2, expansion=4)
+                                       stride=last_stride, temporal_stride=1, expansion=4)
 
         self.avgpool = nn.AdaptiveAvgPool3d(output_size=(1, 1, 1))
 

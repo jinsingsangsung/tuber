@@ -17,7 +17,7 @@ from typing import Dict, List
 from models.transformer.util.misc import NestedTensor, is_main_process
 from models.seqformer.position_encoding import build_position_encoding
 
-from models.backbones.ir_CSN_50 import build_CSN
+from models.backbones.ir_CSN_50_variant import build_CSN
 from models.backbones.ir_CSN_152 import build_CSN as build_CSN_152
 from models.transformer.transformer_layers import LSTRTransformerDecoder, LSTRTransformerDecoderLayer, layer_norm
 
