@@ -21,13 +21,14 @@ from models.sparsercnn.detector import SparseRCNN
 from models.sparsercnn.loss import SetCriterion, HungarianMatcher
 
 def build_model(cfg):
-    class_weight = cfg.MODEL.SparseRCNN.CLASS_WEIGHT
-    giou_weight = cfg.MODEL.SparseRCNN.GIOU_WEIGHT
-    l1_weight = cfg.MODEL.SparseRCNN.L1_WEIGHT
-    no_object_weight = cfg.MODEL.SparseRCNN.NO_OBJECT_WEIGHT
-    deep_supervision = cfg.MODEL.SparseRCNN.DEEP_SUPERVISION
-    use_focal = cfg.MODEL.SparseRCNN.USE_FOCAL
-    num_heads = cfg.MODEL.SparseRCNN.NUM_HEADS
+    class_weight = cfg.CONFIG.MODEL.SparseRCNN.CLASS_WEIGHT
+    giou_weight = cfg.CONFIG.MODEL.SparseRCNN.GIOU_WEIGHT
+    l1_weight = cfg.CONFIG.MODEL.SparseRCNN.L1_WEIGHT
+    no_object_weight = cfg.CONFIG.MODEL.SparseRCNN.NO_OBJECT_WEIGHT
+    deep_supervision = cfg.CONFIG.MODEL.SparseRCNN.DEEP_SUPERVISION
+    use_focal = cfg.CONFIG.MODEL.SparseRCNN.USE_FOCAL
+    num_heads = cfg.CONFIG.MODEL.SparseRCNN.NUM_HEADS
+    num_classes = cfg.CONFIG.DATA.NUM_CLASSES
 
     matcher = HungarianMatcher(cfg=cfg,
                                cost_class=class_weight, 
@@ -35,15 +36,6 @@ def build_model(cfg):
                                cost_giou=giou_weight,
                                use_focal=use_focal)
 
-    criterion = SetCriterion(cfg=cfg,
-                             num_classes=num_classes,
-                             matcher=matcher,
-                             weight_dict=weight_dict,
-                             eos_coef=no_object_weight,
-                             losses=losses,
-                             use_focal=use_focal)
-
-    num_classes = cfg.CONFIG.DATA.NUM_CLASSES
     print('num_classes: ', num_classes)
 
     backbone = build_3d_backbone(cfg)
@@ -52,6 +44,14 @@ def build_model(cfg):
 
     matcher = build_matcher(cfg)
     weight_dict = {"loss_ce": class_weight, "loss_bbox": l1_weight, "loss_giou": giou_weight}
+
+    criterion = SetCriterion(cfg=cfg,
+                            num_classes=num_classes,
+                            matcher=matcher,
+                            weight_dict=weight_dict,
+                            eos_coef=no_object_weight,
+                            losses=losses,
+                            use_focal=use_focal)
 
     if cfg.CONFIG.TRAIN.AUX_LOSS:
         aux_weight_dict = {}

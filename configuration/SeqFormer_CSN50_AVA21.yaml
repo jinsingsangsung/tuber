@@ -76,6 +76,7 @@ CONFIG:
     LOAD: False
     LOAD_FC: False
     LOAD_DETR: False
+    POSITION_EMBEDDING: 'sine' 
 
     SeqFormer:
       NUM_FEATURE_LEVELS: 4
@@ -86,7 +87,6 @@ CONFIG:
       SINGLE_FRAME: True
       NUM_DEC_N_POINTS: 4
       NUM_ENC_N_POINTS: 4
-      POSITION_EMBEDDING: 'sine'
 
 
   MATCHER:

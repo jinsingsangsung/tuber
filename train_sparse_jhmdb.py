@@ -4,9 +4,9 @@ import time
 
 import torch
 import torch.optim
-from tensorboardX import SummaryWriter
+# from tensorboardX import SummaryWriter
 
-from models.sparse_jhmdb import build_model
+from models.sparse_ava import build_model
 from utils.model_utils import deploy_model, load_model, save_checkpoint
 from utils.video_action_recognition import validate_tuber_ucf_detection, train_tuber_detection
 from pipelines.video_action_recognition_config import get_cfg_defaults
@@ -73,7 +73,7 @@ def main_worker(cfg):
             train_sampler.set_epoch(epoch)
 
         train_tuber_detection(cfg, model, criterion, train_loader, optimizer, epoch, cfg.CONFIG.LOSS_COFS.CLIPS_MAX_NORM, lr_scheduler, writer)
-        if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0 and (cfg.CONFIG.LOG.SAVE_FREQ == 0 or epoch cfg.CONFIG.TRAIN.EPOCH_NUM - 1):
+        if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0 and (cfg.CONFIG.LOG.SAVE_FREQ == 0 or epoch == cfg.CONFIG.TRAIN.EPOCH_NUM - 1):
             save_checkpoint(cfg, epoch, model, max_accuracy, optimizer, lr_scheduler)
         if epoch % cfg.CONFIG.VAL.FREQ == 0 or epoch == cfg.CONFIG.TRAIN.EPOCH_NUM - 1:
             validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, val_loader, 0, writer)

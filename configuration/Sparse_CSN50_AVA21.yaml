@@ -76,7 +76,8 @@ CONFIG:
     LOAD: False
     LOAD_FC: False
     LOAD_DETR: False
-
+    POSITION_EMBEDDING: 'sine'
+    
     SparseRCNN:
       USE: True
       ROI_HEADS:
