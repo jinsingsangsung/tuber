@@ -206,7 +206,10 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
             class_err.update(loss_dict_reduced['class_error'], len(targets))
 
             if cfg.CONFIG.MATCHER.BNY_LOSS:
-                losses_ce_b.update(loss_dict_reduced['loss_ce_b'].item(), len(targets))
+                try:
+                    losses_ce_b.update(loss_dict_reduced['loss_ce_b'].item(), len(targets))
+                except:
+                    pass
 
             if not math.isfinite(loss_value):
                 print("Loss is {}, stopping training".format(loss_value))
@@ -214,7 +217,7 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
                 exit(1)
 
             if idx % cfg.CONFIG.LOG.DISPLAY_FREQ == 0:
-                print_string = 'class_error: {class_error:.3f}, loss: {loss:.3f}, loss_bbox: {loss_bbox:.3f}, loss_giou: {loss_giou:.3f}, loss_ce: {loss_ce:.3f}, loss_ce_b: {loss_ce_b:.3f}'.format(
+                print_string = 'class_error: {class_error:.3f}, loss: {loss:.3f}, loss_bbox: {loss_bbox:.3f}, loss_giou: {loss_giou:.3f}, loss_ce: {loss_ce:.3f}'.format(
                     class_error=class_err.avg,
                     loss=losses_avg.avg,
                     loss_bbox=losses_box.avg,
@@ -223,12 +226,12 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
                 )
                 print(print_string)
 
-            writer.add_scalar('train/class_error', class_err.avg, idx + epoch * len(data_loader))
-            writer.add_scalar('train/totall_loss', losses_avg.avg, idx + epoch * len(data_loader))
-            writer.add_scalar('train/loss_bbox', losses_box.avg, idx + epoch * len(data_loader))
-            writer.add_scalar('train/loss_giou', losses_giou.avg, idx + epoch * len(data_loader))
-            writer.add_scalar('train/loss_ce', losses_ce.avg, idx + epoch * len(data_loader))
-            writer.add_scalar('train/loss_ce_b', losses_ce_b.avg, idx + epoch * len(data_loader))
+            # writer.add_scalar('train/class_error', class_err.avg, idx + epoch * len(data_loader))
+            # writer.add_scalar('train/totall_loss', losses_avg.avg, idx + epoch * len(data_loader))
+            # writer.add_scalar('train/loss_bbox', losses_box.avg, idx + epoch * len(data_loader))
+            # writer.add_scalar('train/loss_giou', losses_giou.avg, idx + epoch * len(data_loader))
+            # writer.add_scalar('train/loss_ce', losses_ce.avg, idx + epoch * len(data_loader))
+            # writer.add_scalar('train/loss_ce_b', losses_ce_b.avg, idx + epoch * len(data_loader))
     
     try:
         metrics_data = json.dumps({
@@ -239,7 +242,7 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
             'loss': losses_avg.avg,
             'loss_giou': losses_giou.avg,
             'loss_ce': losses_ce.avg,
-            'loss_ce_b': losses_ce_b.avg,
+            # 'loss_ce_b': losses_ce_b.avg,
             })
         # Report JSON data to the NSML metric API server with a simple HTTP POST request.
         requests.post(os.environ['NSML_METRIC_API'], data=metrics_data)
@@ -336,7 +339,10 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
         weight_dict = criterion.weight_dict
 
         orig_target_sizes = torch.stack([t["size"] for t in targets], dim=0)
-        scores, boxes, output_b = postprocessors['bbox'](outputs, orig_target_sizes)
+        try:
+            scores, boxes, output_b = postprocessors['bbox'](outputs, orig_target_sizes)
+        except:
+            scores, boxes = postprocessors['bbox'](outputs, orig_target_sizes)
         for bidx in range(scores.shape[0]): 
             # batch_pointer = 0
             # if bidx >= num_boxes_per_batch_idx[batch_pointer]:
@@ -351,16 +357,23 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
 
                 buff_output.append(scores[bidx, out_key_pos * cfg.CONFIG.MODEL.QUERY_NUM:(out_key_pos + 1) * cfg.CONFIG.MODEL.QUERY_NUM, :])
                 buff_anno.append(boxes[bidx, out_key_pos * cfg.CONFIG.MODEL.QUERY_NUM:(out_key_pos + 1) * cfg.CONFIG.MODEL.QUERY_NUM, :])
-                buff_binary.append(output_b[bidx, out_key_pos * cfg.CONFIG.MODEL.QUERY_NUM:(out_key_pos + 1) * cfg.CONFIG.MODEL.QUERY_NUM, :])
+                try:
+                    buff_binary.append(output_b[bidx, out_key_pos * cfg.CONFIG.MODEL.QUERY_NUM:(out_key_pos + 1) * cfg.CONFIG.MODEL.QUERY_NUM, :])
+                except:
+                    pass
             else:
                 buff_output.append(scores[bidx])
                 buff_anno.append(boxes[bidx])
-                buff_binary.append(output_b[bidx])
+                try:
+                    buff_binary.append(output_b[bidx])
+                except:
+                    pass
 
             for l in range(cfg.CONFIG.MODEL.QUERY_NUM):
                 buff_id.extend([frame_id])
 
-            raw_idx = (targets[bidx]["raw_boxes"][:, 1] == key_pos).nonzero().squeeze()
+            # raw_idx = (targets[bidx]["raw_boxes"][:, 1] == key_pos).nonzero().squeeze()
+            raw_idx = torch.nonzero(targets[bidx]["raw_boxes"][:, 1] == key_pos, as_tuple=False).squeeze()
             # raw_idx = (targets[batch_pointer]["raw_boxes"][:, 1] == key_pos).nonzero().squeeze()
 
             val_label = targets[bidx]["labels"][raw_idx]
@@ -415,20 +428,23 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
             class_err.update(loss_dict_reduced['class_error'], len(targets))
 
             if cfg.CONFIG.MATCHER.BNY_LOSS:
-                losses_ce_b.update(loss_dict_reduced['loss_ce_b'].item(), len(targets))
+                try:
+                    losses_ce_b.update(loss_dict_reduced['loss_ce_b'].item(), len(targets))
+                except:
+                    pass
 
             if not math.isfinite(loss_value):
                 print("Loss is {}, stopping eval".format(loss_value))
                 print(loss_dict_reduced)
                 exit(1)
             if idx % cfg.CONFIG.LOG.DISPLAY_FREQ == 0:
-                print_string = 'class_error: {class_error:.3f}, loss: {loss:.3f}, loss_bbox: {loss_bbox:.3f}, loss_giou: {loss_giou:.3f}, loss_ce: {loss_ce:.3f}, loss_ce_b: {loss_ce_b:.3f}'.format(
+                print_string = 'class_error: {class_error:.3f}, loss: {loss:.3f}, loss_bbox: {loss_bbox:.3f}, loss_giou: {loss_giou:.3f}, loss_ce: {loss_ce:.3f}'.format(
                     class_error=class_err.avg,
                     loss=losses_avg.avg,
                     loss_bbox=losses_box.avg,
                     loss_giou=losses_giou.avg,
                     loss_ce=losses_ce.avg,
-                    loss_ce_b=losses_ce_b.avg,
+                    # loss_ce_b=losses_ce_b.avg,
                     # cardinality_error=loss_dict_reduced['cardinality_error']
                 )
                 print(print_string)
@@ -440,13 +456,13 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
             # print("len(buff_GT_label): ", len(np.concatenate(buff_GT_label, axis=0)))
             # print("len(buff_GT_anno): ", len(np.concatenate(buff_GT_anno, axis=0)))
 
-    if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
-        writer.add_scalar('val/class_error', class_err.avg, epoch)
-        writer.add_scalar('val/totall_loss', losses_avg.avg, epoch)
-        writer.add_scalar('val/loss_bbox', losses_box.avg, epoch)
-        writer.add_scalar('val/loss_giou', losses_giou.avg, epoch)
-        writer.add_scalar('val/loss_ce', losses_ce.avg, epoch)
-        writer.add_scalar('val/loss_ce_b', losses_ce_b.avg, epoch)
+    # if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
+    #     writer.add_scalar('val/class_error', class_err.avg, epoch)
+    #     writer.add_scalar('val/totall_loss', losses_avg.avg, epoch)
+    #     writer.add_scalar('val/loss_bbox', losses_box.avg, epoch)
+    #     writer.add_scalar('val/loss_giou', losses_giou.avg, epoch)
+    #     writer.add_scalar('val/loss_ce', losses_ce.avg, epoch)
+    #     writer.add_scalar('val/loss_ce_b', losses_ce_b.avg, epoch)
 
     buff_output = np.concatenate(buff_output, axis=0)
     buff_anno = np.concatenate(buff_anno, axis=0)
@@ -499,7 +515,7 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
                 'val_loss': losses_avg.avg,
                 'val_loss_giou': losses_giou.avg,
                 'val_loss_ce': losses_ce.avg,
-                'val_loss_ce_b': losses_ce_b.avg,
+                # 'val_loss_ce_b': losses_ce_b.avg,
                 'val_mAP': Map_
                 })
         try:
@@ -599,7 +615,10 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
         weight_dict = criterion.weight_dict
 
         orig_target_sizes = torch.stack([t["size"] for t in targets], dim=0)
-        scores, boxes, output_b = postprocessors['bbox'](outputs, orig_target_sizes)
+        try:
+            scores, boxes, output_b = postprocessors['bbox'](outputs, orig_target_sizes)
+        except:
+            scores, boxes = postprocessors['bbox'](outputs, orig_target_sizes)
         for bidx in range(scores.shape[0]):
 
             if len(targets[bidx]["raw_boxes"]) == 0:
@@ -614,11 +633,17 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
 
             buff_output.append(scores[bidx, out_key_pos * cfg.CONFIG.MODEL.QUERY_NUM:(out_key_pos + 1) * cfg.CONFIG.MODEL.QUERY_NUM, :])
             buff_anno.append(boxes[bidx, out_key_pos * cfg.CONFIG.MODEL.QUERY_NUM:(out_key_pos + 1) * cfg.CONFIG.MODEL.QUERY_NUM, :])
-            # buff_binary.append(output_b)
+            try:
+                buff_binary.append(output_b)
+            except:
+                pass
 
             for l in range(cfg.CONFIG.MODEL.QUERY_NUM):
                 buff_id.extend([frame_id])
-                buff_binary.append(output_b[..., 0])
+                try:
+                    buff_binary.append(output_b[..., 0])
+                except:
+                    pass
 
             val_label = targets[bidx]["labels"]
             val_category = torch.full((len(val_label), cfg.CONFIG.DATA.NUM_CLASSES), 0)
@@ -744,7 +769,7 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
                 'val_loss': losses_avg.avg,
                 'val_loss_giou': losses_giou.avg,
                 'val_loss_ce': losses_ce.avg,
-                'val_loss_ce_b': losses_ce_b.avg,
+                # 'val_loss_ce_b': losses_ce_b.avg,
                 'val_mAP': Map_
                 })
         try:

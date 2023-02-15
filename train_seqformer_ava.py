@@ -5,7 +5,7 @@ import time
 import torch
 import torch.optim
 
-from models.sparse_ava import build_model
+from models.seqformer_ava import build_model
 from utils.model_utils import deploy_model, load_model, save_checkpoint
 from utils.video_action_recognition import train_tuber_detection, validate_tuber_detection
 from pipelines.video_action_recognition_config import get_cfg_defaults

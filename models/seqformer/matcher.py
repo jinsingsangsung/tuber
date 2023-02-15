@@ -14,7 +14,7 @@ import torch
 from scipy.optimize import linear_sum_assignment
 from torch import nn
 
-from util.box_ops import box_cxcywh_to_xyxy, generalized_box_iou
+from utils.box_ops import box_cxcywh_to_xyxy, generalized_box_iou
 
 
 class HungarianMatcher(nn.Module):
@@ -74,8 +74,8 @@ class HungarianMatcher(nn.Module):
             gamma = 2.0
             neg_cost_class = (1 - alpha) * (out_prob ** gamma) * (-(1 - out_prob + 1e-8).log())
             pos_cost_class = alpha * ((1 - out_prob) ** gamma) * (-(out_prob + 1e-8).log())
-            cost_class = pos_cost_class[:, tgt_ids] - neg_cost_class[:, tgt_ids]
-
+            # cost_class = pos_cost_class[:, tgt_ids] - neg_cost_class[:, tgt_ids]
+            cost_class = -out_prob[:, 1:2].repeat(1, len(tgt_bbox))
             # Compute the L1 cost between boxes
             cost_bbox = torch.cdist(out_bbox, tgt_bbox, p=1)
 
@@ -92,7 +92,7 @@ class HungarianMatcher(nn.Module):
             return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
 
 
-def build_matcher(args):
-    return HungarianMatcher(cost_class=args.set_cost_class,
-                            cost_bbox=args.set_cost_bbox,
-                            cost_giou=args.set_cost_giou)
+def build_matcher(cfg):
+    return HungarianMatcher(cost_class=cfg.CONFIG.LOSS_COFS.DICE_COF,
+                            cost_bbox=cfg.CONFIG.LOSS_COFS.BBOX_COF,
+                            cost_giou=cfg.CONFIG.LOSS_COFS.GIOU_COF)

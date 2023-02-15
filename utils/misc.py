@@ -506,7 +506,7 @@ def accuracy_sigmoid(output, target):
     for n in range(target.shape[0]):
         t = target[n,:]
 
-        labels = t.nonzero().t()[0]
+        labels = torch.nonzero(t, as_tuple=False).t()[0]
 
         maxk = len(labels)
 
@@ -556,3 +556,9 @@ def interpolate(input, size=None, scale_factor=None, mode="nearest", align_corne
         return _new_empty_tensor(input, output_shape)
     else:
         return torchvision.ops.misc.interpolate(input, size, scale_factor, mode, align_corners)
+
+def inverse_sigmoid(x, eps=1e-5):
+    x = x.clamp(min=0, max=1)
+    x1 = x.clamp(min=eps)
+    x2 = (1 - x).clamp(min=eps)
+    return torch.log(x1/x2)

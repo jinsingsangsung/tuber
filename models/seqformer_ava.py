@@ -24,11 +24,9 @@ from utils.misc import (NestedTensor, nested_tensor_from_tensor_list,
 
 from .backbone_3d_builder import build_3d_backbone
 from .seqformer.matcher import build_matcher
-from .seqformer.segmentation import (SeqFormer, PostProcessSegm,
-                           dice_loss, sigmoid_focal_loss)
                            
 from .seqformer.deformable_transformer import build_deformable_transformer
-from .criterion import SetCriterionAVA, PostProcessAVA, PosetProcess, MLP
+from .criterion import SetCriterionAVA, PostProcessAVA, PostProcess, MLP
 import copy
 
 
@@ -110,7 +108,7 @@ class DeformableDETR(nn.Module):
             self.transformer.decoder.bbox_embed = None
         
 
-    def forward(self, samples: NestedTensor, targets, criterion, train=True):
+    def forward(self, samples: NestedTensor):
         """ The forward expects a NestedTensor, which consists of:
                - samples.tensor: batched images, of shape [num_frames x 3 x H x W]
                - samples.mask: a binary mask of shape [num_frames x H x W], containing 1 on padded pixels
@@ -141,6 +139,7 @@ class DeformableDETR(nn.Module):
 
             # src_proj_l -> [nf, N, C, Hi, Wi]
             n,c,h,w = src_proj_l.shape
+            # print("n,c,h,w: ", n,c,h,w)
             src_proj_l = src_proj_l.reshape(n//self.num_frames, self.num_frames, c, h, w)
             # src_proj_l = src_proj_l.reshape(n//self.num_frames, self.num_frames, c, h, w).permute(1,0,2,3,4)
             # mask -> [nf, N, Hi, Wi]
@@ -239,14 +238,14 @@ class DeformableDETR(nn.Module):
 
 
 
-def build(cfg):    
+def build_model(cfg):    
     num_classes = cfg.CONFIG.DATA.NUM_CLASSES
 
-    if 'swin' in args.backbone:
+    if 'swin' in cfg.CONFIG.MODEL.BACKBONE_NAME:
         from .swin_transformer import build_swin_backbone
         backbone = build_swin_backbone(cfg) 
     else:
-        backbone = build_backbone(cfg)
+        backbone = build_3d_backbone(cfg)
 
     transformer = build_deformable_transformer(cfg)
     model = DeformableDETR(
@@ -266,9 +265,9 @@ def build(cfg):
     weight_dict['loss_giou'] = cfg.CONFIG.MATCHER.COST_GIOU
 
     # TODO this is a hack
-    if args.aux_loss:
+    if cfg.CONFIG.TRAIN.AUX_LOSS:
         aux_weight_dict = {}
-        for i in range(args.dec_layers - 1):
+        for i in range(cfg.CONFIG.MODEL.DEC_LAYERS - 1):
             aux_weight_dict.update({k + f'_{i}': v for k, v in weight_dict.items()})
         aux_weight_dict.update({k + f'_enc': v for k, v in weight_dict.items()})
         weight_dict.update(aux_weight_dict)

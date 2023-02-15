@@ -56,7 +56,7 @@ def crop(images, target, region):
             # cropped_boxes = target['boxes'][:,1:].reshape(-1, 2, 2)
             # keep = torch.all(cropped_boxes[:, 1, :] > cropped_boxes[:, 0, :], dim=1)
             areas = target['area']
-            keep = torch.where(areas > 30, True, False)
+            keep = torch.where(areas > 30, 1, 0) > 0
             # print("eval areas")
         else:
             keep = target['masks'].flatten(1).any(1)

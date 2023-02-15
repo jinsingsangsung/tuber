@@ -17,7 +17,7 @@ CONFIG:
   USE_LOCATION: False
   TRAIN:
     EPOCH_NUM: 20
-    BATCH_SIZE: 2
+    BATCH_SIZE: 1
     LR: 2e-4
     MIN_LR: 1e-5
     LR_BACKBONE: 1e-5
@@ -83,6 +83,10 @@ CONFIG:
       REL_COORD: False
       MASK: False # always false
       ALPHA: 0.25
+      SINGLE_FRAME: True
+      NUM_DEC_N_POINTS: 4
+      NUM_ENC_N_POINTS: 4
+      POSITION_EMBEDDING: 'sine'
 
 
   MATCHER:
@@ -95,7 +99,7 @@ CONFIG:
 
   LOSS_COFS:
     MASK_COF: 1
-    DICE_COF: 12
+    DICE_COF: 2
     BBOX_COF: 5
     GIOU_COF: 2
     EOS_COF: 0.1

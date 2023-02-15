@@ -47,13 +47,15 @@ class SetCriterionAVA(nn.Module):
         src_logits = outputs['pred_logits']
 
         idx = self._get_src_permutation_idx(indices)
+        try:
+            src_logits_b = outputs['pred_logits_b']
+            target_classes_b = torch.full(src_logits_b.shape[:2], 2,
+                                dtype=torch.int64, device=src_logits.device)
+            target_classes_b[idx] = 1
+            loss_ce_b = F.cross_entropy(src_logits_b.transpose(1, 2), target_classes_b, self.empty_weight.to(src_logits.device))
+        except:
+            pass
 
-        src_logits_b = outputs['pred_logits_b']
-        target_classes_b = torch.full(src_logits_b.shape[:2], 2,
-                                      dtype=torch.int64, device=src_logits.device)
-        target_classes_b[idx] = 1
-
-        loss_ce_b = F.cross_entropy(src_logits_b.transpose(1, 2), target_classes_b, self.empty_weight.to(src_logits.device))
         src_logits_sig = src_logits.sigmoid()
 
         target_classes_o = torch.cat([t["labels"][J] for t, (_, J) in zip(targets, indices)])
@@ -73,7 +75,10 @@ class SetCriterionAVA(nn.Module):
             loss_ce = F.binary_cross_entropy(src_logits_sig, target_classes, weight=weights)
 
         losses = {'loss_ce': loss_ce}
-        losses['loss_ce_b'] = loss_ce_b
+        try:
+            losses['loss_ce_b'] = loss_ce_b
+        except:
+            pass
         if log:
             # docs this should probably be a separate loss, not hacked in this one here
             losses['class_error'] = 100 - accuracy_sigmoid(src_logits[idx], target_classes_o)[0]
@@ -421,9 +426,10 @@ class PostProcess(nn.Module):
                           For evaluation, this must be the original image size (before any data augmentation)
                           For visualization, this should be the image size after data augment, but before padding
         """
-
-        out_logits, out_bbox, out_logits_b = outputs['pred_logits'], outputs['pred_boxes'], outputs['pred_logits_b']
-
+        try:
+            out_logits, out_bbox, out_logits_b = outputs['pred_logits'], outputs['pred_boxes'], outputs['pred_logits_b']
+        except:
+            out_logits, out_bbox = outputs['pred_logits'], outputs['pred_boxes']
         assert len(out_logits) == len(target_sizes)
         assert target_sizes.shape[1] == 2
 
@@ -439,10 +445,11 @@ class PostProcess(nn.Module):
         scores = prob.detach().cpu().numpy()
         # labels = labels.detach().cpu().numpy()
         boxes = boxes.detach().cpu().numpy()
-
-        output_b = out_logits_b.softmax(-1).detach().cpu().numpy()[..., 1:]
-
-        return scores, boxes, output_b
+        try:
+            output_b = out_logits_b.softmax(-1).detach().cpu().numpy()[..., 1:]
+            return scores, boxes, output_b
+        except:
+            return scores, boxes
 
 class PostProcessAVA(nn.Module):
     """ This module converts the model's output into the format expected by the coco api"""
@@ -455,8 +462,10 @@ class PostProcessAVA(nn.Module):
                           For evaluation, this must be the original image size (before any data augmentation)
                           For visualization, this should be the image size after data augment, but before padding
         """
-
-        out_logits_b, out_logits, out_bbox = outputs['pred_logits_b'], outputs['pred_logits'], outputs['pred_boxes']
+        try:
+            out_logits_b, out_logits, out_bbox = outputs['pred_logits_b'], outputs['pred_logits'], outputs['pred_boxes']
+        except:
+            out_logits, out_bbox = outputs['pred_logits'], outputs['pred_boxes']
 
 
         assert len(out_logits) == len(target_sizes)
@@ -465,10 +474,13 @@ class PostProcessAVA(nn.Module):
 
         # prob = out_logits.sigmoid() * out_logits_b.softmax(-1)[:,:,1:2]
 
-
-        prob_binary = out_logits_b.softmax(-1)[:, :, 1:2]
-        prob_bbox = (prob_binary > 0.8).float() * prob_binary
-        prob = out_logits.sigmoid() * prob_bbox
+        try:
+            prob_binary = out_logits_b.softmax(-1)[:, :, 1:2]
+            prob_bbox = (prob_binary > 0.8).float() * prob_binary
+            prob = out_logits.sigmoid() * prob_bbox
+        except:
+            pass
+        prob = out_logits.sigmoid()
 
         boxes = box_ops.box_cxcywh_to_xyxy(out_bbox)
         img_h, img_w = target_sizes.unbind(1)
@@ -477,9 +489,11 @@ class PostProcessAVA(nn.Module):
 
         scores = prob.detach().cpu().numpy()
         boxes = boxes.detach().cpu().numpy()
-        output_b = out_logits_b.softmax(-1).detach().cpu().numpy()[..., 1:2]
-
-        return scores, boxes, output_b
+        try:
+            output_b = out_logits_b.softmax(-1).detach().cpu().numpy()[..., 1:2]
+            return scores, boxes, output_b
+        except:
+            return scores, boxes
 
 
 class MLP(nn.Module):

@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torch import nn, Tensor
 from torch.nn.init import xavier_uniform_, constant_, uniform_, normal_
 
-from util.misc import inverse_sigmoid
+from utils.misc import inverse_sigmoid
 from models.seqformer.ops.modules import MSDeformAttn
 
 
@@ -390,7 +390,7 @@ def _get_activation_fn(activation):
     raise RuntimeError(F"activation should be relu/gelu, not {activation}.")
 
 
-def build_deformable_transformer(args):
+def build_deformable_transformer(cfg):
     return DeformableTransformer(
         d_model=cfg.CONFIG.MODEL.D_MODEL,
         nhead=cfg.CONFIG.MODEL.NHEAD,
