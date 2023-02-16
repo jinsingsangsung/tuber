@@ -56,7 +56,10 @@ class Backbone(nn.Module):
             # return_layers = {"layer2": "0", "layer3": "1", "layer4": "2"}
             self.strides = [8, 16, 32]
             self.num_channels = [512, 1024, 2048]
-            self.in_features = cfg.CONFIG.MODEL.SparseRCNN.ROI_HEADS.IN_FEATURES
+            try:
+                self.in_features = cfg.CONFIG.MODEL.SparseRCNN.ROI_HEADS.IN_FEATURES
+            except:
+                self.in_features = None
         else:
             return_layers = {'layer4': "0"}
             self.strides = [32]
