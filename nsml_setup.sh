@@ -8,7 +8,7 @@ mkdir pretrained_models # && cp -r /mnt/video-nfs5/users/jinsung/pretrained_mode
 # if needed
 cd /home/nsml/pretrained_models/
 #mkdir detr && cd detr
-# wget https://yzaws-data-log.s3.amazonaws.com/shared/TubeR_cvpr22/detr.pth
+wget https://yzaws-data-log.s3.amazonaws.com/shared/TubeR_cvpr22/detr.pth
 # cd ../
 mkdir backbone && cd backbone
 wget https://yzaws-data-log.s3.amazonaws.com/shared/TubeR_cvpr22/irCSN_50_ft_kinetics_from_ig65m_f233743920.mat
