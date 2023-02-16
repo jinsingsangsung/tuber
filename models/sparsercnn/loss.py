@@ -105,13 +105,12 @@ class SetCriterion(nn.Module):
         assert 'pred_boxes' in outputs
         idx = self._get_src_permutation_idx(indices)
         src_boxes = outputs['pred_boxes'][idx]
-        target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0)
-        target_boxes = target_boxes[:, 1:]
+        target_boxes = torch.cat([t["boxes"][i][:, 1:]*t["orig_size"].unsqueeze(0).repeat(1, 2) for t, (_, i) in zip(targets, indices)], dim=0)
 
         loss_bbox = F.l1_loss(src_boxes, target_boxes, reduction='none')
 
         losses = {}
-        losses['loss_bbox'] = loss_bbox.sum() / num_boxes
+        losses['loss_bbox'] = loss_bbox.sum() / num_boxes / 100
 
         loss_giou = 1 - torch.diag(box_ops.generalized_box_iou(
             # box_ops.box_cxcywh_to_xyxy(src_boxes),
@@ -244,15 +243,10 @@ class HungarianMatcher(nn.Module):
             out_bbox = outputs["pred_boxes"].flatten(0, 1)  # [batch_size * num_queries, 4]
 
         # Also concat the target labels and boxes
-        tgt_ids = torch.cat([v["labels"] for v in targets])
+        tgt_ids = torch.cat([v["labels"] for v in targets]) # instances in all batches
         tgt_bbox = torch.cat([v["boxes"] for v in targets])
         tgt_bbox = tgt_bbox[:,1:]
         
-        # print("tgt_ids.shape: ", tgt_ids.shape)
-        # print("tgt_bbox.shape: ", tgt_bbox.shape)
-        # print("out_prob.shape: ", out_prob.shape)
-        # print("out_bbox_sample: ", out_bbox[:10])
-        # print("tgt_bbox_sample: ", tgt_bbox[:10])
         tgt_ids_tensor = torch.zeros(1, tgt_ids.shape[-1], device=tgt_ids.device)
         for i in range(len(tgt_ids)):
             tgt_ids_tensor += tgt_ids[i, :]
@@ -276,22 +270,14 @@ class HungarianMatcher(nn.Module):
         # Compute the L1 cost between boxes
         image_size_out = torch.cat([v["size"].unsqueeze(0) for v in targets])
         image_size_out = image_size_out.unsqueeze(1).repeat(1, num_queries, 1).flatten(0, 1)
-        image_size_out = torch.cat([image_size_out,image_size_out], dim =1)
-        image_size_tgt = torch.cat([v["orig_size"] for v in targets])
-        # print("size: ",targets[0]["size"])
-        # print("orig_size: ",targets[0]["orig_size"])
-        # print("image_size_out.shape: ", image_size_out.shape) # 600 x 2
-        # print("image_size_tgt.shape: ", image_size_tgt.shape) # 4
-        # print("out_bbox.shape: ", out_bbox.shape) # 600 x 4
-        # print("tgt_bbox.shape: ", tgt_bbox.shape) # 2 x 4
+        image_size_out = image_size_out.repeat(1,2)
+        # image_size_out = torch.cat([image_size_out,image_size_out], dim =1)
+        tgt_bbox_ = torch.cat([v["boxes"][:,1:]/ v["orig_size"].unsqueeze(0).repeat(1,2) for v in targets], dim=0)
+
         out_bbox_ = out_bbox / image_size_out
-        tgt_bbox_ = tgt_bbox / image_size_tgt
+
         cost_bbox = torch.cdist(out_bbox_, tgt_bbox_, p=1)
-        # print("is out_bbox valid output?: ", (out_bbox[:, 2:] >= out_bbox[:, :2]).all())
-        # print("is tgt_bbox valid output?: ", (tgt_bbox[:, 2:] >= tgt_bbox[:, :2]).all())
-        # print("tgt_bbox: ", tgt_bbox)
-        # assert (out_bbox[:, 2:] >= out_bbox[:, :2]).all()
-        # assert (tgt_bbox[:, 2:] >= tgt_bbox[:, :2]).all()
+
         # Compute the giou cost betwen boxes
         # cost_giou = -generalized_box_iou(box_cxcywh_to_xyxy(out_bbox), box_cxcywh_to_xyxy(tgt_bbox))
         cost_giou = -generalized_box_iou(out_bbox, box_cxcywh_to_xyxy(tgt_bbox))

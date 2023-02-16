@@ -466,7 +466,10 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
 
     buff_output = np.concatenate(buff_output, axis=0)
     buff_anno = np.concatenate(buff_anno, axis=0)
-    buff_binary = np.concatenate(buff_binary, axis=0)
+    try:
+        buff_binary = np.concatenate(buff_binary, axis=0)
+    except:
+        pass
     buff_GT_label = np.concatenate(buff_GT_label, axis=0)
     buff_GT_anno = np.concatenate(buff_GT_anno, axis=0)
     # print(buff_output.shape, buff_anno.shape, buff_binary.shape, len(buff_id), buff_GT_anno.shape, buff_GT_label.shape, len(buff_GT_id))
@@ -474,7 +477,10 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
     tmp_path = '{}/{}/{}.txt'
     with open(tmp_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, cfg.DDP_CONFIG.GPU_WORLD_RANK), 'w') as f:
         for x in range(len(buff_id)):
-            data = np.concatenate([buff_anno[x], buff_output[x], buff_binary[x]])
+            try:
+                data = np.concatenate([buff_anno[x], buff_output[x], buff_binary[x]])
+            except:
+                data = np.concatenate([buff_anno[x], buff_output[x]])
             f.write("{} {}\n".format(buff_id[x], data.tolist()))
     tmp_GT_path = '{}/{}/GT_{}.txt'
     with open(tmp_GT_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, cfg.DDP_CONFIG.GPU_WORLD_RANK), 'w') as f:
