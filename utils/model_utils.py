@@ -6,6 +6,7 @@ import torch.nn as nn
 
 import torch
 
+__all__ = ['load_detr_weights', 'deploy_model', 'load_model', 'save_model', 'save_checkpoint', 'check_sha1', 'download']
 
 def load_detr_weights(model, pretrain_dir, cfg):
     checkpoint = torch.load(pretrain_dir, map_location='cpu')
@@ -59,7 +60,7 @@ def deploy_model(model, cfg, is_tuber=True):
     else:
         # DataParallel will divide and allocate batch_size to all available GPUs
         model = torch.nn.DataParallel(model).cuda()
-    if cfg.CONFIG.MODEL.LOAD_DETR and is_tuber:  
+    if cfg.CONFIG.MODEL.LOAD_DETR: #and is_tuber:  
         print("loading detr")
         load_detr_weights(model, cfg.CONFIG.MODEL.PRETRAIN_TRANSFORMER_DIR, cfg)
     else:
