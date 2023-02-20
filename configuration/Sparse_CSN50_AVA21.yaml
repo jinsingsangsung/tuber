@@ -72,9 +72,9 @@ CONFIG:
     PRETRAINED: True
     PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_50_ft_kinetics_from_ig65m_f233743920.mat"
     PRETRAIN_TRANSFORMER_DIR: "../pretrained_models/transformer/detr.pth"
-    PRETRAINED_PATH: "../pretrained_models/main/TubeR_CSN50_AVA21.pth"
-    LOAD: False
-    LOAD_FC: False
+    PRETRAINED_PATH: "../pretrained_models/sparse/r101_100pro_3x_model.pth"
+    LOAD: True
+    LOAD_FC: True
     LOAD_DETR: False
     POSITION_EMBEDDING: 'sine'
     

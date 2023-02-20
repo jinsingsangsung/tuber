@@ -80,9 +80,9 @@ def train_classification(base_iter, model, dataloader, epoch, criterion,
             print_string = 'loss: {loss:.5f}'.format(loss=losses.avg)
             print(print_string)
             iteration = base_iter
-            writer.add_scalar('train_loss_iteration', losses.avg, iteration)
-            writer.add_scalar('train_batch_size_iteration', train_label.size(0), iteration)
-            writer.add_scalar('learning_rate', lr, iteration)
+            # writer.add_scalar('train_loss_iteration', losses.avg, iteration)
+            # writer.add_scalar('train_batch_size_iteration', train_label.size(0), iteration)
+            # writer.add_scalar('learning_rate', lr, iteration)
     # batch_bar.close()
     return base_iter
 
@@ -509,7 +509,7 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
         print_string = 'mAP: {mAP:.5f}'.format(mAP=mAP[0])
         print(print_string)
         print(mAP)
-        writer.add_scalar('val/val_mAP_epoch', mAP[0], epoch)
+        # writer.add_scalar('val/val_mAP_epoch', mAP[0], epoch)
         Map_ = mAP[0]
 
     if Map_ != 0:
@@ -713,12 +713,12 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
                 )
                 print(print_string)
 
-    if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
-        writer.add_scalar('val/class_error', class_err.avg, epoch)
-        writer.add_scalar('val/totall_loss', losses_avg.avg, epoch)
-        writer.add_scalar('val/loss_bbox', losses_box.avg, epoch)
-        writer.add_scalar('val/loss_giou', losses_giou.avg, epoch)
-        writer.add_scalar('val/loss_ce', losses_ce.avg, epoch)
+    # if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
+    #     writer.add_scalar('val/class_error', class_err.avg, epoch)
+    #     writer.add_scalar('val/totall_loss', losses_avg.avg, epoch)
+    #     writer.add_scalar('val/loss_bbox', losses_box.avg, epoch)
+    #     writer.add_scalar('val/loss_giou', losses_giou.avg, epoch)
+    #     writer.add_scalar('val/loss_ce', losses_ce.avg, epoch)
 
     buff_output = np.concatenate(buff_output, axis=0)
     buff_anno = np.concatenate(buff_anno, axis=0)

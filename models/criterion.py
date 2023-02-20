@@ -66,7 +66,7 @@ class SetCriterionAVA(nn.Module):
         weights = torch.full(src_logits.shape[:2], 1,
                              dtype=torch.float32, device=src_logits.device)
         weights[idx] = self.weight
-        #
+
         weights = weights.view(weights.shape[0], weights.shape[1], 1)  # [:,:,None]
         target_classes[idx] = target_classes_o
         if self.evaluation:

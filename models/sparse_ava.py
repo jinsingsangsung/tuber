@@ -18,7 +18,7 @@ from models.transformer.transformer import build_transformer
 from models.transformer.transformer_layers import TransformerEncoderLayer, TransformerEncoder
 
 from models.sparsercnn.detector import SparseRCNN
-from models.sparsercnn.loss import SetCriterion, HungarianMatcher
+from models.sparsercnn.loss import HungarianMatcher, SetCriterionAVA
 from models.criterion import PostProcess, PostProcessAVA, MLP
 
 def build_model(cfg):
@@ -49,13 +49,22 @@ def build_model(cfg):
     weight_dict = {"loss_ce": class_weight, "loss_bbox": l1_weight, "loss_giou": giou_weight}
     losses = ['labels', 'boxes']
 
-    criterion = SetCriterion(cfg=cfg,
-                            num_classes=num_classes,
-                            matcher=matcher,
-                            weight_dict=weight_dict,
-                            eos_coef=no_object_weight,
-                            losses=losses,
-                            use_focal=use_focal)
+    # criterion = SetCriterion(cfg=cfg,
+    #                         num_classes=num_classes,
+    #                         matcher=matcher,
+    #                         weight_dict=weight_dict,
+    #                         eos_coef=no_object_weight,
+    #                         losses=losses,
+    #                         use_focal=use_focal)
+    
+    criterion = SetCriterionAVA(cfg.CONFIG.LOSS_COFS.WEIGHT,
+                                num_classes,
+                                num_queries=cfg.CONFIG.MODEL.QUERY_NUM,
+                                matcher=matcher, weight_dict=weight_dict,
+                                eos_coef=cfg.CONFIG.LOSS_COFS.EOS_COF,
+                                losses=losses,
+                                data_file=cfg.CONFIG.DATA.DATASET_NAME,
+                                evaluation=cfg.CONFIG.EVAL_ONLY)
 
     if cfg.CONFIG.TRAIN.AUX_LOSS:
         aux_weight_dict = {}
