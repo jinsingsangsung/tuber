@@ -238,7 +238,7 @@ class SetCriterionAVA(nn.Module):
         target_classes = torch.full(src_logits.shape, 0,
                                     dtype=torch.float32, device=src_logits.device)
         # rebalance way 1:
-         weights = torch.full(src_logits.shape[:2], 1,
+        weights = torch.full(src_logits.shape[:2], 1,
                              dtype=torch.float32, device=src_logits.device)
         weights[idx] = self.weight
         #
