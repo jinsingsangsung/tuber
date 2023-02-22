@@ -31,7 +31,7 @@ def load_detr_weights(model, pretrain_dir, cfg):
     pretrained_dict_ = {k: v for k, v in pretrained_dict.items() if k in model_dict} # model_dict에는 "module.query_embed.weight"라는 key가 있음
     unused_dict = {k: v for k, v in pretrained_dict.items() if not k in model_dict}
     # not_found_dict = {k: v for k, v in model_dict.items() if not k in pretrained_dict}
-    print(pretrained_dict_["module.query_embed.weight"].shape)
+    # print(pretrained_dict_["module.query_embed.weight"].shape)
     print("detr unused model layers:", unused_dict.keys())
     # print("not found layers:", not_found_dict.keys())
 
