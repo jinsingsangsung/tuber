@@ -38,6 +38,8 @@ class SetCriterionAVA(nn.Module):
         empty_weight = torch.ones(3)
         empty_weight[-1] = self.eos_coef
         self.register_buffer('empty_weight', empty_weight)
+        self.focal_loss_alpha = 0.25
+        self.focal_loss_gamma = 2.0
 
     def loss_labels(self, outputs, targets, indices, num_boxes, log=True):
         """Classification loss (NLL)
@@ -59,7 +61,6 @@ class SetCriterionAVA(nn.Module):
         src_logits_sig = src_logits.sigmoid()
 
         target_classes_o = torch.cat([t["labels"][J] for t, (_, J) in zip(targets, indices)])
-
         target_classes = torch.full(src_logits.shape, 0,
                                     dtype=torch.float32, device=src_logits.device)
         # rebalance way 1:

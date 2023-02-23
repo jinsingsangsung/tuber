@@ -32,12 +32,18 @@ def load_detr_weights(model, pretrain_dir, cfg):
     unused_dict = {k: v for k, v in pretrained_dict.items() if not k in model_dict}
     # not_found_dict = {k: v for k, v in model_dict.items() if not k in pretrained_dict}
     # print(pretrained_dict_["module.query_embed.weight"].shape)
-    print("detr unused model layers:", unused_dict.keys())
+    print("number of detr unused model layers:", len(unused_dict.keys()))
+    # print("unused",[i for i in unused_dict.keys()][:10])
+    # print("model_dict",[i for i in model_dict.keys()][:10])
+    # print("pretrained_dict",[i for i in pretrained_dict.keys()][:10])
     # print("not found layers:", not_found_dict.keys())
 
     model_dict.update(pretrained_dict_)
     model.load_state_dict(model_dict)
-    print("load pretrain success")
+    if len(pretrained_dict_.keys())!=0:
+        print("detr load pretrain success")
+    else:
+        print("detr load pretrain failed")
 
 
 def deploy_model(model, cfg, is_tuber=True):
