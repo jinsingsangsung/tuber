@@ -27,9 +27,11 @@ python3 train_seqformer_ava.py --config-file ./configuration/SeqFormer_CSN50_AVA
 
 | Dataset | Backbone | Backbone pretrained on | DETR pretrained on | #view | Original mAP | Reproduced mAP | config |
 | :---: | :---: | :-----: | :-----: |  :---: | :----: | :---: | :---: |
-| AVA 2.1 | CSN-50 | Kinetics-400 | *COCO*, AVA | 1 view | 27.2 |  *26.1* | [config](configuration/TubeR_CSN50_AVA21.yaml) |
+| AVA 2.1 | CSN-50 | Kinetics-400 | *COCO*, AVA | 1 view | 27.2 |  **27.1** | [config](configuration/TubeR_CSN50_AVA21.yaml) |
+| AVA 2.1 | CSN-50 | Kinetics-400 | *COCO* | 1 view | - | 0.0013 | changed the DETR weight to that of the original repo|
+| AVA 2.1 | CSN-50 | Kinetics-400 | - | 1 view | - | 0.0017 | 30 epochs, changed lr to 2e-5|
 
-Still have no idea where the 1% drop comes from. 
+~~Still have no idea where the 1% drop comes from.~~ fixed with 8gpu (23.2.20)
 
 ## Citing TubeR
 ```
