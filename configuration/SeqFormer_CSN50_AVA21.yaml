@@ -30,7 +30,7 @@ CONFIG:
     LR_MILESTONE: [2, 10]
     STEP: 0.1
     OPTIMIZER:
-      NAME: SGD
+      NAME: ADAMW
     AUX_LOSS: False
 
   VAL:

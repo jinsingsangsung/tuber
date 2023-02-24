@@ -56,11 +56,15 @@ def main_worker(cfg):
     ]
 
     # create optimizer
-    optimizer = torch.optim.AdamW(param_dicts, lr=cfg.CONFIG.TRAIN.LR, weight_decay=cfg.CONFIG.TRAIN.W_DECAY)
-
+    if cfg.CONFIG.TRAIN.OPTIMIZER.NAME == 'ADAMW':
+        optimizer = torch.optim.AdamW(param_dicts, lr=cfg.CONFIG.TRAIN.LR, weight_decay=cfg.CONFIG.TRAIN.W_DECAY)
+    elif cfg.CONFIG.TRAIN.OPTIMIZER.NAME == 'SGD':
+        optimizer = torch.optim.SGD(param_dicts, lr=cfg.CONFIG.TRAIN.LR, weight_decay=cfg.CONFIG.TRAIN.W_DECAY)
+    else:
+        raise AssertionError("optimizer is one of SGD or ADAMW")
     # create lr scheduler
     if cfg.CONFIG.TRAIN.LR_POLICY == "step":
-        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[30,60], gamma=0.1)
+        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=cfg.CONFIG.TRAIN.LR_MILESTONE, gamma=cfg.CONFIG.TRAIN.STEP)
     else:
         lr_scheduler = build_scheduler(cfg, optimizer, len(train_loader))
 
