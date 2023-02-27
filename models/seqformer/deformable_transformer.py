@@ -401,6 +401,6 @@ def build_deformable_transformer(cfg):
         activation="relu",
         return_intermediate_dec=True,
         num_frames=cfg.CONFIG.MODEL.TEMP_LEN,
-        num_feature_levels=cfg.CONFIG.MODEL.SeqFormer.NUM_FEATURE_LEVELS,
-        dec_n_points=cfg.CONFIG.MODEL.SeqFormer.NUM_DEC_N_POINTS,
-        enc_n_points=cfg.CONFIG.MODEL.SeqFormer.NUM_ENC_N_POINTS)
+        num_feature_levels=cfg.CONFIG.MODEL.NUM_FEATURE_LEVELS,
+        dec_n_points=cfg.CONFIG.MODEL.NUM_DEC_N_POINTS,
+        enc_n_points=cfg.CONFIG.MODEL.NUM_ENC_N_POINTS)

@@ -1,7 +1,7 @@
 setup.py
-/SeqFormer/models/ops/src/vision.cpp
-/SeqFormer/models/ops/src/cpu/ms_deform_attn_cpu.cpp
-/SeqFormer/models/ops/src/cuda/ms_deform_attn_cuda.cu
+/home/nsml/tuber/models/seqformer/ops/src/vision.cpp
+/home/nsml/tuber/models/seqformer/ops/src/cpu/ms_deform_attn_cpu.cpp
+/home/nsml/tuber/models/seqformer/ops/src/cuda/ms_deform_attn_cuda.cu
 MultiScaleDeformableAttention.egg-info/PKG-INFO
 MultiScaleDeformableAttention.egg-info/SOURCES.txt
 MultiScaleDeformableAttention.egg-info/dependency_links.txt
