@@ -79,6 +79,10 @@ class DETR(nn.Module):
         self.is_swin = "SWIN" in backbone_name
         self.generate_lfb = generate_lfb
         self.last_stride = last_stride
+    
+    def freeze_backbone(self):
+        for param in self.backbone.parameters():
+            param.requires_grad = False
 
     def freeze_params(self):
         for param in self.backbone.parameters():
@@ -217,5 +221,9 @@ def build_model(cfg):
                         evaluation=cfg.CONFIG.EVAL_ONLY)
 
     postprocessors = {'bbox': PostProcessAVA() if cfg.CONFIG.DATA.DATASET_NAME == 'ava' else PostProcess()}
+
+    if cfg.CONFIG.FREEZE_BACKBONE:
+        model.freeze_backbone()
+        print("freeze backbone")
 
     return model, criterion, postprocessors

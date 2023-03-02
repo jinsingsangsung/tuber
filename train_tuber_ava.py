@@ -38,7 +38,6 @@ def main_worker(cfg):
 
     # create criterion
     criterion = criterion.cuda()
-
     param_dicts = [
         {"params": [p for n, p in model.named_parameters() if "backbone" not in n and "class_embed" not in n and "query_embed" not in n and p.requires_grad]},
         {
