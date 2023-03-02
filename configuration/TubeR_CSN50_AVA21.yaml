@@ -15,11 +15,10 @@ CONFIG:
   TWO_STREAM: False
   USE_LFB: False
   USE_LOCATION: False
-  FREEZE_BACKBONE: True
   TRAIN:
     EPOCH_NUM: 20
     BATCH_SIZE: 2
-    LR: 1e-5
+    LR: 1e-4
     MIN_LR: 1e-5
     LR_BACKBONE: 1e-5
     MOMENTUM: 0.9
@@ -27,7 +26,7 @@ CONFIG:
     LR_POLICY: 'step'
     USE_WARMUP: True
     WARMUP_START_LR: 1e-5
-    WARMUP_EPOCHS: 1
+    WARMUP_EPOCHS: 4
     LR_MILESTONE: [10, 15]
     STEP: 0.1
     OPTIMIZER:
@@ -102,6 +101,6 @@ CONFIG:
     SAVE_DIR: 'checkpoints'
     EVAL_DIR: '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/AVA_Tuber/eval'
     SAVE_FREQ: 1
-    RES_DIR: 'tmp2_train_og_backbone_freeze'
-    EXP_NAME: original_backbone_freeze
+    RES_DIR: 'tmp2_train_og'
+    EXP_NAME: original
     DISPLAY_FREQ: 1000
