@@ -80,6 +80,10 @@ class DETR(nn.Module):
         self.generate_lfb = generate_lfb
         self.last_stride = last_stride
 
+    def freeze_backbone(self):
+        for param in self.backbone.parameters():
+            param.requires_grad = False
+
     def freeze_params(self):
         for param in self.backbone.parameters():
             param.requires_grad = False
@@ -180,6 +184,9 @@ def build_model(cfg):
                  ds_rate=cfg.CONFIG.MODEL.DS_RATE,
                  last_stride=cfg.CONFIG.MODEL.LAST_STRIDE,
                  dataset_mode=cfg.CONFIG.DATA.DATASET_NAME)
+
+    if cfg.CONFIG.FREEZE_BACKBONE:
+        model.freeze_backbone()
 
     matcher = build_matcher(cfg)
     weight_dict = {'loss_ce': cfg.CONFIG.LOSS_COFS.DICE_COF, 'loss_bbox': cfg.CONFIG.LOSS_COFS.BBOX_COF}
