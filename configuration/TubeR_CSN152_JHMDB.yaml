@@ -19,7 +19,7 @@ CONFIG:
   USE_LOCATION: False
   TRAIN:
     EPOCH_NUM: 30
-    BATCH_SIZE: 2
+    BATCH_SIZE: 4
     LR: 1e-4
     MIN_LR: 1e-5
     LR_BACKBONE: 1e-5
@@ -73,7 +73,7 @@ CONFIG:
     PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_152_ft_kinetics_from_ig65m_f126851907.mat"
     PRETRAIN_TRANSFORMER_DIR: "../pretrained_models/transformer/detr.pth"
     PRETRAINED_PATH: "../pretrained_models/main/TubeR_CSN152_JHMDB.pth"
-    LOAD_DETR: False
+    LOAD_DETR: True
     LOAD: False
     LOAD_FC: False
 
