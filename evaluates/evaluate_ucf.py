@@ -136,7 +136,7 @@ class STDetectionEvaluaterUCF(object):
         print("start adding into evaluator")
         count = 0
         for image_key, info in sample_dict_per_image.items():
-            if count % 10 == 0:
+            if count % 1000 == 0:
                 print(count, len(sample_dict_per_image.keys()))
             if len(info['bbox']) == 0:
                 print(count)

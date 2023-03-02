@@ -238,10 +238,10 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
             '@epoch': epoch,
             '@step': epoch, # actually epoch
             '@time': time.time(),
-            'class_error': class_err.avg,
-            'loss': losses_avg.avg,
-            'loss_giou': losses_giou.avg,
-            'loss_ce': losses_ce.avg,
+            'class_error': float(class_err.avg),
+            'loss': float(losses_avg.avg),
+            'loss_giou': float(losses_giou.avg),
+            'loss_ce': float(losses_ce.avg),
             # 'loss_ce_b': losses_ce_b.avg,
             })
         # Report JSON data to the NSML metric API server with a simple HTTP POST request.
@@ -722,7 +722,10 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
 
     buff_output = np.concatenate(buff_output, axis=0)
     buff_anno = np.concatenate(buff_anno, axis=0)
-    buff_binary = np.concatenate(buff_binary, axis=0)
+    try:
+        buff_binary = np.concatenate(buff_binary, axis=0)
+    except:
+        pass
 
     buff_GT_label = np.concatenate(buff_GT_label, axis=0)
     buff_GT_anno = np.concatenate(buff_GT_anno, axis=0)
@@ -734,12 +737,14 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
         for x in range(len(buff_id)):
             data = np.concatenate([buff_anno[x], buff_output[x]])
             f.write("{} {}\n".format(buff_id[x], data.tolist()))
-
-    tmp_binary_path = '{}/{}/binary_{}.txt'
-    with open(tmp_binary_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, cfg.DDP_CONFIG.GPU_WORLD_RANK), 'w') as f:
-        for x in range(len(buff_id)):
-            data = buff_binary[x]
-            f.write("{} {}\n".format(buff_id[x], data.tolist()))
+    try:
+        tmp_binary_path = '{}/{}/binary_{}.txt'
+        with open(tmp_binary_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, cfg.DDP_CONFIG.GPU_WORLD_RANK), 'w') as f:
+            for x in range(len(buff_id)):
+                data = buff_binary[x]
+                f.write("{} {}\n".format(buff_id[x], data.tolist()))
+    except:
+        pass
 
     tmp_GT_path = '{}/{}/GT_{}.txt'
     with open(tmp_GT_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, cfg.DDP_CONFIG.GPU_WORLD_RANK), 'w') as f:
@@ -771,10 +776,10 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
                 '@epoch': epoch,
                 '@step': epoch, # actually epoch
                 '@time': time.time(),
-                'val_class_error': class_err.avg,
-                'val_loss': losses_avg.avg,
-                'val_loss_giou': losses_giou.avg,
-                'val_loss_ce': losses_ce.avg,
+                'val_class_error': float(class_err.avg),
+                'val_loss': float(losses_avg.avg),
+                'val_loss_giou': float(losses_giou.avg),
+                'val_loss_ce': float(losses_ce.avg),
                 # 'val_loss_ce_b': losses_ce_b.avg,
                 'val_mAP': Map_
                 })
