@@ -1,9 +1,9 @@
 DDP_CONFIG:
   WORLD_SIZE: 1
   WORLD_RANK: 0
-  GPU_WORLD_SIZE: 8
+  GPU_WORLD_SIZE: 4
   GPU_WORLD_RANK: 0
-  DIST_URL: 'tcp://{}:11589' 
+  DIST_URL: 'tcp://{}:11588' 
   WOLRD_URLS: ["{}"]
   AUTO_RANK_MATCH: True
   DIST_BACKEND: 'nccl'
@@ -18,20 +18,22 @@ CONFIG:
   TRAIN:
     EPOCH_NUM: 20
     BATCH_SIZE: 4
-    LR: 1e-5
-    MIN_LR: 1e-5
-    LR_BACKBONE: 1e-5
+    LR: 1e-4
+    MIN_LR: 1e-5 # only if cosine scheduler is used
+    LR_BACKBONE: 1e-5 # if <=0, freezes the backbone
     MOMENTUM: 0.9
-    W_DECAY: 1e-4
+    W_DECAY: 1e-5
     LR_POLICY: 'step'
-    USE_WARMUP: True
+    USE_WARMUP: True # does nothing
     WARMUP_START_LR: 1e-5
-    WARMUP_EPOCHS: 0
+    WARMUP_EPOCHS: 0 # this determines whether to use Warmup
     LR_MILESTONE: [10, 15]
-    STEP: 0.2
+    STEP: 0.1 # gamma for lr decay
     OPTIMIZER:
       NAME: ADAMW
     AUX_LOSS: True
+    LR_SCHEDULER:
+      NAME: 'step'
 
   VAL:
     BATCH_SIZE: 1
@@ -56,7 +58,7 @@ CONFIG:
     TEMPORAL_DS_STRATEGY: decode
     LAST_STRIDE: False
     GENERATE_LFB: False
-    NAME: 'Sparse R-CNN'
+    NAME: 'ava_detr_9_224'
     ENC_LAYERS: 6
     DEC_LAYERS: 6
     D_MODEL: 256
@@ -72,43 +74,14 @@ CONFIG:
     PRETRAINED: True
     PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_50_ft_kinetics_from_ig65m_f233743920.mat"
     PRETRAIN_TRANSFORMER_DIR: "../pretrained_models/transformer/detr.pth"
-    PRETRAINED_PATH: "/mnt/video-nfs5/users/jinsung/results/sparse-rcnn/AVA/SparseTuber/checkpoints/ckpt_epoch_7.pth" # "../pretrained_models/sparse/r101_100pro_3x_model.pth"
+    PRETRAINED_PATH: "../pretrained_models/main/TubeR_CSN50_AVA21.pth"
     LOAD: False
     LOAD_FC: False
     LOAD_DETR: False
-    POSITION_EMBEDDING: 'sine'
-    
-    SparseRCNN:
-      USE: True
-      ROI_HEADS:
-        IN_FEATURES: ["layer1", "layer2", "layer3", "layer4"]
-      HIDDEN_DIM: 256
-      SINGLE_FRAME: True
-      NUM_PROPOSALS: 15
-      NUM_HEADS: 8
-      CLASS_WEIGHT: 2.0
-      GIOU_WEIGHT: 2.0
-      L1_WEIGHT: 5.0
-      NO_OBJECT_WEIGHT: 0.1
-      DEEP_SUPERVISION: True
-      USE_FOCAL: True
-      ALPHA: 0.25
-      GAMMA: 2.0
-      PRIOR_PROB: 0.01
-      ACTIVATION: "relu"
-      SOLVER:
-        OPTIMIZER: "ADAMW"
-        BACKBONE_MULTIPLIER: 1.0
-      ROI_HEADS:
-        IN_FEATURES: ["p2", "p3", "p4", "p5"]
-      ROI_BOX_HEAD:
-        POOLER_TYPE: "ROIAlignV2"
-        POOLER_RESOLUTION: 7
-        POOLER_SAMPLING_RATIO: 2     
-      DIM_DYNAMIC: 64
-      NUM_DYNAMIC: 2
-      NUM_CLS: 1
-      NUM_REG: 3
+    POSITION_EMBEDDING: "sine"
+    NUM_FEATURE_LEVELS: 4
+    NUM_DEC_N_POINTS: 4
+    NUM_ENC_N_POINTS: 4
 
   MATCHER:
     COST_CLASS: 12
@@ -120,8 +93,8 @@ CONFIG:
   LOSS_COFS:
     MASK_COF: 1
     DICE_COF: 12
-    BBOX_COF: 5 #10
-    GIOU_COF: 2 #4
+    BBOX_COF: 5
+    GIOU_COF: 2
     EOS_COF: 0.1
     WEIGHT: 10
     WEIGHT_CHANGE: 1000
@@ -129,11 +102,11 @@ CONFIG:
     CLIPS_MAX_NORM: 0.1
 
   LOG:
-    BASE_PATH: '/mnt/video-nfs5/users/jinsung/results/sparse-rcnn/AVA'
+    BASE_PATH: '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/AVA_Tuber'
     LOG_DIR: 'tb_log'
     SAVE_DIR: 'checkpoints'
-    EVAL_DIR: '/mnt/video-nfs5/users/jinsung/results/sparse-rcnn/AVA/eval'
+    EVAL_DIR: '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/AVA_Tuber/eval'
     SAVE_FREQ: 1
-    RES_DIR: 'tmp2_sparse'
-    EXP_NAME: 'SparseTuber'
+    RES_DIR: 'tmp2_train_og'
+    EXP_NAME: original
     DISPLAY_FREQ: 1000
