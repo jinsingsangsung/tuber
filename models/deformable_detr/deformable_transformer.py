@@ -171,9 +171,14 @@ class DeformableTransformer(nn.Module):
             pos_trans_out = self.pos_trans_norm(self.pos_trans(self.get_proposal_pos_embed(topk_coords_unact)))
             query_embed, tgt = torch.split(pos_trans_out, c, dim=2)
         else:
-            query_embed, tgt = torch.split(query_embed, c, dim=1)
-            query_embed = query_embed.unsqueeze(0).expand(bs, -1, -1)
-            tgt = tgt.unsqueeze(0).expand(bs, -1, -1)
+            # cross attention in deformable transformer
+            try:
+                query_embed, tgt = torch.split(query_embed, c, dim=1)
+                query_embed = query_embed.unsqueeze(0).expand(bs, -1, -1)
+                tgt = tgt.unsqueeze(0).expand(bs, -1, -1)
+            except:
+                bs = query_embed.size(0) # bs
+                query_embed, tgt = torch.split(query_embed, c, dim=2)
             reference_points = self.reference_points(query_embed).sigmoid()
             init_reference_out = reference_points
 
