@@ -94,19 +94,21 @@ def load_model(model, cfg, load_fc=True):
         # detr weight is already updated
         # del model_dict['module.query_embed.weight']
         # print(model_dict.keys())
-        if not cfg.CONFIG.MODEL.SparseRCNN.USE:
+        if cfg.DDP_CONFIG.DISTRIBUTED:
             pretrained_dict = {k: v for k, v in checkpoint['model'].items() if k in model_dict}
             unused_dict = {k: v for k, v in checkpoint['model'].items() if not k in model_dict}
             not_found_dict = {k: v for k, v in model_dict.items() if not k in checkpoint['model']}
-            print("unused model layers:", unused_dict.keys())
-            print("not found layers:", not_found_dict.keys())
+            print("number of unused model layers:", len(unused_dict.keys()))
+            print("number of not found layers:", len(not_found_dict.keys()))
+            
         else:
-            pretrained_dict = {k: v for k, v in checkpoint.items() if 'module.'+k in model_dict or k in model_dict}
-            unused_dict = {k: v for k, v in checkpoint.items() if not 'module.'+k in model_dict or k not in model_dict}
-            not_found_dict = {k: v for k, v in model_dict.items() if not 'module.'+k in checkpoint or k not in checkpoint}
+            pretrained_dict = {k: v for k, v in checkpoint["model"].items() if k[7:] in model_dict}
+            unused_dict = {k: v for k, v in checkpoint["model"].items() if not k[7:] in model_dict}
+            not_found_dict = {k: v for k, v in model_dict.items() if not "module."+k in checkpoint["model"]}
             print("number of loaded model layers:", len(pretrained_dict.keys()))
             print("number of unused model layers:", len(unused_dict.keys()))
             print("number of not found layers:", len(not_found_dict.keys()))
+
         model_dict.update(pretrained_dict)
         model.load_state_dict(model_dict, strict=False)
         try:

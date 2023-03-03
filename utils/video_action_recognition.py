@@ -339,10 +339,15 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
         weight_dict = criterion.weight_dict
 
         orig_target_sizes = torch.stack([t["size"] for t in targets], dim=0)
-        try:
-            scores, boxes, output_b = postprocessors['bbox'](outputs, orig_target_sizes)
-        except:
-            scores, boxes = postprocessors['bbox'](outputs, orig_target_sizes)
+        if not cfg.CONFIG.MODEL.SparseRCNN.USE:
+            try:
+                scores, boxes, output_b = postprocessors['bbox'](outputs, orig_target_sizes)
+            except:
+                scores, boxes = postprocessors['bbox'](outputs, orig_target_sizes)
+        else: 
+            scores, _ = postprocessors['bbox'](outputs, orig_target_sizes)
+            boxes = outputs["pred_boxes"].detach().cpu().numpy()
+        
         for bidx in range(scores.shape[0]): 
             # batch_pointer = 0
             # if bidx >= num_boxes_per_batch_idx[batch_pointer]:

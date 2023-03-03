@@ -292,12 +292,12 @@ class SetCriterionAVA(nn.Module):
 
         losses = {}
         losses['loss_bbox'] = loss_bbox.sum() / num_boxes
-
         loss_giou = 1 - torch.diag(box_ops.generalized_box_iou(
-            src_boxes, #box_ops.box_cxcywh_to_xyxy(src_boxes),
+            src_boxes_, #box_ops.box_cxcywh_to_xyxy(src_boxes),
             box_ops.box_cxcywh_to_xyxy(target_boxes)))
         losses['loss_giou'] = loss_giou.sum() / num_boxes
         return losses
+
 
     def loss_masks(self, outputs, targets, indices, num_boxes):
         """Compute the losses related to the masks: the focal loss and the dice loss.
@@ -476,17 +476,15 @@ class HungarianMatcher(nn.Module):
         image_size_out = image_size_out.unsqueeze(1).repeat(1, num_queries, 1).flatten(0, 1)
         image_size_out = image_size_out.repeat(1,2)
         # image_size_out = torch.cat([image_size_out,image_size_out], dim =1)
-        tgt_bbox_ = torch.cat([v["boxes"][:,1:]/ v["orig_size"].unsqueeze(0).repeat(1,2) for v in targets], dim=0)
-
+        # tgt_bbox_ = torch.cat([v["boxes"][:,1:]/ v["orig_size"].unsqueeze(0).repeat(1,2) for v in targets], dim=0)
         out_bbox_ = out_bbox / image_size_out
 
-        cost_bbox = torch.cdist(out_bbox_, tgt_bbox_, p=1)
-
+        cost_bbox = torch.cdist(out_bbox_, tgt_bbox, p=1)
+        # import pdb; pdb.set_trace()
         # Compute the giou cost betwen boxes
         # cost_giou = -generalized_box_iou(box_cxcywh_to_xyxy(out_bbox), box_cxcywh_to_xyxy(tgt_bbox))
         cost_giou = -generalized_box_iou(out_bbox, box_cxcywh_to_xyxy(tgt_bbox))
-        # cost_giou = -generalized_box_iou(box_cxcywh_to_xyxy(out_bbox_),
-        #                                  box_cxcywh_to_xyxy(tgt_bbox_))
+
         # Final cost matrix
         C = self.cost_bbox * cost_bbox + self.cost_class * cost_class + self.cost_giou * cost_giou
         C = C.view(bs, num_queries, -1).cpu()
