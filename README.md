@@ -49,6 +49,11 @@ python3 train_d_tuber_ava3.py --config-file ./configuration/D3_TubeR_CSN50_AVA21
 ```
 <img width="646" alt="Screen Shot 2023-03-03 at 4 01 03 PM" src="https://user-images.githubusercontent.com/76904126/222653064-10cf0cc4-33a4-4c7f-b358-a6d35527a229.png">
 
+## Deformable TubeR: Deformable DETR + transformer
+```
+python3 train_d_tuber_ava4.py --config-file ./configuration/D4_TubeR_CSN50_AVA21.yaml
+```
+<img width="646" alt="Screen Shot 2023-03-03 at 11 52 36 PM" src="https://user-images.githubusercontent.com/76904126/222751737-ca8ce89a-88b7-4941-9aec-54af63e2822d.png">
 
 
 ## Citing TubeR
