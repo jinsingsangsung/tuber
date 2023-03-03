@@ -31,10 +31,18 @@ Model | Dataset | Backbone | Backbone pretrained on | DETR pretrained on | #view
 | TubeR | AVA 2.1 | CSN-50 | Kinetics-400 | *COCO*, AVA | 1 view | - | 24.98 | use focal loss |
 | TubeR | AVA 2.1 | CSN-50 | Kinetics-400 | *COCO* | 1 view | - | 0.0013 | changed the DETR weight to that of the original repo|
 | TubeR | AVA 2.1 | CSN-50 | Kinetics-400 | - | 1 view | - | 25.03 | 30 epochs, changed lr to 2e-5|
-| Deformable TubeR (vanilla) | AVA 2.1 | CSN-50 | Kinetics-400 | - | 1 view | - | 25.03 | [config](configuration/D2_TubeR_CSN50_AVA21.yaml) |
+| Deformable TubeR (vanilla) | AVA 2.1 | CSN-50 | Kinetics-400 | - | 1 view | - | TBD | [config](configuration/D2_TubeR_CSN50_AVA21.yaml) |
 
 
 ~~Still have no idea where the 1% drop comes from.~~ fixed with 8gpu (23.2.20)
+
+# Model explanation
+## Deformable TubeR (vanilla)
+```
+python3 train_d_tuber_ava2.py --config-file ./configuration/D2_TubeR_CSN50_AVA21.yaml
+```
+<img width="689" alt="Screen Shot 2023-03-03 at 2 01 53 PM" src="https://user-images.githubusercontent.com/76904126/222635641-4d7492c1-0b56-41a5-a59e-e19b99fb1bd1.png">
+
 
 ## Citing TubeR
 ```
