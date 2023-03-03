@@ -168,7 +168,7 @@ class SparseRCNN(nn.Module):
         # Prediction.
         outputs_class, outputs_coord = self.head(srcs, proposal_boxes, self.init_proposal_features.weight)
         output = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1]}
-        
+        # print(output["pred_boxes"][:3])
         return output
         # if self.training:
         #     gt_instances = [x["instances"].to(self.device) for x in batched_inputs]

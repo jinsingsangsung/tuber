@@ -103,7 +103,7 @@ class DETR(nn.Module):
         # else:
         #     self.input_proj = nn.Conv3d(backbone.num_channels, hidden_dim, kernel_size=1)
         #     self.class_proj = nn.Conv3d(backbone.num_channels, hidden_dim, kernel_size=1)
-        self.class_proj = nn.Conv3d(backbone.num_channels[-1], hidden_dim, kernel_size=1)
+        self.class_proj = nn.Conv3d(backbone.num_channels[-1], hidden_dim, kernel_size=(4,1,1))
         encoder_layer = TransformerEncoderLayer(hidden_dim, 8, 2048, 0.1, "relu", normalize_before=False)
         self.encoder = TransformerEncoder(encoder_layer, num_layers=1, norm=None)
         self.cross_attn = nn.MultiheadAttention(256, num_heads=8, dropout=0.1)
@@ -116,13 +116,13 @@ class DETR(nn.Module):
         self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
 
         if self.dataset_mode == 'ava':
-            self.class_embed = nn.Linear(hidden_dim, num_classes)
+            self.class_fc = nn.Linear(hidden_dim, num_classes)
         else:
-            self.class_embed = nn.Linear(hidden_dim, num_classes + 1)
+            self.class_fc = nn.Linear(hidden_dim, num_classes + 1)
         self.dropout = nn.Dropout(0.5)
         num_pred = transformer.decoder.num_layers
         if with_box_refine:
-            self.class_embed = _get_clones(self.class_embed, num_pred)
+            # self.class_embed = _get_clones(self.class_embed, num_pred)
             self.bbox_embed = _get_clones(self.bbox_embed, num_pred)
             nn.init.constant_(self.bbox_embed[0].layers[-1].bias.data[2:], -2.0)
             # hack implementation for iterative bounding box refinement
@@ -253,19 +253,20 @@ class DETR(nn.Module):
             outputs_class_b = outputs_class_b.unsqueeze(0).repeat(6, 1, 1)
         
         #############momentum
-        # lay_n, bs, nb, dim = hs.shape
-        src_c = self.class_proj(features[-1].tensors.permute(1,0,2,3)).unsqueeze(0) # 256 32 16 29 
-        
-        # hs_t_agg = hs.contiguous().view(lay_n, bs, 1, nb, dim)
+        lay_n, bs, nq, dim = hs.shape
+        # features[-1].tensors.shape: bs*t, dim, h, w
+        hd, h, w = features[-1].tensors.shape[-3:]
+        # hs.shape: lay_n, bs, nq, dim
+        src_c = self.class_proj(features[-1].tensors.contiguous().view(bs,-1,hd,h,w).permute(0,2,1,3,4)) # bs, hidden_dim, t, h, w
+        hs_t_agg = hs.contiguous().view(lay_n, bs, 1, nq, dim)
+        src_flatten = src_c.view(1, bs, self.hidden_dim, -1).repeat(lay_n, 1, 1, 1).view(lay_n * bs, self.hidden_dim, -1).permute(2, 0, 1).contiguous()
+        if not self.is_swin:
+            src_flatten, _ = self.encoder(src_flatten, orig_shape=src_c.shape)
+        hs_query = hs_t_agg.view(lay_n * bs, nq, dim).permute(1, 0, 2).contiguous()
+        q_class = self.cross_attn(hs_query, src_flatten, src_flatten)[0]
+        q_class = q_class.permute(1, 0, 2).contiguous().view(lay_n, bs, nq, self.hidden_dim)
 
-        # src_flatten = src_c.view(1, bs, self.hidden_dim, -1).repeat(lay_n, 1, 1, 1).view(lay_n * bs, self.hidden_dim, -1).permute(2, 0, 1).contiguous()
-        # # if not self.is_swin:
-        #     # src_flatten, _ = self.encoder(src_flatten, orig_shape=src_c.shape)
-        # hs_query = hs_t_agg.view(lay_n * bs, nb, dim).permute(1, 0, 2).contiguous()
-        # q_class = self.cross_attn(hs_query, src_flatten, src_flatten)[0]
-        # q_class = q_class.permute(1, 0, 2).contiguous().view(lay_n, bs, nb, self.hidden_dim)
-
-        # outputs_class = self.class_fc(self.dropout(q_class))
+        outputs_class = self.class_fc(self.dropout(q_class))
         # outputs_coord = self.bbox_embed(hs_box.mean(2)).sigmoid()
 
         out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1], 'pred_logits_b': outputs_class_b[-1],}
