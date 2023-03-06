@@ -78,6 +78,7 @@ def main_worker(cfg):
 
         if epoch % cfg.CONFIG.VAL.FREQ == 0 or epoch == cfg.CONFIG.TRAIN.EPOCH_NUM - 1:
             validate_tuber_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)
+        lr_scheduler.step()
 
     if writer is not None:
         writer.close()
