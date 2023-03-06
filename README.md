@@ -32,6 +32,7 @@ Model | Dataset | Backbone | Backbone pretrained on | DETR pretrained on | #view
 | TubeR | AVA 2.1 | CSN-50 | Kinetics-400 | *COCO* | 1 view | - | 0.0013 | original DETR weight |
 | TubeR | AVA 2.1 | CSN-50 | Kinetics-400 | - | 1 view | - | 25.03 | 30 epochs, lr: 2e-5|
 | Deformable TubeR (vanilla) | AVA 2.1 | CSN-50 | Kinetics-400 | - | 1 view | - | TBD | [config](configuration/D2_TubeR_CSN50_AVA21.yaml) |
+| DETR + DeformableDETR | AVA 2.1 | CSN-50 | Kinetics-400 | - | 1 view | - | 22.0 | [config](configuration/D3_TubeR_CSN50_AVA21.yaml) |
 
 
 ~~Still have no idea where the 1% drop comes from.~~ fixed with 8gpu (23.2.20)
