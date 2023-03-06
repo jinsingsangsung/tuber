@@ -14,10 +14,10 @@ from utils.misc import (NestedTensor, nested_tensor_from_tensor_list,
 
 from models.dfwsgar.backbone_builder import build_backbone
 from models.detr.segmentation import (dice_loss, sigmoid_focal_loss)
-from models.transformer.transformer import build_transformer
+from models.dfwsgar.transformer import build_transformer
 from models.transformer.transformer_layers import TransformerEncoderLayer, TransformerEncoder
 from models.criterion import SetCriterion, PostProcess, SetCriterionAVA, PostProcessAVA, MLP
-
+from models.transformer.transformer_layers import LSTRTransformerDecoder, LSTRTransformerDecoderLayer, layer_norm
 
 class DETR(nn.Module):
     """ This is the DETR module that performs object detection """
@@ -79,6 +79,10 @@ class DETR(nn.Module):
         self.is_swin = "SWIN" in backbone_name
         self.generate_lfb = generate_lfb
         self.last_stride = last_stride
+        self.query_pool = nn.Embedding(1, 256)
+        self.pool_decoder = LSTRTransformerDecoder(
+            LSTRTransformerDecoderLayer(d_model=256, nhead=8, dim_feedforward=256, dropout=0.1), 1,
+            norm=layer_norm(d_model=256, condition=True))
 
     def freeze_backbone(self):
         for param in self.backbone.parameters():
@@ -118,32 +122,41 @@ class DETR(nn.Module):
 
         features, pos, xt = self.backbone(samples)
         src, mask = features[-1].decompose()
+        bs = src.size(0)
+        t = src.size(2)
         assert mask is not None
 
         hs = self.transformer(self.input_proj(src), mask, self.query_embed.weight, pos[-1])[0]
-        import pdb; pdb.set_trace()
-        if self.dataset_mode == 'ava':
-            outputs_class_b = self.class_embed_b(hs)
-        else:
-            outputs_class_b = self.class_embed_b(self.avg_s(xt).squeeze(-1).squeeze(-1).squeeze(-1))
-            outputs_class_b = outputs_class_b.unsqueeze(0).repeat(6, 1, 1)
-        #############momentum
-        lay_n, bs, nb, dim = hs.shape
+
+        lay_n, bst, nb, dim = hs.shape
+        hs = hs.permute(1,0,2,3).contiguous().view(bs, t, lay_n, nb, -1).permute(1,0,2,3,4).contiguous()
+        hs = hs.view(t, bs*lay_n*nb, dim)
+
+        query_pool = self.query_pool.weight.unsqueeze(1).repeat(1, bs*lay_n*nb, 1)
+        hs = self.pool_decoder(query_pool, hs)
+        hs = hs.view(1, bs, lay_n*nb, dim).permute(1,2,0,3).contiguous().view(bs*lay_n, nb, 1, dim).permute(0,2,1,3) # bs*lay_n, 1, nb, dim       
 
         src_c = self.class_proj(xt)
 
-        hs_t_agg = hs.contiguous().view(lay_n, bs, 1, nb, dim)
+        hs_t_agg = hs.contiguous().view(bs, lay_n, nb, 1, dim).permute(1, 0, 3, 2, 4) # lay_n, bs, 1, nb, dim
+        # hs_t_agg = hs.contiguous().view(lay_n, bs, 1, nb, dim)
 
         src_flatten = src_c.view(1, bs, self.hidden_dim, -1).repeat(lay_n, 1, 1, 1).view(lay_n * bs, self.hidden_dim, -1).permute(2, 0, 1).contiguous()
         if not self.is_swin:
             src_flatten, _ = self.encoder(src_flatten, orig_shape=src_c.shape)
 
-        hs_query = hs_t_agg.view(lay_n * bs, nb, dim).permute(1, 0, 2).contiguous()
+        hs_query = hs_t_agg.flatten(0,2).permute(1, 0, 2).contiguous()
         q_class = self.cross_attn(hs_query, src_flatten, src_flatten)[0]
         q_class = q_class.permute(1, 0, 2).contiguous().view(lay_n, bs, nb, self.hidden_dim)
+        
+        if self.dataset_mode == 'ava':
+            outputs_class_b = self.class_embed_b(hs_t_agg.view(lay_n, bs, nb, dim))
+        else:
+            outputs_class_b = self.class_embed_b(self.avg_s(xt).squeeze(-1).squeeze(-1).squeeze(-1))
+            outputs_class_b = outputs_class_b.unsqueeze(0).repeat(6, 1, 1)
 
         outputs_class = self.class_fc(self.dropout(q_class))
-        outputs_coord = self.bbox_embed(hs).sigmoid()
+        outputs_coord = self.bbox_embed(hs_t_agg.view(lay_n, bs, nb, dim)).sigmoid()
 
         out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1], 'pred_logits_b': outputs_class_b[-1],}
         if self.aux_loss:
