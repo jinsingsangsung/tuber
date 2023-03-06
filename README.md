@@ -31,7 +31,7 @@ Model | Dataset | Backbone | Backbone pretrained on | DETR pretrained on | #view
 | TubeR | AVA 2.1 | CSN-50 | Kinetics-400 | *COCO*, AVA | 1 view | - | 24.98 | use focal loss |
 | TubeR | AVA 2.1 | CSN-50 | Kinetics-400 | *COCO* | 1 view | - | 0.0013 | original DETR weight |
 | TubeR | AVA 2.1 | CSN-50 | Kinetics-400 | - | 1 view | - | 25.03 | 30 epochs, lr: 2e-5|
-| Deformable TubeR (vanilla) | AVA 2.1 | CSN-50 | Kinetics-400 | - | 1 view | - | TBD | [config](configuration/D2_TubeR_CSN50_AVA21.yaml) |
+| Deformable TubeR (vanilla) | AVA 2.1 | CSN-50 | Kinetics-400 | - | 1 view | - | 20.4 | [config](configuration/D2_TubeR_CSN50_AVA21.yaml) |
 | DETR + DeformableDETR | AVA 2.1 | CSN-50 | Kinetics-400 | - | 1 view | - | 22.0 | [config](configuration/D3_TubeR_CSN50_AVA21.yaml) |
 
 
