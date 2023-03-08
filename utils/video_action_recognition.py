@@ -145,10 +145,17 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
                 else:
                     outputs = model(samples, lfb_features)
             else:
-                outputs = model(samples)
+                if not "DN" in cfg.CONFIG.LOG.RES_DIR:
+                    outputs = model(samples)
+                    loss_dict = criterion(outputs, targets)
+                else:
+                    dn_args = targets, cfg.CONFIG.MODEL.SCALAR, cfg.CONFIG.MODEL.LABEL_NOISE_SCALE, cfg.CONFIG.MODEL.BOX_NOISE_SCALE, cfg.CONFIG.MODEL.NUM_PATTERNS
+                    outputs, mask_dict = model(samples, dn_args)
+                    loss_dict = criterion(outputs, targets, mask_dict)
+
         # if not math.isfinite(outputs["pred_logits"][0].data.cpu().numpy()[0,0]):
         #     print(outputs["pred_logits"][0].data.cpu().numpy())
-        loss_dict = criterion(outputs, targets)
+        
         weight_dict = criterion.weight_dict
         if epoch > cfg.CONFIG.LOSS_COFS.WEIGHT_CHANGE:
             weight_dict['loss_ce'] = cfg.CONFIG.LOSS_COFS.LOSS_CHANGE_COF
@@ -332,6 +339,10 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
                 else:
                     outputs = model(samples, lfb_features)
             else:
+                try:
+                    model.training=False
+                except:
+                    pass
                 outputs = model(samples)
                 # outputs, num_boxes_per_batch_idx = model(targets, samples)
 
