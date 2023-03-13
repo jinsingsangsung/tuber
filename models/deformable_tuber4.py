@@ -17,15 +17,16 @@ from models.detr.segmentation import (dice_loss, sigmoid_focal_loss)
 from models.deformable_detr.deformable_transformer import build_deformable_transformer_og
 from models.transformer.transformer_layers import TransformerEncoderLayer, TransformerEncoder
 from models.criterion import SetCriterion, PostProcess, SetCriterionAVA, PostProcessAVA, MLP
+from models.transformer.transformer_layers import LSTRTransformerDecoder, LSTRTransformerDecoderLayer, layer_norm
 import copy
 
-def t_pool_layer(conv_channel, conv_kernels, l):
-    basic_layer = [nn.Conv3d(conv_channel, conv_channel, (conv_kernels[l],1,1)), nn.BatchNorm3d(conv_channel)]
-    return nn.Sequential(*basic_layer)
+# def t_pool_layer(conv_channel, conv_kernels, l):
+#     basic_layer = [nn.Conv3d(conv_channel, conv_channel, (conv_kernels[l],1,1)), nn.BatchNorm3d(conv_channel)]
+#     return nn.Sequential(*basic_layer)
 
-def t_pool_layers(conv_channel, conv_kernels, i, num_feature_levels):
-    layers = [t_pool_layer(conv_channel, conv_kernels, l) for l in range(num_feature_levels)[i:-1]]
-    return nn.Sequential(*layers)
+# def t_pool_layers(conv_channel, conv_kernels, i, num_feature_levels):
+#     layers = [t_pool_layer(conv_channel, conv_kernels, l) for l in range(num_feature_levels)[i:-1]]
+#     return nn.Sequential(*layers)
 
 def _get_clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
@@ -52,18 +53,22 @@ class DETR(nn.Module):
         self.avg = nn.AvgPool3d(kernel_size=(temporal_length, 1, 1))
         self.dataset_mode = dataset_mode
         self.num_feature_levels = num_feature_levels # 4
-        conv_channels = [ch//2 for ch in backbone.num_channels] + [backbone.num_channels[-1]]
-        conv_channel = backbone.num_channels[0] // 2
+        # conv_channels = [ch//2 for ch in backbone.num_channels] + [backbone.num_channels[-1]]
+        # conv_channel = backbone.num_channels[0] // 2
         # 256, 512, 1024, 2048
-        conv_kernels = [temporal_length//(2**(l+2))+1 if l != num_feature_levels-2 else temporal_length//(2**(l+1)) for l in range(num_feature_levels-1)]
+        # conv_kernels = [temporal_length//(2**(l+2))+1 if l != num_feature_levels-2 else temporal_length//(2**(l+1)) for l in range(num_feature_levels-1)]
         # 9, 5, 4
         # self.conv3d = [t_pool_layers(conv_channel, conv_kernels, i, num_feature_levels) for i in range(num_feature_levels-1)]
         # self.conv3d += [self.conv3d[-1]]
-        self.conv3d_0 = t_pool_layers(conv_channel, conv_kernels, 0, num_feature_levels)
-        self.conv3d_1 = t_pool_layers(conv_channel, conv_kernels, 1, num_feature_levels)
-        self.conv3d_2 = t_pool_layers(conv_channel, conv_kernels, 2, num_feature_levels)
-        self.conv3d_3 = t_pool_layers(conv_channel, conv_kernels, 2, num_feature_levels)
-        self.conv3d = [self.conv3d_0, self.conv3d_1, self.conv3d_2, self.conv3d_3]
+        # self.conv3d_0 = t_pool_layers(conv_channel, conv_kernels, 0, num_feature_levels)
+        # self.conv3d_1 = t_pool_layers(conv_channel, conv_kernels, 1, num_feature_levels)
+        # self.conv3d_2 = t_pool_layers(conv_channel, conv_kernels, 2, num_feature_levels)
+        # self.conv3d_3 = t_pool_layers(conv_channel, conv_kernels, 2, num_feature_levels)
+        # self.conv3d = [self.conv3d_0, self.conv3d_1, self.conv3d_2, self.conv3d_3]
+        self.query_pool = nn.Embedding(num_feature_levels, hidden_dim)
+        self.pool_decoder = LSTRTransformerDecoder(
+            LSTRTransformerDecoderLayer(d_model=hidden_dim, nhead=8, dim_feedforward=hidden_dim, dropout=0.1), 1,
+            norm=layer_norm(d_model=hidden_dim, condition=True))
         if num_feature_levels > 1:
             num_backbone_outs = len(backbone.strides)
             input_proj_list = []
@@ -110,15 +115,12 @@ class DETR(nn.Module):
 
         if self.dataset_mode == 'ava':
             self.class_embed_b = nn.Linear(hidden_dim, 3)
-        else:
-            self.class_embed_b = nn.Linear(2048, 2)
-
-        self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
-
-        if self.dataset_mode == 'ava':
             self.class_fc = nn.Linear(hidden_dim, num_classes)
         else:
+            self.class_embed_b = nn.Linear(2048, 2)
             self.class_fc = nn.Linear(hidden_dim, num_classes + 1)
+
+        self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
         self.dropout = nn.Dropout(0.5)
         num_pred = transformer.decoder.num_layers
         if with_box_refine:
@@ -177,9 +179,13 @@ class DETR(nn.Module):
 
             n,c,h,w = src_proj_l.shape # bs*nf, c, h, w
             # TODO: how to pool temporal frames? Naively, take 3D conv
-            src_proj_l = self.conv3d[l](src_proj_l.reshape(-1, n//bs, c, h, w).permute(0,2,1,3,4))
-            # src_proj_l = src_proj_l.reshape(n//self.num_frames, self.num_frames, c, h, w)
-            src_proj_l = src_proj_l.permute(0,2,1,3,4)
+            # src_proj_l = self.conv3d[l](src_proj_l.reshape(-1, n//bs, c, h, w).permute(0,2,1,3,4))
+            # # src_proj_l = src_proj_l.reshape(n//self.num_frames, self.num_frames, c, h, w)
+            # src_proj_l = src_proj_l.permute(0,2,1,3,4)            
+
+            src_proj_l = src_proj_l.reshape(-1, n//bs, c, h, w).flatten(3).permute(1,0,3,2).contiguous().flatten(1,2) # t, bs*w*h, ch
+            query_embed = self.query_pool.weight[l:l+1, :].unsqueeze(1).repeat(1, bs*w*h, 1)
+            src_proj_l = self.pool_decoder(query_embed, src_proj_l).permute(1,0,2).contiguous().view(bs, -1, 1, c).permute(0,3,2,1).contiguous().view(bs, 1, c, h, w)
 
             mask = mask.reshape(-1, n//bs, h, w)
             np, cp, hp, wp = pos[l+1].shape
@@ -197,7 +203,10 @@ class DETR(nn.Module):
                 else:
                     src = self.input_proj[l](srcs[-1])
                 n, c, h, w = src.shape
-                src = self.conv3d[l](src.reshape(-1, n//bs, c, h, w).permute(0,2,1,3,4)).permute(0,2,1,3,4)
+                # src = self.conv3d[l](src.reshape(-1, n//bs, c, h, w).permute(0,2,1,3,4)).permute(0,2,1,3,4)
+                src = src.reshape(-1, n//bs, c, h, w).flatten(3).permute(1,0,3,2).contiguous().flatten(1,2) # t, bs*w*h, ch
+                query_embed = self.query_pool.weight[l:, :].unsqueeze(1).repeat(1, bs*w*h, 1)
+                src = self.pool_decoder(query_embed, src).contiguous().view(bs, -1, 1, c).permute(0,3,2,1).contiguous().view(bs, 1, c, h, w)
                 m = samples.mask    # [nf*N, H, W]
                 mask = F.interpolate(m[None].float(), size=src.shape[-2:]).to(torch.bool)[0]
                 mask = mask.unsqueeze(1).repeat(1,samples.tensors.shape[2],1,1) # for ava dataset
