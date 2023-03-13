@@ -635,7 +635,16 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
                 else:
                     outputs = model(samples, lfb_features)
             else:
-                outputs = model(samples)
+                try:
+                    model.training=False
+                except:
+                    pass
+                if not "DN" in cfg.CONFIG.LOG.EXP_NAME:
+                    outputs = model(samples)
+                else:
+                    dn_args = targets, cfg.CONFIG.MODEL.NUM_PATTERNS
+                    outputs, mask_dict = model(samples, dn_args)
+                    loss_dict = criterion(outputs, targets, mask_dict)
 
         loss_dict = criterion(outputs, targets)
 

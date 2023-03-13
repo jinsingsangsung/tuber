@@ -262,8 +262,8 @@ def tgt_loss_labels(src_logits_, tgt_labels_, num_tgt, focal_alpha, log=True):
 
     # target_classes_onehot = target_classes_onehot[:, :, :-1]
     # loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot, num_tgt, alpha=focal_alpha, gamma=2) * src_logits.shape[1]
-    loss_ce = sigmoid_focal_loss(src_logits, tgt_labels, num_tgt, alpha=focal_alpha, gamma=2) * src_logits.shape[1]
-
+    # loss_ce = sigmoid_focal_loss(src_logits, tgt_labels, num_tgt, alpha=focal_alpha, gamma=2) * src_logits.shape[1]
+    loss_ce = F.binary_cross_entropy(src_logits, tgt_labels)
     losses = {'tgt_loss_ce': loss_ce}
     # losses['tgt_class_error'] = 100 - accuracy(src_logits_, tgt_labels_)[0]
     losses['tgt_class_error'] = 100 - accuracy_sigmoid(src_logits_, tgt_labels_)[0]
@@ -283,6 +283,7 @@ def compute_dn_loss(mask_dict, training, aux_num, focal_alpha):
     if training and 'output_known_lbs_bboxes' in mask_dict:
         known_labels, known_bboxs, output_known_class, output_known_coord, \
         num_tgt = prepare_for_loss(mask_dict)
+        output_known_class = output_known_class.sigmoid()
         losses.update(tgt_loss_labels(output_known_class[-1], known_labels, num_tgt, focal_alpha))
         losses.update(tgt_loss_boxes(output_known_coord[-1], known_bboxs, num_tgt))
     else:

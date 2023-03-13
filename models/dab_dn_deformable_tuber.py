@@ -20,6 +20,7 @@ from models.criterion import PostProcess, PostProcessAVA, MLP
 from models.dn_dab_deformable_detr.criterion import SetCriterion, SetCriterionAVA
 from models.transformer.transformer_layers import LSTRTransformerDecoder, LSTRTransformerDecoderLayer, layer_norm
 from models.dn_dab_deformable_detr.dn_components import prepare_for_dn, dn_post_process, compute_dn_loss
+# from models.dn_dab_deformable_detr.dn_components import prepare_for_dn, dn_post_process, compute_dn_loss
 import copy
 import math
 
@@ -393,14 +394,9 @@ def build_model(cfg):
                                     data_file=cfg.CONFIG.DATA.DATASET_NAME,
                                     evaluation=cfg.CONFIG.EVAL_ONLY)
     else:
-        criterion = SetCriterion(cfg.CONFIG.LOSS_COFS.WEIGHT,
-                        num_classes,
-                        num_queries=cfg.CONFIG.MODEL.QUERY_NUM,
+        criterion = SetCriterion(num_classes,
                         matcher=matcher, weight_dict=weight_dict,
-                        eos_coef=cfg.CONFIG.LOSS_COFS.EOS_COF,
-                        losses=losses,
-                        data_file=cfg.CONFIG.DATA.DATASET_NAME,
-                        evaluation=cfg.CONFIG.EVAL_ONLY)
+                        losses=losses)
 
     postprocessors = {'bbox': PostProcessAVA() if cfg.CONFIG.DATA.DATASET_NAME == 'ava' else PostProcess()}
 
