@@ -19,6 +19,8 @@ from models.transformer.transformer import build_transformer
 from models.transformer.transformer_layers import TransformerEncoderLayer, TransformerEncoder
 from models.criterion import SetCriterion, PostProcess, SetCriterionAVA, PostProcessAVA, MLP
 import copy
+from models.transformer.transformer_layers import LSTRTransformerDecoder, LSTRTransformerDecoderLayer, layer_norm
+
 
 def t_pool_layer(conv_channel, conv_kernels, l):
     basic_layer = [nn.Conv3d(conv_channel, conv_channel, (conv_kernels[l],1,1)), nn.BatchNorm3d(conv_channel)]
@@ -55,17 +57,21 @@ class DETR(nn.Module):
         self.dataset_mode = dataset_mode
         self.num_feature_levels = num_feature_levels # 4
         # conv_channels = [ch//2 for ch in backbone.num_channels] + [backbone.num_channels[-1]]
-        conv_channel = backbone.num_channels[0] // 2
+        # conv_channel = backbone.num_channels[0] // 2
         # 256, 512, 1024, 2048
-        conv_kernels = [temporal_length//(2**(l+2))+1 if l != num_feature_levels-2 else temporal_length//(2**(l+1)) for l in range(num_feature_levels-1)]
+        # conv_kernels = [temporal_length//(2**(l+2))+1 if l != num_feature_levels-2 else temporal_length//(2**(l+1)) for l in range(num_feature_levels-1)]
         # 9, 5, 4
         # self.conv3d = [t_pool_layers(conv_channel, conv_kernels, i, num_feature_levels) for i in range(num_feature_levels-1)]
         # self.conv3d += [self.conv3d[-1]]
-        self.conv3d_0 = t_pool_layers(conv_channel, conv_kernels, 0, num_feature_levels)
-        self.conv3d_1 = t_pool_layers(conv_channel, conv_kernels, 1, num_feature_levels)
-        self.conv3d_2 = t_pool_layers(conv_channel, conv_kernels, 2, num_feature_levels)
-        self.conv3d_3 = t_pool_layers(conv_channel, conv_kernels, 2, num_feature_levels)
-        self.conv3d = [self.conv3d_0, self.conv3d_1, self.conv3d_2, self.conv3d_3]
+        # self.conv3d_0 = t_pool_layers(conv_channel, conv_kernels, 0, num_feature_levels)
+        # self.conv3d_1 = t_pool_layers(conv_channel, conv_kernels, 1, num_feature_levels)
+        # self.conv3d_2 = t_pool_layers(conv_channel, conv_kernels, 2, num_feature_levels)
+        # self.conv3d_3 = t_pool_layers(conv_channel, conv_kernels, 2, num_feature_levels)
+        # self.conv3d = [self.conv3d_0, self.conv3d_1, self.conv3d_2, self.conv3d_3]
+        self.query_pool = nn.Embedding(num_feature_levels, hidden_dim)
+        self.pool_decoder = LSTRTransformerDecoder(
+            LSTRTransformerDecoderLayer(d_model=hidden_dim, nhead=8, dim_feedforward=hidden_dim, dropout=0.1), 1,
+            norm=layer_norm(d_model=hidden_dim, condition=True))        
         if num_feature_levels > 1:
             num_backbone_outs = len(backbone.strides)
             input_proj_list = []
@@ -94,6 +100,8 @@ class DETR(nn.Module):
             self.query_embed2 = nn.Embedding(num_queries * temporal_length, hidden_dim)
         else:
             self.query_embed2 = nn.Embedding(num_queries, hidden_dim)
+        # self.query_embedder2 = nn.Linear(hidden_dim, hidden_dim)
+        # self.layernorm = nn.LayerNorm((num_queries, hidden_dim))
         self.query_embed = nn.Embedding(num_queries, hidden_dim)
 
             
@@ -114,21 +122,19 @@ class DETR(nn.Module):
 
         if self.dataset_mode == 'ava':
             self.class_embed_b = nn.Linear(hidden_dim, 3)
-        else:
-            self.class_embed_b = nn.Linear(2048, 2)
-
-        self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
-
-        if self.dataset_mode == 'ava':
             self.class_embed = nn.Linear(hidden_dim, num_classes)
         else:
+            self.class_embed_b = nn.Linear(2048, 2)
             self.class_embed = nn.Linear(hidden_dim, num_classes + 1)
+
+        self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
+        self.bbox_embed2 = MLP(hidden_dim, hidden_dim, 4, 3)            
         self.dropout = nn.Dropout(0.5)
         num_pred = transformer2.decoder.num_layers
         if with_box_refine:
             self.class_embed = _get_clones(self.class_embed, num_pred)
             self.bbox_embed = _get_clones(self.bbox_embed, num_pred)
-            nn.init.constant_(self.bbox_embed[0].layers[-1].bias.data[2:], -2.0)
+            # nn.init.constant_(self.bbox_embed[0].layers[-1].bias.data[2:], -2.0)
             # hack implementation for iterative bounding box refinement
             self.transformer2.decoder.bbox_embed = self.bbox_embed
         self.backbone = backbone
@@ -182,9 +188,13 @@ class DETR(nn.Module):
 
             n,c,h,w = src_proj_l.shape # bs*nf, c, h, w
             # TODO: how to pool temporal frames? Naively, take 3D conv
-            src_proj_l = self.conv3d[l](src_proj_l.reshape(-1, n//bs, c, h, w).permute(0,2,1,3,4))
-            # src_proj_l = src_proj_l.reshape(n//self.num_frames, self.num_frames, c, h, w)
-            src_proj_l = src_proj_l.permute(0,2,1,3,4)
+            # src_proj_l = self.conv3d[l](src_proj_l.reshape(-1, n//bs, c, h, w).permute(0,2,1,3,4))
+            # # src_proj_l = src_proj_l.reshape(n//self.num_frames, self.num_frames, c, h, w)
+            # src_proj_l = src_proj_l.permute(0,2,1,3,4)
+
+            src_proj_l = src_proj_l.reshape(-1, n//bs, c, h, w).flatten(3).permute(1,0,3,2).contiguous().flatten(1,2) # t, bs*w*h, ch
+            query_embed = self.query_pool.weight[l:l+1, :].unsqueeze(1).repeat(1, bs*w*h, 1)
+            src_proj_l = self.pool_decoder(query_embed, src_proj_l).permute(1,0,2).contiguous().view(bs, -1, 1, c).permute(0,3,2,1).contiguous().view(bs, 1, c, h, w)
 
             mask = mask.reshape(-1, n//bs, h, w)
             np, cp, hp, wp = pos[l+1].shape
@@ -202,7 +212,11 @@ class DETR(nn.Module):
                 else:
                     src = self.input_proj[l](srcs[-1])
                 n, c, h, w = src.shape
-                src = self.conv3d[l](src.reshape(-1, n//bs, c, h, w).permute(0,2,1,3,4)).permute(0,2,1,3,4)
+                # src = self.conv3d[l](src.reshape(-1, n//bs, c, h, w).permute(0,2,1,3,4)).permute(0,2,1,3,4)
+                src = src.reshape(-1, n//bs, c, h, w).flatten(3).permute(1,0,3,2).contiguous().flatten(1,2) # t, bs*w*h, ch
+                query_embed = self.query_pool.weight[l:, :].unsqueeze(1).repeat(1, bs*w*h, 1)
+                src = self.pool_decoder(query_embed, src).contiguous().view(bs, -1, 1, c).permute(0,3,2,1).contiguous().view(bs, 1, c, h, w)
+
                 m = samples.mask    # [nf*N, H, W]
                 mask = F.interpolate(m[None].float(), size=src.shape[-2:]).to(torch.bool)[0]
                 mask = mask.unsqueeze(1).repeat(1,samples.tensors.shape[2],1,1) # for ava dataset
@@ -225,38 +239,40 @@ class DETR(nn.Module):
                 poses.append(pos_l[:,0,:,:,:])
 
         query_embeds = self.query_embed.weight
-        query_embeds2 = self.query_embed2.weight
+        # query_embeds2 = self.query_embed2.weight``
         src = srcs[-2].unsqueeze(2)
         mask = masks[-2].unsqueeze(1)
         pos = poses[-2].unsqueeze(2)
  
-        hs = self.transformer1(src, mask, query_embeds, pos)[0][-1] # lay_n, bs, nq, dim
-        bs, nq, dim = hs.shape
+        hs__ = self.transformer1(src, mask, query_embeds, pos)[0] # lay_n, bs, nq, dim
+        hs_ = hs__[-1]
+        bs, nq, dim = hs_.shape
         query_embed2 = self.query_embed2.weight.unsqueeze(0).repeat(bs, 1, 1)
-        query_input = torch.cat([hs, query_embed2], dim=2)
+        query_input = torch.cat([hs_, query_embed2], dim=2)
         # hs, hs_box, memory, init_reference, inter_references, inter_samples, enc_outputs_class, valid_ratios = self.transformer(srcs, masks, poses, query_embeds)
         hs, init_reference, inter_references, enc_outputs_class, enc_outputs_coord_unact = self.transformer2(srcs, masks, poses, query_input)
         # hs = self.transformer(self.input_proj(src), mask, self.query_embed.weight, pos[-1])[0]
         outputs_classes = []
         outputs_coords = []
         for lvl in range(hs.shape[0]):
-            if lvl == 0:
-                reference = init_reference
-            else:
-                reference = inter_references[lvl - 1]
-            reference = inverse_sigmoid(reference)
+            # if lvl == 0:
+            #     reference = init_reference
+            # else:
+            #     reference = inter_references[lvl - 1]
+            # reference = inverse_sigmoid(reference)
             outputs_class = self.class_embed[lvl](hs[lvl])
-            tmp = self.bbox_embed[lvl](hs[lvl])
-            if reference.shape[-1] == 4:
-                tmp += reference
-            else:
-                assert reference.shape[-1] == 2
-                tmp[..., :2] += reference
-            outputs_coord = tmp.sigmoid()
+            # tmp = self.bbox_embed[lvl](hs[lvl])
+            # if reference.shape[-1] == 4:
+            #     tmp += reference
+            # else:
+            #     assert reference.shape[-1] == 2
+            #     tmp[..., :2] += reference
+            # outputs_coord = tmp.sigmoid()
             outputs_classes.append(outputs_class)
-            outputs_coords.append(outputs_coord)
+            # outputs_coords.append(outputs_coord)
         outputs_class = torch.stack(outputs_classes)
-        outputs_coord = torch.stack(outputs_coords)
+        # outputs_coord = torch.stack(outputs_coords)
+        outputs_coord = self.bbox_embed2(hs__).sigmoid()
 
         if self.dataset_mode == 'ava':
             outputs_class_b = self.class_embed_b(hs)
