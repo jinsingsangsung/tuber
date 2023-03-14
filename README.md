@@ -25,15 +25,15 @@ python3 train_seqformer_ava.py --config-file ./configuration/SeqFormer_CSN50_AVA
 ```
 # Reproduction result of TubeR
 
-Model | Dataset | Backbone | Backbone pretrained on | DETR pretrained on | #view | Original mAP | Reproduced mAP | config |
-:-----: | :---: | :---: | :-----: | :-----: |  :---: | :----: | :---: | :---: |
-| TubeR | AVA 2.1 | CSN-50 | Kinetics-400 | *COCO*, AVA | 1 view | 27.2 |  **27.1** | [config](configuration/TubeR_CSN50_AVA21.yaml) |
-| TubeR | AVA 2.1 | CSN-50 | Kinetics-400 | *COCO*, AVA | 1 view | - | 24.98 | use focal loss |
-| TubeR | AVA 2.1 | CSN-50 | Kinetics-400 | *COCO* | 1 view | - | 0.0013 | original DETR weight |
-| TubeR | AVA 2.1 | CSN-50 | Kinetics-400 | - | 1 view | - | 25.03 | 30 epochs, lr: 2e-5|
-| Deformable TubeR (vanilla) | AVA 2.1 | CSN-50 | Kinetics-400 | - | 1 view | - | 20.39 | [config](configuration/D2_TubeR_CSN50_AVA21.yaml) |
-| DETR + DeformableDETR | AVA 2.1 | CSN-50 | Kinetics-400 | - | 1 view | - | 21.99 | [config](configuration/D3_TubeR_CSN50_AVA21.yaml) |
-| DeformableDETR + transformer| AVA 2.1 | CSN-50 | Kinetics-400 | - | 1 view | - | 20.48 | [config](configuration/D4_TubeR_CSN50_AVA21.yaml) |
+Model | Dataset | Backbone | Backbone pretrained on | DETR pretrained on | Original mAP | Reproduced mAP | config |
+:-----: | :---: | :---: | :-----: | :-----: | :----: | :---: | :---: |
+| TubeR | AVA 2.1 | CSN-50 | Kinetics-400 | *COCO*, AVA | 27.2 |  **27.1** | [config](configuration/TubeR_CSN50_AVA21.yaml) |
+| TubeR | AVA 2.1 | CSN-50 | Kinetics-400 | *COCO*, AVA | - | 24.98 | use focal loss |
+| TubeR | AVA 2.1 | CSN-50 | Kinetics-400 | *COCO* | - | 0.0013 | original DETR weight |
+| TubeR | AVA 2.1 | CSN-50 | Kinetics-400 | - | - | 25.03 | 30 epochs, lr: 2e-5|
+| Deformable TubeR (vanilla) | AVA 2.1 | CSN-50 | Kinetics-400 | - | - | 20.39 | [config](configuration/D2_TubeR_CSN50_AVA21.yaml) |
+| DETR + DeformableDETR | AVA 2.1 | CSN-50 | Kinetics-400 | - | - | 21.99 | [config](configuration/D3_TubeR_CSN50_AVA21.yaml) |
+| DeformableDETR + transformer| AVA 2.1 | CSN-50 | Kinetics-400 | - | - | 20.48 | [config](configuration/D4_TubeR_CSN50_AVA21.yaml) |
 
 ~~Still have no idea where the 1% drop comes from.~~ fixed with 8gpu (23.2.20)
 
