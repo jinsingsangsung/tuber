@@ -68,7 +68,7 @@ def prepare_for_dn(dn_args, tgt_weight, embedweight, batch_size, training, num_q
     indicator0 = torch.zeros([num_queries * num_patterns, 1]).cuda()
     # sometimes the target is empty, add a zero part of label_enc to avoid unused parameters
     tgt = torch.cat([tgt_weight, indicator0], dim=1) + label_enc.weight[0][0]*torch.tensor(0).cuda()
-    refpoint_emb = embedweight
+    refpoint_emb = embedweight #refanchor
     bs = len(targets)
     if training:
         # known = [(torch.ones_like(t['labels'])).cuda() for t in targets]
@@ -92,7 +92,7 @@ def prepare_for_dn(dn_args, tgt_weight, embedweight, batch_size, training, num_q
         known_indice = torch.nonzero(unmask_label + unmask_bbox)
         # 한 batch 안에서 어떤 물체의 박스 좌표 / label 둘 중 하나라도 알면 known_indice
         # known_indice = known_indice.view(-1)
-        known_indice = known_indice.reshape(-1) #num_instance*2, num_classes flatten
+        known_indice = known_indice.reshape(-1) # num_instance, num_classes flatten
 
         # add noise
         known_indice = known_indice.repeat(scalar, 1).view(-1)
@@ -262,8 +262,8 @@ def tgt_loss_labels(src_logits_, tgt_labels_, num_tgt, focal_alpha, log=True):
 
     # target_classes_onehot = target_classes_onehot[:, :, :-1]
     # loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot, num_tgt, alpha=focal_alpha, gamma=2) * src_logits.shape[1]
-    # loss_ce = sigmoid_focal_loss(src_logits, tgt_labels, num_tgt, alpha=focal_alpha, gamma=2) * src_logits.shape[1]
-    loss_ce = F.binary_cross_entropy(src_logits, tgt_labels)
+    loss_ce = sigmoid_focal_loss(src_logits, tgt_labels, num_tgt, alpha=focal_alpha, gamma=2) * src_logits.shape[1]
+    # loss_ce = F.binary_cross_entropy(src_logits, tgt_labels)
     losses = {'tgt_loss_ce': loss_ce}
     # losses['tgt_class_error'] = 100 - accuracy(src_logits_, tgt_labels_)[0]
     losses['tgt_class_error'] = 100 - accuracy_sigmoid(src_logits_, tgt_labels_)[0]
@@ -283,7 +283,7 @@ def compute_dn_loss(mask_dict, training, aux_num, focal_alpha):
     if training and 'output_known_lbs_bboxes' in mask_dict:
         known_labels, known_bboxs, output_known_class, output_known_coord, \
         num_tgt = prepare_for_loss(mask_dict)
-        output_known_class = output_known_class.sigmoid()
+        # output_known_class = output_known_class.sigmoid()
         losses.update(tgt_loss_labels(output_known_class[-1], known_labels, num_tgt, focal_alpha))
         losses.update(tgt_loss_boxes(output_known_coord[-1], known_bboxs, num_tgt))
     else:

@@ -59,9 +59,10 @@ class DETR(nn.Module):
         self.num_patterns = num_patterns
         self.random_refpoints_xy = random_refpoints_xy
         self.query_pool = nn.Embedding(num_feature_levels, hidden_dim)        
-        self.pool_decoder = LSTRTransformerDecoder(
+        self.pool_decoder = _get_clones(LSTRTransformerDecoder(
             LSTRTransformerDecoderLayer(d_model=hidden_dim, nhead=8, dim_feedforward=hidden_dim, dropout=0.1), 1,
-            norm=layer_norm(d_model=hidden_dim, condition=True))
+            norm=layer_norm(d_model=hidden_dim, condition=True)), num_feature_levels)
+        
         if num_feature_levels > 1:
             num_backbone_outs = len(backbone.strides)
             input_proj_list = []
@@ -204,10 +205,9 @@ class DETR(nn.Module):
             # src_proj_l = self.conv3d[l](src_proj_l.reshape(-1, n//bs, c, h, w).permute(0,2,1,3,4))
             # # src_proj_l = src_proj_l.reshape(n//self.num_frames, self.num_frames, c, h, w)
             # src_proj_l = src_proj_l.permute(0,2,1,3,4)            
-
             src_proj_l = src_proj_l.reshape(-1, n//bs, c, h, w).flatten(3).permute(1,0,3,2).contiguous().flatten(1,2) # t, bs*w*h, ch
             query_embed = self.query_pool.weight[l:l+1, :].unsqueeze(1).repeat(1, bs*w*h, 1)
-            src_proj_l = self.pool_decoder(query_embed, src_proj_l).permute(1,0,2).contiguous().view(bs, -1, 1, c).permute(0,3,2,1).contiguous().view(bs, 1, c, h, w)
+            src_proj_l = self.pool_decoder[l](query_embed, src_proj_l).permute(1,0,2).contiguous().view(bs, -1, 1, c).permute(0,3,2,1).contiguous().view(bs, 1, c, h, w)
 
             mask = mask.reshape(-1, n//bs, h, w)
             np, cp, hp, wp = pos[l+1].shape
@@ -229,7 +229,7 @@ class DETR(nn.Module):
                 # src = self.conv3d[l](src.reshape(-1, n//bs, c, h, w).permute(0,2,1,3,4)).permute(0,2,1,3,4)
                 src = src.reshape(-1, n//bs, c, h, w).flatten(3).permute(1,0,3,2).contiguous().flatten(1,2) # t, bs*w*h, ch
                 query_embed = self.query_pool.weight[l:, :].unsqueeze(1).repeat(1, bs*w*h, 1)
-                src = self.pool_decoder(query_embed, src).contiguous().view(bs, -1, 1, c).permute(0,3,2,1).contiguous().view(bs, 1, c, h, w)
+                src = self.pool_decoder[l](query_embed, src).contiguous().view(bs, -1, 1, c).permute(0,3,2,1).contiguous().view(bs, 1, c, h, w)
                 m = samples.mask    # [nf*N, H, W]
                 mask = F.interpolate(m[None].float(), size=src.shape[-2:]).to(torch.bool)[0]
                 mask = mask.unsqueeze(1).repeat(1,samples.tensors.shape[2],1,1) # for ava dataset
@@ -250,12 +250,12 @@ class DETR(nn.Module):
                 srcs.append(src[:,0,:,:,:])
                 masks.append(mask[:,0,:,:])
                 poses.append(pos_l[:,0,:,:,:])
-
+                
         if self.two_stage:
             assert NotImplementedError
         elif self.use_dab:
             if self.num_patterns == 0:
-                tgt_all_embed = tgt_embed = self.tgt_embed.weight           # nq, 256
+                tgt_all_embed = tgt_embed = self.tgt_embed.weight       # nq, 256
                 refanchor = self.refpoint_embed.weight      # nq, 4
                 # query_embeds = torch.cat((tgt_embed, refanchor), dim=1)
             else:

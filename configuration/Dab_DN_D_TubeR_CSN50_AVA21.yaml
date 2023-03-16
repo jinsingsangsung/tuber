@@ -18,7 +18,7 @@ CONFIG:
   TRAIN:
     EPOCH_NUM: 40
     BATCH_SIZE: 4
-    LR: 5e-5
+    LR: 2e-5
     MIN_LR: 1e-5 # only if cosine scheduler is used
     LR_BACKBONE: 1e-5 # if <=0, freezes the backbone
     MOMENTUM: 0.9

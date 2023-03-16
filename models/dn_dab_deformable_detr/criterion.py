@@ -8,6 +8,7 @@ from utils.misc import (NestedTensor, nested_tensor_from_tensor_list,
                        is_dist_avail_and_initialized)
 
 from .dn_components import prepare_for_dn, dn_post_process, compute_dn_loss, sigmoid_focal_loss
+import copy
 
 class SetCriterionAVA(nn.Module):
     """ This class computes the loss for DETR.
@@ -48,7 +49,6 @@ class SetCriterionAVA(nn.Module):
         """
         assert 'pred_logits' in outputs
         src_logits = outputs['pred_logits']
-
         idx = self._get_src_permutation_idx(indices)
         try:
             src_logits_b = outputs['pred_logits_b']
@@ -74,7 +74,8 @@ class SetCriterionAVA(nn.Module):
         if self.evaluation:
             loss_ce = F.binary_cross_entropy(src_logits_sig, target_classes)
         else:
-            loss_ce = F.binary_cross_entropy(src_logits_sig, target_classes, weight=weights)
+            # loss_ce = F.binary_cross_entropy(src_logits_sig, target_classes, weight=weights)
+            loss_ce = sigmoid_focal_loss(src_logits, target_classes, target_classes.size(1), alpha=0.25, gamma=2)
             # eps = 1e-8
             # loss_ce = -(((1 - src_logits_sig)**self.focal_loss_gamma * target_classes * torch.log(src_logits_sig + eps) + src_logits_sig**self.focal_loss_gamma * (1-target_classes) * torch.log(1-src_logits_sig+eps))*weights).sum()
 
