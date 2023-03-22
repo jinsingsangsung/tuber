@@ -550,7 +550,6 @@ class TransformerDecoderLayer(nn.Module):
         value = value.unsqueeze(0).repeat(nb, 1, 1, 1).permute(2, 0, 1, 3).contiguous().flatten(0,1)
         new_key = torch.stack([key[..., i].gather(1, filtered_indices) for i in range(key.size(-1))], -1).view(lay_n, nb, -1, d).permute(1,2,0,3) # 15, thw*p, lay_n*bs, d
         new_value = torch.stack([value[..., i].gather(1, filtered_indices) for i in range(value.size(-1))], -1).view(lay_n, nb, -1, d).permute(1,2,0,3)
-
         new_key = self.norm(new_key)
         return new_key, new_value, q_output, dec_attn
 
