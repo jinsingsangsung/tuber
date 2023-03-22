@@ -16,7 +16,7 @@ from models.backbone_builder import build_backbone
 from models.detr.segmentation import (dice_loss, sigmoid_focal_loss)
 from models.transformer.transformer import build_transformer
 from models.zoom_transformer.transformer_layers import TransformerEncoderLayer, TransformerEncoder, TransformerDecoder, TransformerDecoderLayer
-from models.criterion import SetCriterion, PostProcess, SetCriterionAVA, PostProcessAVA, MLP
+from models.zoom_transformer.criterion import SetCriterion, PostProcess, SetCriterionAVA, PostProcessAVA, MLP
 
 
 class DETR(nn.Module):
@@ -154,11 +154,10 @@ class DETR(nn.Module):
 
         outputs_class = self.class_fc(self.dropout(q_class))
         outputs_coord = self.bbox_embed(hs).sigmoid()
-
         out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1], 'pred_logits_b': outputs_class_b[-1],}
         if self.aux_loss:
             out['aux_outputs'] = self._set_aux_loss(outputs_class, outputs_coord, outputs_class_b)
-
+        out["class_fc_weights"] = self.class_fc.weight
         return out
 
     @torch.jit.unused
@@ -204,6 +203,7 @@ def build_model(cfg):
     weight_dict = {'loss_ce': cfg.CONFIG.LOSS_COFS.DICE_COF, 'loss_bbox': cfg.CONFIG.LOSS_COFS.BBOX_COF}
     weight_dict['loss_giou'] = cfg.CONFIG.LOSS_COFS.GIOU_COF
     weight_dict['loss_ce_b'] = 1
+    weight_dict['loss_class_weight'] = 1
     # if cfg.CONFIG.MATCHER.BNY_LOSS:
     #     weight_dict['loss_ce_b'] = 1
     #     print("loss binary weight: {}".format(weight_dict['loss_ce_b']))
