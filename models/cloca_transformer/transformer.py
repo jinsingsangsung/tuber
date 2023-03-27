@@ -480,7 +480,7 @@ def build_transformer2(cfg):
         nhead=cfg.CONFIG.MODEL.NHEAD,
         dim_feedforward=cfg.CONFIG.MODEL.DIM_FEEDFORWARD,
         # num_encoder_layers=cfg.CONFIG.MODEL.ENC_LAYERS,
-        num_decoder_layers=cfg.CONFIG.MODEL.DEC_LAYERS,
+        num_decoder_layers=cfg.CONFIG.MODEL.DEC_LAYERS2,
         normalize_before=cfg.CONFIG.MODEL.NORMALIZE_BEFORE,
         return_intermediate_dec=True,
         num_feat = cfg.CONFIG.MODEL.TEMP_LEN // cfg.CONFIG.MODEL.DS_RATE if not cfg.CONFIG.MODEL.SINGLE_FRAME else 1
