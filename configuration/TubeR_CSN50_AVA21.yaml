@@ -1,7 +1,7 @@
 DDP_CONFIG:
   WORLD_SIZE: 1
   WORLD_RANK: 0
-  GPU_WORLD_SIZE: 4
+  GPU_WORLD_SIZE: 8
   GPU_WORLD_RANK: 0
   DIST_URL: 'tcp://{}:11588' 
   WOLRD_URLS: ["{}"]
@@ -19,15 +19,15 @@ CONFIG:
   TRAIN:
     EPOCH_NUM: 20
     BATCH_SIZE: 2
-    LR: 1e-4
+    LR: 1e-5
     MIN_LR: 1e-5
     LR_BACKBONE: 1e-5
     MOMENTUM: 0.9
-    W_DECAY: 1e-4
+    W_DECAY: 1e-5
     LR_POLICY: 'step'
     USE_WARMUP: True
     WARMUP_START_LR: 1e-5
-    WARMUP_EPOCHS: 4
+    WARMUP_EPOCHS: 0
     LR_MILESTONE: [10, 15]
     STEP: 0.1
     OPTIMIZER:
@@ -102,6 +102,6 @@ CONFIG:
     SAVE_DIR: 'checkpoints'
     EVAL_DIR: '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/AVA_Tuber/eval'
     SAVE_FREQ: 1
-    RES_DIR: 'tmp2_train_og_backone_freeze'
-    EXP_NAME: original_backbone_freeze
+    RES_DIR: og_270-10_0327
+    EXP_NAME: og_270-10_0327
     DISPLAY_FREQ: 1000
