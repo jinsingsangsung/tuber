@@ -19,9 +19,9 @@ CONFIG:
   TRAIN:
     EPOCH_NUM: 20
     BATCH_SIZE: 2
-    LR: 1e-5
+    LR: 1e-4
     MIN_LR: 1e-5
-    LR_BACKBONE: 1e-5
+    LR_BACKBONE: 0
     MOMENTUM: 0.9
     W_DECAY: 1e-5
     LR_POLICY: 'step'
@@ -86,7 +86,7 @@ CONFIG:
     BEFORE: False
 
   LOSS_COFS:
-    MASK_COF: 1
+    MASK_COF: %1
     DICE_COF: 12
     BBOX_COF: 5
     GIOU_COF: 2

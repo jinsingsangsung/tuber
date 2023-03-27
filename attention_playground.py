@@ -18,6 +18,7 @@ from models.tuber_ava import build_model
 from glob import glob
 import json
 import datasets.video_transforms as T
+import random
 
 def read_label_map(label_map_path):
 
@@ -180,9 +181,40 @@ def loadvideo(start_img, vid, frame_key):
         buffer.append(tmp)
 
     return buffer, target
+
+
+# TubeR's csn152, ava21 results
+gpu_num = random.randint(0,3)
+detection = '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/eval/tmp3/{}.txt'.format(gpu_num) #numbers are changeable
+gt = '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/eval/tmp3/GT_{}.txt'.format(gpu_num)
+
+# what label am I interested in?
+import pdb; pdb.set_trace()
+label = 12 # "stand", for example
+
+# find a video key frame with desired label
+
+key_frame_candidates = []
+with open(gt) as f:
+    for line in f.readlines():
+        img_id = line.split(' ')[0]
+        annotation = [int(float(n)) for n in line.split('[')[1].split(']')[0].split(',')]
+        multi_hot_obj_label = annotation[6:]
+        if multi_hot_obj_label[label-1] == 1:
+            key_frame_candidates.append(img_id)
+
+# pick one of key_frame_candidates:
+if len(key_frame_candidates) == 0:
+    print("no key frame found with following label: {}".format(items[label]), " try another gpu_num")
+
+ind = random.randint(0, len(key_frame_candidates)-1)
+frame_key = key_frame_candidates[ind]
+frame_second = frame_key.split("_")[-1]
+vid = "_".join(frame_key.split('_')[:-1])
+
 # frame_key is one of "xeGWXqSvC-8,0911", "CMCPhm2L400,1274", "Gvp-cj3bmIY,1725", "Gvp-cj3bmIY_1675"
-frame_key = "Gvp-cj3bmIY,1675" 
-vid, frame_second = frame_key.split(',')
+# frame_key = "Gvp-cj3bmIY,1675"
+# vid, frame_second = frame_key.split(',')
 timef = int(frame_second) - 900
 start_img = np.max((timef * 30 - 32 // 2 * 2, 0))
 

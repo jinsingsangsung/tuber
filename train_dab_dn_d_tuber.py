@@ -5,7 +5,7 @@ import time
 import torch
 import torch.optim
 # from tensorboardX import SummaryWriter
-from models.tuber_ava import build_model
+from models.dab_dn_deformable_tuber import build_model
 from utils.model_utils import deploy_model, load_model, save_checkpoint
 from utils.video_action_recognition import train_tuber_detection, validate_tuber_detection
 from pipelines.video_action_recognition_config import get_cfg_defaults
@@ -27,7 +27,7 @@ def main_worker(cfg):
 
     # create model
     print('Creating TubeR model: %s' % cfg.CONFIG.MODEL.NAME)
-    print(cfg.CONFIG.MODEL.SINGLE_FRAME)
+    print("use sinlge frame:", cfg.CONFIG.MODEL.SINGLE_FRAME)
     model, criterion, postprocessors = build_model(cfg)
     model = deploy_model(model, cfg, is_tuber=True)
     num_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -38,7 +38,7 @@ def main_worker(cfg):
 
     # create criterion
     criterion = criterion.cuda()
-    
+
     param_dicts = [
         {"params": [p for n, p in model.named_parameters() if "backbone" not in n and "class_embed" not in n and "query_embed" not in n and p.requires_grad]},
         {
@@ -88,7 +88,7 @@ def main_worker(cfg):
         if epoch % cfg.CONFIG.VAL.FREQ == 0 or epoch == cfg.CONFIG.TRAIN.EPOCH_NUM - 1:
             validate_tuber_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)
         lr_scheduler.step()
-
+        
     if writer is not None:
         writer.close()
 
@@ -100,7 +100,7 @@ def main_worker(cfg):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train video action recognition transformer models.')
     parser.add_argument('--config-file',
-                        default='./configuration/TubeR_CSN50_AVA21.yaml',
+                        default='./configuration/Dab_DN_D_TubeR_CSN50_AVA21.yaml',
                         help='path to config file.')
     parser.add_argument('--num_gpu', default=4, type=int)
     args = parser.parse_args()

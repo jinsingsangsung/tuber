@@ -145,10 +145,17 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
                 else:
                     outputs = model(samples, lfb_features)
             else:
-                outputs = model(samples)
+                if not "DN" in cfg.CONFIG.LOG.RES_DIR:
+                    outputs = model(samples)
+                    loss_dict = criterion(outputs, targets)
+                else:
+                    dn_args = targets, cfg.CONFIG.MODEL.SCALAR, cfg.CONFIG.MODEL.LABEL_NOISE_SCALE, cfg.CONFIG.MODEL.BOX_NOISE_SCALE, cfg.CONFIG.MODEL.NUM_PATTERNS
+                    outputs, mask_dict = model(samples, dn_args)
+                    loss_dict = criterion(outputs, targets, mask_dict)
+
         # if not math.isfinite(outputs["pred_logits"][0].data.cpu().numpy()[0,0]):
         #     print(outputs["pred_logits"][0].data.cpu().numpy())
-        loss_dict = criterion(outputs, targets)
+        
         weight_dict = criterion.weight_dict
         if epoch > cfg.CONFIG.LOSS_COFS.WEIGHT_CHANGE:
             weight_dict['loss_ce'] = cfg.CONFIG.LOSS_COFS.LOSS_CHANGE_COF
@@ -332,14 +339,23 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
                 else:
                     outputs = model(samples, lfb_features)
             else:
-                outputs = model(samples)
+                try:
+                    model.training=False
+                except:
+                    pass
+                if not "DN" in cfg.CONFIG.LOG.EXP_NAME:
+                    outputs = model(samples)
+                else:
+                    dn_args = targets, cfg.CONFIG.MODEL.NUM_PATTERNS
+                    outputs, mask_dict = model(samples, dn_args)
+                    loss_dict = criterion(outputs, targets, mask_dict)
                 # outputs, num_boxes_per_batch_idx = model(targets, samples)
 
         loss_dict = criterion(outputs, targets)
         weight_dict = criterion.weight_dict
 
         orig_target_sizes = torch.stack([t["size"] for t in targets], dim=0)
-        if not cfg.CONFIG.MODEL.SparseRCNN.USE:
+        if not "sparse" in cfg.CONFIG.LOG.RES_DIR:
             try:
                 scores, boxes, output_b = postprocessors['bbox'](outputs, orig_target_sizes)
             except:
@@ -619,7 +635,16 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
                 else:
                     outputs = model(samples, lfb_features)
             else:
-                outputs = model(samples)
+                try:
+                    model.training=False
+                except:
+                    pass
+                if not "DN" in cfg.CONFIG.LOG.EXP_NAME:
+                    outputs = model(samples)
+                else:
+                    dn_args = targets, cfg.CONFIG.MODEL.NUM_PATTERNS
+                    outputs, mask_dict = model(samples, dn_args)
+                    loss_dict = criterion(outputs, targets, mask_dict)
 
         loss_dict = criterion(outputs, targets)
 

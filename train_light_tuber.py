@@ -5,7 +5,7 @@ import time
 import torch
 import torch.optim
 # from tensorboardX import SummaryWriter
-from models.tuber_ava import build_model
+from models.tuber_light import build_model
 from utils.model_utils import deploy_model, load_model, save_checkpoint
 from utils.video_action_recognition import train_tuber_detection, validate_tuber_detection
 from pipelines.video_action_recognition_config import get_cfg_defaults
@@ -38,7 +38,7 @@ def main_worker(cfg):
 
     # create criterion
     criterion = criterion.cuda()
-    
+
     param_dicts = [
         {"params": [p for n, p in model.named_parameters() if "backbone" not in n and "class_embed" not in n and "query_embed" not in n and p.requires_grad]},
         {
@@ -100,7 +100,7 @@ def main_worker(cfg):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train video action recognition transformer models.')
     parser.add_argument('--config-file',
-                        default='./configuration/TubeR_CSN50_AVA21.yaml',
+                        default='./configuration/TubeR_Res50_AVA21.yaml',
                         help='path to config file.')
     parser.add_argument('--num_gpu', default=4, type=int)
     args = parser.parse_args()

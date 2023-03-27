@@ -1,7 +1,7 @@
 DDP_CONFIG:
   WORLD_SIZE: 1
   WORLD_RANK: 0
-  GPU_WORLD_SIZE: 4
+  GPU_WORLD_SIZE: 8
   GPU_WORLD_RANK: 0
   DIST_URL: 'tcp://{}:11588' 
   WOLRD_URLS: ["{}"]
@@ -16,18 +16,18 @@ CONFIG:
   USE_LFB: False
   USE_LOCATION: False
   TRAIN:
-    EPOCH_NUM: 20
+    EPOCH_NUM: 40
     BATCH_SIZE: 4
-    LR: 1e-4
+    LR: 1e-5
     MIN_LR: 1e-5 # only if cosine scheduler is used
     LR_BACKBONE: 1e-5 # if <=0, freezes the backbone
     MOMENTUM: 0.9
-    W_DECAY: 1e-5
+    W_DECAY: 1e-4
     LR_POLICY: 'step'
     USE_WARMUP: True # does nothing
     WARMUP_START_LR: 1e-5
-    WARMUP_EPOCHS: 0 # this determines whether to use Warmup
-    LR_MILESTONE: [10, 15]
+    WARMUP_EPOCHS: 4 # this determines whether to use Warmup
+    LR_MILESTONE: [25, 35]
     STEP: 0.1 # gamma for lr decay
     OPTIMIZER:
       NAME: ADAMW
@@ -84,7 +84,7 @@ CONFIG:
     NUM_ENC_N_POINTS: 4
 
   MATCHER:
-    COST_CLASS: 12
+    COST_CLASS: 10
     COST_BBOX: 5
     COST_GIOU: 2
     BNY_LOSS: True
@@ -107,6 +107,6 @@ CONFIG:
     SAVE_DIR: 'checkpoints'
     EVAL_DIR: '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/AVA_Tuber/eval'
     SAVE_FREQ: 1
-    RES_DIR: 'tmp2_train_D4'
-    EXP_NAME: D4
+    RES_DIR: 'tmp2_train_dec_D4'
+    EXP_NAME: dec_D4
     DISPLAY_FREQ: 1000

@@ -15,7 +15,7 @@ CONFIG:
   TWO_STREAM: False
   USE_LFB: False
   USE_LOCATION: False
-  FREEZE_BACKBONE: False
+  FREEZE_BACKBONE: True
   TRAIN:
     EPOCH_NUM: 20
     BATCH_SIZE: 2
@@ -33,6 +33,9 @@ CONFIG:
     OPTIMIZER:
       NAME: ADAMW
     AUX_LOSS: True
+    POSITION_EMBEDDING: 'sine'
+    LR_SCHEDULER:
+      NAME: 'step'
 
   VAL:
     BATCH_SIZE: 1
@@ -52,9 +55,10 @@ CONFIG:
     FRAME_RATE: 2
 
   MODEL:
-    SINGLE_FRAME: True
-    BACKBONE_NAME: CSN-152
-    TEMPORAL_DS_STRATEGY: avg
+    SINGLE_FRAME: False
+    BACKBONE_NAME: 'resnet50'
+    NEIGHBOR_SIZE: 3
+    TEMPORAL_DS_STRATEGY: decode
     LAST_STRIDE: False
     GENERATE_LFB: False
     NAME: 'ava_detr_9_224'
@@ -70,13 +74,13 @@ CONFIG:
     DS_RATE: 8
     TEMP_LEN: 32
     SAMPLE_RATE: 2
-    PRETRAINED: False
-    PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_152_ft_kinetics_from_ig65m_f126851907.mat"
+    PRETRAINED: True
+    PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/vclr_k400.pth"
     PRETRAIN_TRANSFORMER_DIR: "../pretrained_models/transformer/detr.pth"
-    PRETRAINED_PATH: "../pretrained_models/main/TubeR_CSN152_AVA21.pth"
+    PRETRAINED_PATH: "../pretrained_models/main/TubeR_CSN50_AVA21.pth"
     LOAD: False
     LOAD_FC: False
-    LOAD_DETR: True
+    LOAD_DETR: False
 
   MATCHER:
     COST_CLASS: 12
@@ -102,7 +106,6 @@ CONFIG:
     SAVE_DIR: 'checkpoints'
     EVAL_DIR: '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/AVA_Tuber/eval'
     SAVE_FREQ: 1
-    RES_DIR: 'tmp3_train'
-    EXP_NAME: cls_only
-    EXP_SPEC: "csn152_ava21"
+    RES_DIR: 'withres50'
+    EXP_NAME: withres50
     DISPLAY_FREQ: 1000

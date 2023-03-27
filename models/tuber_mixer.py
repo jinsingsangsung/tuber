@@ -17,7 +17,7 @@ from models.detr.segmentation import (dice_loss, sigmoid_focal_loss)
 from models.transformer.transformer import build_transformer
 from models.transformer.transformer_layers import TransformerEncoderLayer, TransformerEncoder
 from models.criterion import SetCriterion, PostProcess, SetCriterionAVA, PostProcessAVA, MLP
-
+from models.mlp_mixer.mlp_mixer_pytorch import MLPMixer
 
 class DETR(nn.Module):
     """ This is the DETR module that performs object detection """
@@ -80,6 +80,7 @@ class DETR(nn.Module):
         self.generate_lfb = generate_lfb
         self.last_stride = last_stride
         self.freeze_backbone_ = freeze_backbone
+        self.query_mixer = MLPMixer(num_queries=num_queries, dim=hidden_dim)
 
     def freeze_backbone(self):
         for param in self.backbone.parameters():
@@ -149,7 +150,7 @@ class DETR(nn.Module):
         hs_query = hs_t_agg.view(lay_n * bs, nb, dim).permute(1, 0, 2).contiguous()
         q_class = self.cross_attn(hs_query, src_flatten, src_flatten)[0]
         q_class = q_class.permute(1, 0, 2).contiguous().view(lay_n, bs, nb, self.hidden_dim)
-
+        q_class = self.query_mixer(q_class.flatten(0,1)).view(lay_n, bs, nb, -1)
         outputs_class = self.class_fc(self.dropout(q_class))
         outputs_coord = self.bbox_embed(hs).sigmoid()
 
