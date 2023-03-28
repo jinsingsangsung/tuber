@@ -15,13 +15,13 @@ CONFIG:
   TWO_STREAM: False
   USE_LFB: False
   USE_LOCATION: False
-  FREEZE_BACKBONE: True
+  FREEZE_BACKBONE: False
   TRAIN:
     EPOCH_NUM: 20
     BATCH_SIZE: 2
-    LR: 1e-4
+    LR: 2e-5
     MIN_LR: 1e-5
-    LR_BACKBONE: 0
+    LR_BACKBONE: 1e-5
     MOMENTUM: 0.9
     W_DECAY: 1e-5
     LR_POLICY: 'step'
@@ -29,7 +29,7 @@ CONFIG:
     WARMUP_START_LR: 1e-5
     WARMUP_EPOCHS: 0
     LR_MILESTONE: [10, 15]
-    STEP: 0.1
+    STEP: 0.2
     OPTIMIZER:
       NAME: ADAMW
     AUX_LOSS: True
@@ -86,7 +86,7 @@ CONFIG:
     BEFORE: False
 
   LOSS_COFS:
-    MASK_COF: %1
+    MASK_COF: 1
     DICE_COF: 12
     BBOX_COF: 5
     GIOU_COF: 2
@@ -102,6 +102,6 @@ CONFIG:
     SAVE_DIR: 'checkpoints'
     EVAL_DIR: '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/AVA_Tuber/eval'
     SAVE_FREQ: 1
-    RES_DIR: og_270-10_0327
-    EXP_NAME: og_270-10_0327
+    RES_DIR: og_270-10_0328
+    EXP_NAME: og_270-10_0328
     DISPLAY_FREQ: 1000
