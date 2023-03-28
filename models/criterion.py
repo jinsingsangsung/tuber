@@ -218,9 +218,9 @@ class SetCriterionAVA(nn.Module):
                     l_dict = self.get_loss(loss, aux_outputs, targets, indices, num_boxes, **kwargs)
                     l_dict = {k + f'_{i}': v for k, v in l_dict.items()}
                     losses.update(l_dict)
-        fc_weights = outputs_without_aux["class_fc_weights"]
-        reg_weights = self.loss_fc_weights(fc_weights)
-        losses["loss_fc_weights"] = reg_weights
+        # fc_weights = outputs_without_aux["class_fc_weights"]
+        # reg_weights = self.loss_fc_weights(fc_weights)
+        # losses["loss_fc_weights"] = reg_weights
         return losses
 
 
