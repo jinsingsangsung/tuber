@@ -16,6 +16,9 @@ def load_detr_weights(model, pretrain_dir, cfg):
     for k, v in checkpoint['model'].items():
         if k.split('.')[1] == 'transformer':
             pretrained_dict.update({k: v})
+            if 'cloca' in cfg.CONFIG.LOG.EXP_NAME:
+                new_k = 'module.transformer2.' + ".".join(k.split('.')[2:])
+                pretrained_dict.update({new_k: v})
         elif k.split('.')[1] == 'bbox_embed':
             pretrained_dict.update({k: v})
         elif k.split('.')[1] == 'query_embed':
@@ -33,9 +36,8 @@ def load_detr_weights(model, pretrain_dir, cfg):
     # not_found_dict = {k: v for k, v in model_dict.items() if not k in pretrained_dict}
     # print(pretrained_dict_["module.query_embed.weight"].shape)
     print("number of detr unused model layers:", len(unused_dict.keys()))
-    # print("unused",[i for i in unused_dict.keys()][:10])
+    print("number of detr used model layers:", len(pretrained_dict_.keys()))
     # print("model_dict",[i for i in model_dict.keys()][:10])
-    # print("pretrained_dict",[i for i in pretrained_dict.keys()][:10])
     # print("not found layers:", not_found_dict.keys())
 
     model_dict.update(pretrained_dict_)
