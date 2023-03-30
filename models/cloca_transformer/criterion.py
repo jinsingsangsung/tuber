@@ -153,13 +153,13 @@ class SetCriterionAVA(nn.Module):
         }
         return losses
     
-    def loss_fc_weights(self, weights):
-        # weights: num_class, d
-        weights = weights.abs()
-        sim = weights.matmul(weights.T)
-        c = len(weights)
-        reg_weights = (sim.sum() - sim.diag().sum()).div(c*(c-1)/2)
-        return reg_weights
+    # def loss_fc_weights(self, weights):
+    #     # weights: num_class, d
+    #     weights = weights.abs()
+    #     sim = weights.matmul(weights.T)
+    #     c = len(weights)
+    #     reg_weights = (sim.sum() - sim.diag().sum()).div(c*(c-1)/2)
+    #     return reg_weights
 
     def _get_src_permutation_idx(self, indices):
         # permute predictions following indices
@@ -218,9 +218,9 @@ class SetCriterionAVA(nn.Module):
                     l_dict = self.get_loss(loss, aux_outputs, targets, indices, num_boxes, **kwargs)
                     l_dict = {k + f'_{i}': v for k, v in l_dict.items()}
                     losses.update(l_dict)
-        fc_weights = outputs_without_aux["class_fc_weights"]
-        reg_weights = self.loss_fc_weights(fc_weights)
-        losses["loss_fc_weights"] = reg_weights
+        # fc_weights = outputs_without_aux["class_fc_weights"]
+        # reg_weights = self.loss_fc_weights(fc_weights)
+        # losses["loss_fc_weights"] = reg_weights
         return losses
 
 
