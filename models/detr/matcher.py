@@ -55,8 +55,8 @@ class HungarianMatcher(nn.Module):
             For each batch element, it holds:
                 len(index_i) = len(index_j) = min(num_queries, num_target_boxes)
         """
-
         bs, num_queries = outputs["pred_logits"].shape[:2]
+        # bs, num_queries = outputs["pred_boxes"].shape[:2]
 
         out_bbox = outputs["pred_boxes"].flatten(0, 1)
         # Also concat the target labels
@@ -70,7 +70,9 @@ class HungarianMatcher(nn.Module):
 
         out_prob = outputs["pred_logits_b"].flatten(0, 1).softmax(-1)
         cost_class = -out_prob[:, 1:2].repeat(1, len(tgt_bbox))
-
+        # tgt_label = torch.cat([v["labels"] for v in targets])
+        # out_prob = outputs["pred_logits"].sigmoid()
+        # cost_class = -torch.matmul(out_prob, tgt_label.T)
         # Final cost matrix
         C = self.cost_bbox * cost_bbox + self.cost_class * cost_class + self.cost_giou * cost_giou
         C = C.view(bs, num_queries, -1).cpu()
