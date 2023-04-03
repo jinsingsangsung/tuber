@@ -14,7 +14,7 @@ from utils.misc import (NestedTensor, nested_tensor_from_tensor_list,
 
 from models.backbone_builder import build_backbone
 from models.detr.segmentation import (dice_loss, sigmoid_focal_loss)
-from models.dab_detr.dab_transformer import build_transformer
+from models.dab_detr.dab_transformer_gt import build_transformer
 from models.transformer.transformer_layers import TransformerEncoderLayer, TransformerEncoder
 from models.criterion import PostProcess, PostProcessAVA, MLP
 from models.criterion import SetCriterion, SetCriterionAVA
@@ -151,9 +151,13 @@ class DETR(nn.Module):
         src, mask = features[-1].decompose()
         assert mask is not None
         # bs = samples.tensors.shape[0]
-
+        tgt_boxes = []
+        if self.training:            
+            for anns in targets:
+                tgt_boxes.append(anns["boxes"][:,1:])
+        
         embedweight = self.refpoint_embed.weight      # nq, 4
-        hs, reference = self.transformer(self.input_proj(src), mask, embedweight, pos[-1])
+        hs, reference = self.transformer(self.input_proj(src), mask, embedweight, pos[-1], tgt_boxes)
 
         if self.dataset_mode == 'ava':
             outputs_class_b = self.class_embed_b(hs)

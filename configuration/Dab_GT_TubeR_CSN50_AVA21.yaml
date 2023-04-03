@@ -1,0 +1,116 @@
+DDP_CONFIG:
+  WORLD_SIZE: 1
+  WORLD_RANK: 0
+  GPU_WORLD_SIZE: 8
+  GPU_WORLD_RANK: 0
+  DIST_URL: 'tcp://{}:11588' 
+  WOLRD_URLS: ["{}"]
+  AUTO_RANK_MATCH: True
+  DIST_BACKEND: 'nccl'
+  GPU: 0
+  DISTRIBUTED: True
+
+CONFIG:
+  EVAL_ONLY: False
+  TWO_STREAM: False
+  USE_LFB: False
+  USE_LOCATION: False
+  TRAIN:
+    EPOCH_NUM: 20
+    BATCH_SIZE: 4
+    LR: 1e-4
+    MIN_LR: 1e-5 # only if cosine scheduler is used
+    LR_BACKBONE: 1e-5 # if <=0, freezes the backbone
+    MOMENTUM: 0.9
+    W_DECAY: 1e-4
+    LR_POLICY: 'step'
+    USE_WARMUP: True # does nothing
+    WARMUP_START_LR: 1e-5
+    WARMUP_EPOCHS: 0 # this determines whether to use Warmup
+    LR_MILESTONE: [15,18]
+    STEP: 0.1 # gamma for lr decay
+    OPTIMIZER:
+      NAME: ADAMW
+    AUX_LOSS: True
+    LR_SCHEDULER:
+      NAME: 'step'
+
+  VAL:
+    BATCH_SIZE: 1
+    FREQ: 2
+    PUT_GT: False
+
+  DATA:
+    DATASET_NAME: 'ava'
+    LABEL_PATH: '/home/nsml/assets/ava_action_list_v2.1_for_activitynet_2018.pbtxt'
+    ANNO_PATH: '/home/nsml/assets/ava_{}_v21.json'
+    DATA_PATH: '/mnt/tmp/frames/{}/'
+    NUM_CLASSES: 80
+    MULTIGRID: False
+    IMG_SIZE: 256
+    IMG_RESHAPE_SIZE: 288
+    TEMP_LEN: 32
+    FRAME_RATE: 2
+
+  MODEL:
+    SINGLE_FRAME: True
+    BACKBONE_NAME: CSN-50
+    TEMPORAL_DS_STRATEGY: decode
+    LAST_STRIDE: False
+    GENERATE_LFB: False
+    NAME: 'ava_detr_9_224'
+    ENC_LAYERS: 6
+    DEC_LAYERS: 6
+    D_MODEL: 256
+    NHEAD: 8
+    NUM_ENCODER_LAYERS: 12
+    DIM_FEEDFORWARD: 2048
+    QUERY_NUM: 15
+    NORMALIZE_BEFORE: False
+    DROPOUT: 0.1
+    DS_RATE: 8
+    TEMP_LEN: 32
+    SAMPLE_RATE: 2
+    PRETRAINED: True
+    PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_50_ft_kinetics_from_ig65m_f233743920.mat"
+    PRETRAIN_TRANSFORMER_DIR: "../pretrained_models/transformer/detr.pth"
+    PRETRAINED_PATH: "/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/AVA_Tuber/Dab_DN_D_/checkpoints/ckpt_epoch_0.pth"
+    LOAD: False
+    LOAD_FC: False
+    LOAD_DETR: True
+    POSITION_EMBEDDING: "sine"
+    NUM_FEATURE_LEVELS: 4
+    NUM_DEC_N_POINTS: 4
+    NUM_ENC_N_POINTS: 4
+    SCALAR: 5
+    LABEL_NOISE_SCALE: 0.05
+    BOX_NOISE_SCALE: 0.4
+    NUM_PATTERNS: 0
+
+  MATCHER:
+    COST_CLASS: 12
+    COST_BBOX: 5
+    COST_GIOU: 2
+    BNY_LOSS: True
+    BEFORE: False
+
+  LOSS_COFS:
+    MASK_COF: 1
+    DICE_COF: 10
+    BBOX_COF: 5
+    GIOU_COF: 2
+    EOS_COF: 0.1
+    WEIGHT: 10
+    WEIGHT_CHANGE: 1000
+    LOSS_CHANGE_COF: 2
+    CLIPS_MAX_NORM: 0.1
+
+  LOG:
+    BASE_PATH: '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/AVA_Tuber'
+    LOG_DIR: 'tb_log'
+    SAVE_DIR: 'checkpoints'
+    EVAL_DIR: '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/AVA_Tuber/eval'
+    SAVE_FREQ: 1
+    RES_DIR: 'Dab_GT_TubeR_270-14_0403'
+    EXP_NAME: Dab_GT_TubeR_270-14_0403'
+    DISPLAY_FREQ: 1000
