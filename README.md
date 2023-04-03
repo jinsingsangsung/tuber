@@ -1,15 +1,25 @@
 # main_all
 
 This branch is to try different architectures to the video action detection task.
-Total three models are try-able:
-- TubeR: Tubelet Transformer for Video Action Detection
-- SeqFormer
-- Sparse R-CNN
 
+<details>
+<summary> Previous models' brief summaries </summary>  
+Total three models are try-able:
+  
+  - TubeR: Tubelet Transformer for Video Action Detection
+  - SeqFormer
+  - Sparse R-CNN
+  ```
+  # example running command
+  python3 train_tuber_ava.py --config-file ./configuration/TubeR_CSN50_AVA21.yaml --num_gpu 4
+  python3 train_sparse_ava.py --config-file ./configuration/Sparse_CSN50_AVA21.yaml --num_gpu 4
+  python3 train_seqformer_ava.py --config-file ./configuration/SeqFormer_CSN50_AVA21.yaml --num_gpu 4
+  ```
 Note that debugging is still ongoing.
 
 This repo copied the supported code of [TubeR: Tubelet Transformer for Video Action Detection](https://openaccess.thecvf.com/content/CVPR2022/papers/Zhao_TubeR_Tubelet_Transformer_for_Video_Action_Detection_CVPR_2022_paper.pdf). 
-
+</details>
+  
 ```
 # if running this code other than nsml, you can use docker image that contains pretrained models and files as well
 docker run -it -v /data02/ava:/datasets  -v /home/jinsung/tuber:/tuber --gpus all --shm-size 32g --name tuber jinsingsangsung/tuber:1.2 /bin/bash 
@@ -18,10 +28,7 @@ docker run -it -v /data02/ava:/datasets  -v /home/jinsung/tuber:/tuber --gpus al
 sh nsml_setup # brings pretrained models
 sh nsml_setup_{gpu type} # brings AVA dataset to scratchpad
 
-# example running command
-python3 train_tuber_ava.py --config-file ./configuration/TubeR_CSN50_AVA21.yaml --num_gpu 4
-python3 train_sparse_ava.py --config-file ./configuration/Sparse_CSN50_AVA21.yaml --num_gpu 4
-python3 train_seqformer_ava.py --config-file ./configuration/SeqFormer_CSN50_AVA21.yaml --num_gpu 4
+# now run the running command following the descriptions in the following sections.
 ```
 # Experiments on TubeR variants
 
