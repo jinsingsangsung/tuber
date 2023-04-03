@@ -60,7 +60,7 @@ class DETR(nn.Module):
         encoder_layer = TransformerEncoderLayer(hidden_dim, 8, 2048, 0.1, "relu", normalize_before=False)
         self.encoder = TransformerEncoder(encoder_layer, num_layers=1, norm=None)
         decoder_layer = TransformerDecoderLayer(hidden_dim, 4)
-        self.cross_attn = TransformerDecoder(decoder_layer, num_layers=4)
+        self.cross_attn = TransformerDecoder(decoder_layer, num_layers=2)
 
         if self.dataset_mode == 'ava':
             self.class_embed_b = nn.Linear(hidden_dim, 3)
