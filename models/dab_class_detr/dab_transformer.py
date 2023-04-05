@@ -111,7 +111,7 @@ class Transformer(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
 
-    def forward(self, src, mask, refpoint_embed, pos_embed, class_embed):
+    def forward(self, src, mask, refpoint_embed, pos_embed):
         # flatten NxCxHxW to HWxNxC
         bs, c, t, h, w = src.shape
         assert t == 1
@@ -130,9 +130,9 @@ class Transformer(nn.Module):
             tgt = self.patterns.weight[:, None, None, :].repeat(1, self.num_queries, bs, 1).flatten(0, 1) # n_q*n_pat, bs, d_model
             refpoint_embed = refpoint_embed.repeat(self.num_patterns, 1, 1) # n_q*n_pat, bs, d_model
             # import ipdb; ipdb.set_trace()
-        hs, references, ce = self.decoder(tgt, memory, memory_key_padding_mask=mask,
-                          pos=pos_embed, refpoints_unsigmoid=refpoint_embed, class_embed=class_embed)
-        return hs, references, ce
+        hs, references = self.decoder(tgt, memory, memory_key_padding_mask=mask,
+                          pos=pos_embed, refpoints_unsigmoid=refpoint_embed)
+        return hs, references
 
 
 class TransformerEncoder(nn.Module):
@@ -195,8 +195,8 @@ class TransformerDecoder(nn.Module):
         self.modulate_hw_attn = modulate_hw_attn
         self.bbox_embed_diff_each_layer = bbox_embed_diff_each_layer
 
-        self.ce_proj = MLP(d_model, d_model, d_model, 2)
-        self.cross_attn = MultiheadAttention(d_model, 4, dropout=0.1, vdim=d_model)
+        # self.ce_proj = MLP(d_model, d_model, d_model, 2)
+        # self.cross_attn = MultiheadAttention(d_model, 4, dropout=0.1, vdim=d_model)
 
 
         if modulate_hw_attn:
@@ -214,7 +214,6 @@ class TransformerDecoder(nn.Module):
                 memory_key_padding_mask: Optional[Tensor] = None,
                 pos: Optional[Tensor] = None,
                 refpoints_unsigmoid: Optional[Tensor] = None, # num_queries, bs, 2
-                class_embed: Optional[Tensor] = None,
                 ):
         output = tgt
 
@@ -222,9 +221,7 @@ class TransformerDecoder(nn.Module):
         reference_points = refpoints_unsigmoid.sigmoid()
         ref_points = [reference_points]
 
-        # import ipdb; ipdb.set_trace()        
-        ce = class_embed
-
+        # import ipdb; ipdb.set_trace()
         for layer_id, layer in enumerate(self.layers):
             obj_center = reference_points[..., :self.query_dim]     # [num_queries, batch_size, 2]
             # get sine embedding for the query vector
@@ -257,11 +254,11 @@ class TransformerDecoder(nn.Module):
                            pos=pos, query_pos=query_pos, query_sine_embed=query_sine_embed,
                            is_first=(layer_id == 0))
             bs = output.size(1)
-            q = self.ce_proj(ce)
-            if len(q.shape) == 2:
-                q = q.unsqueeze(1).repeat(1, bs, 1)
-            k = v = output
-            ce = self.cross_attn(query=q, key=k, value=v)[0]   
+            # q = self.ce_proj(ce)
+            # if len(q.shape) == 2:
+            #     q = q.unsqueeze(1).repeat(1, bs, 1)
+            # k = v = output
+            # ce = self.cross_attn(query=q, key=k, value=v)[0]   
 
             # iter update
             if self.bbox_embed is not None:
@@ -290,13 +287,11 @@ class TransformerDecoder(nn.Module):
                 return [
                     torch.stack(intermediate).transpose(1, 2),
                     torch.stack(ref_points).transpose(1, 2),
-                    ce
                 ]
             else:
                 return [
                     torch.stack(intermediate).transpose(1, 2), 
                     reference_points.unsqueeze(0).transpose(1, 2),
-                    ce
                 ]
 
         return output.unsqueeze(0)

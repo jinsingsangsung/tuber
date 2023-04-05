@@ -15,11 +15,10 @@ from utils.misc import (NestedTensor, nested_tensor_from_tensor_list,
 from models.backbone_builder import build_backbone
 from models.detr.segmentation import (dice_loss, sigmoid_focal_loss)
 from models.dab_class_detr.dab_transformer import build_transformer
-from models.transformer.transformer_layers import TransformerEncoderLayer, TransformerEncoder
+from models.dab_class_detr.transformer_layers import TransformerEncoderLayer, TransformerEncoder, TransformerDecoderLayer, TransformerDecoder
 from models.criterion import PostProcess, PostProcessAVA, MLP
 from models.criterion import SetCriterion, SetCriterionAVA
-from models.transformer.transformer_layers import LSTRTransformerDecoder, LSTRTransformerDecoderLayer, layer_norm
-# from models.dn_dab_deformable_detr.dn_components import prepare_for_dn, dn_post_process, compute_dn_loss
+from models.dab_class_detr.transformer_layers import LSTRTransformerDecoder, LSTRTransformerDecoderLayer, layer_norm
 
 import copy
 import math
@@ -80,7 +79,8 @@ class DETR(nn.Module):
         # self.class_proj = nn.Conv3d(backbone.num_channels[-1], hidden_dim, kernel_size=(4,1,1))
         encoder_layer = TransformerEncoderLayer(hidden_dim, 8, 2048, 0.1, "relu", normalize_before=False)
         self.encoder = TransformerEncoder(encoder_layer, num_layers=1, norm=None)
-        self.cross_attn = nn.MultiheadAttention(256, num_heads=8, dropout=0.1)
+        decoder_layer = TransformerDecoderLayer(hidden_dim, 4)
+        self.cross_attn = TransformerDecoder(decoder_layer, num_layers=3)
 
         if self.dataset_mode == 'ava':
             self.class_embed_b = nn.Linear(hidden_dim, 3)
@@ -89,6 +89,7 @@ class DETR(nn.Module):
             self.class_embed_b = nn.Linear(2048, 2)
             # self.class_embed = nn.Linear(hidden_dim, num_classes + 1)
         self.class_embed = nn.Embedding(num_classes, hidden_dim)
+        self.class_embed_bias = nn.Parameter(torch.zeros(transformer.dec_layers, 1, num_queries, num_classes))
         if bbox_embed_diff_each_layer:
             self.bbox_embed = nn.ModuleList([MLP(hidden_dim, hidden_dim, 4, 3) for i in range(6)])
         else:
@@ -153,8 +154,7 @@ class DETR(nn.Module):
         # bs = samples.tensors.shape[0]
 
         embedweight = self.refpoint_embed.weight      # nq, 4
-        class_embed = self.class_embed.weight  # num_classes, hidden_dim
-        hs, reference, ce = self.transformer(self.input_proj(src), mask, embedweight, pos[-1], class_embed)
+        hs, reference = self.transformer(self.input_proj(src), mask, embedweight, pos[-1])
 
         if self.dataset_mode == 'ava':
             outputs_class_b = self.class_embed_b(hs)
@@ -181,21 +181,24 @@ class DETR(nn.Module):
             outputs_coord = torch.stack(outputs_coords)        
 
         ############# momentum
-        outputs_class = torch.einsum("lbnd,cbd->lbnc", self.dropout(hs), ce)
-        # lay_n, bs, nq, dim = hs.shape
+        
+        lay_n, bs, nq, dim = hs.shape
 
-        # src_c = self.class_proj(xt)        
-        # hs_t_agg = hs.contiguous().view(lay_n, bs, 1, nq, dim)
-        # src_flatten = src_c.view(1, bs, self.hidden_dim, -1).repeat(lay_n, 1, 1, 1).view(lay_n * bs, self.hidden_dim, -1).permute(2, 0, 1).contiguous()
-        # if not self.is_swin:
-        #     src_flatten, _ = self.encoder(src_flatten, orig_shape=src_c.shape)
+        class_embed = self.class_embed.weight  # num_classes, hidden_dim
 
-        # hs_query = hs_t_agg.view(lay_n * bs, nq, dim).permute(1, 0, 2).contiguous()
-        # q_class = self.cross_attn(hs_query, src_flatten, src_flatten)[0]
-        # q_class = q_class.permute(1, 0, 2).contiguous().view(lay_n, bs, nq, self.hidden_dim)
+        src_c = self.class_proj(xt)
+        hs_t_agg = hs.contiguous().view(lay_n, bs, 1, nq, dim)
+        src_flatten = src_c.view(1, bs, self.hidden_dim, -1).repeat(lay_n, 1, 1, 1).view(lay_n * bs, self.hidden_dim, -1).permute(2, 0, 1).contiguous()
+        if not self.is_swin:
+            src_flatten, _ = self.encoder(src_flatten, orig_shape=src_c.shape)
 
+        hs_query = hs_t_agg.view(lay_n * bs, nq, dim).permute(1, 0, 2).contiguous()
+        class_embed = class_embed.unsqueeze(1).repeat(1, bs, 1)
+        q_class, ce = self.cross_attn(hs_query, src_flatten, class_embed)
+        q_class = q_class.permute(1, 0, 2).contiguous().view(lay_n, bs, nq, self.hidden_dim)
+        outputs_class = torch.einsum("lbnd,cbd->lbnc", self.dropout(hs), ce) + self.class_embed_bias
         # outputs_class = self.class_embed(self.dropout(q_class))
-        # outputs_coord = self.bbox_embed(hs).sigmoid()
+        outputs_coord = self.bbox_embed(hs).sigmoid()
     
         out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1], 'pred_logits_b': outputs_class_b[-1],}
         if self.aux_loss:
