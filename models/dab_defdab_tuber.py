@@ -110,9 +110,9 @@ class DETR(nn.Module):
         #     self.input_proj = nn.Conv3d(backbone.num_channels, hidden_dim, kernel_size=1)
         #     self.class_proj = nn.Conv3d(backbone.num_channels, hidden_dim, kernel_size=1)
         # self.class_proj = nn.Conv3d(backbone.num_channels[-1], hidden_dim, kernel_size=(4,1,1))
-        encoder_layer = TransformerEncoderLayer(hidden_dim, 8, 2048, 0.1, "relu", normalize_before=False)
-        self.encoder = TransformerEncoder(encoder_layer, num_layers=1, norm=None)
-        self.cross_attn = nn.MultiheadAttention(256, num_heads=8, dropout=0.1)
+        # encoder_layer = TransformerEncoderLayer(hidden_dim, 8, 2048, 0.1, "relu", normalize_before=False)
+        # self.encoder = TransformerEncoder(encoder_layer, num_layers=1, norm=None)
+        # self.cross_attn = nn.MultiheadAttention(256, num_heads=8, dropout=0.1)
 
         if self.dataset_mode == 'ava':
             self.class_embed_b = nn.Linear(hidden_dim, 3)
@@ -210,11 +210,12 @@ class DETR(nn.Module):
 
         hs, reference = self.transformer(src_l, mask, embedweight, pos) # DAB-DETR
 
-        # if self.dataset_mode == 'ava':
-        #     outputs_class_b = self.class_embed_b(hs)
-        # else:
-        #     outputs_class_b = self.class_embed_b(self.avg_s(xt).squeeze(-1).squeeze(-1).squeeze(-1))
-        #     outputs_class_b = outputs_class_b.unsqueeze(0).repeat(6, 1, 1)
+        ####### binary action localization head
+        if self.dataset_mode == 'ava':
+            outputs_class_b = self.class_embed_b(hs)
+        else:
+            outputs_class_b = self.class_embed_b(self.avg_s(xt).squeeze(-1).squeeze(-1).squeeze(-1))
+            outputs_class_b = outputs_class_b.unsqueeze(0).repeat(6, 1, 1)
 
         ######## localization head
 
@@ -260,7 +261,7 @@ class DETR(nn.Module):
         query_embed = torch.cat((hs[-1], reference[-1]), dim=2)
         # Note that query_embed is already of size (b, nq, d+4)
 
-        q_class = self.transformer2(srcs, masks, poses, query_embed)
+        q_class = self.transformer2(srcs, masks, poses, query_embed)[0]
 
         outputs_class = self.class_embed(self.dropout(q_class))
         # outputs_coord = self.bbox_embed(hs).sigmoid()

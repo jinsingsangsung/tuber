@@ -168,6 +168,7 @@ class MSDeformAttn3D(nn.Module):
         """
         :param query                       (N, Length_{query}, C)
         :param reference_points            (N, Length_{query}, n_levels, 3), range in [0, 1], start-top-left (0,0,0), end-bottom-right (1,1,1), including padding area
+                                        or (N, Length_{query}, n_levels, 6) with twh extent
         :param input_flatten               (N, \sum_{l=0}^{L-1} H_l \cdot W_l, C)
         :param input_spatial_shapes        (n_levels, 2), [(H_0, W_0), (H_1, W_1), ..., (H_{L-1}, W_{L-1})]
         :param input_level_start_index     (n_levels, ), [0, H_0*W_0, H_0*W_0+H_1*W_1, H_0*W_0+H_1*W_1+H_2*W_2, ..., H_0*W_0+H_1*W_1+...+H_{L-1}*W_{L-1}]
@@ -191,6 +192,9 @@ class MSDeformAttn3D(nn.Module):
             offset_normalizer = torch.stack([input_spatial_shapes[..., 0], input_spatial_shapes[..., 2], input_spatial_shapes[..., 1]], -1)
             sampling_locations = reference_points[:, :, None, :, None, :] \
                                  + sampling_offsets / offset_normalizer[None, None, None, :, None, :]
+        elif reference_points.shape[-1] == 6:
+            sampling_locations = reference_points[:, :, None, :, None, :3] \
+                                 + sampling_offsets / self.n_points * reference_points[:, :, None, :, None, 3:] * 0.5       
         else:
             raise ValueError(
                 'Last dim of reference_points must be 3, but get {} instead.'.format(reference_points.shape[-1]))

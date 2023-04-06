@@ -196,7 +196,6 @@ class DeformableTransformer(nn.Module):
             query_embed, tgt = torch.split(pos_trans_out, c, dim=2)
 
         elif self.use_dab:
-            import pdb; pdb.set_trace()
             reference_points = query_embed[..., self.d_model:].sigmoid() 
             tgt = query_embed[..., :self.d_model]
             if query_embed.size(0) != bs:
@@ -207,7 +206,7 @@ class DeformableTransformer(nn.Module):
             query_embed = query_embed.unsqueeze(0).expand(bs, -1, -1)
             tgt = tgt.unsqueeze(0).expand(bs, -1, -1)
             reference_points = self.reference_points(query_embed).sigmoid() 
-                # bs, num_queries, 2
+            # bs, num_queries, 2
             init_reference_out = reference_points
 
         # decoder
@@ -319,7 +318,7 @@ class DeformableTransformerDecoderLayer(nn.Module):
         super().__init__()
 
         # cross attention
-        self.cross_attn = MSDeformAttn(d_model, n_levels, n_heads, n_points)
+        self.cross_attn = MSDeformAttn3D(d_model, n_levels, n_heads, n_points)
         self.dropout1 = nn.Dropout(dropout)
         self.norm1 = nn.LayerNorm(d_model)
 
@@ -348,18 +347,16 @@ class DeformableTransformerDecoderLayer(nn.Module):
 
     def forward(self, tgt, query_pos, reference_points, src, src_spatio_temporal_shapes, level_start_index, src_padding_mask=None):
         # self attention
-        q = k = self.with_pos_embed(tgt, query_pos)
-        tgt2 = self.self_attn(q.transpose(0, 1), k.transpose(0, 1), tgt.transpose(0, 1))[0].transpose(0, 1)
-        tgt = tgt + self.dropout2(tgt2)
-        tgt = self.norm2(tgt)
-
+        # q = k = self.with_pos_embed(tgt, query_pos)
+        # tgt2 = self.self_attn(q.transpose(0, 1), k.transpose(0, 1), tgt.transpose(0, 1))[0].transpose(0, 1)
+        # tgt = tgt + self.dropout2(tgt2)
+        # tgt = self.norm2(tgt)
         # cross attention
         tgt2 = self.cross_attn(self.with_pos_embed(tgt, query_pos),
                                reference_points,
                                src, src_spatio_temporal_shapes, level_start_index, src_padding_mask)
         tgt = tgt + self.dropout1(tgt2)
         tgt = self.norm1(tgt)
-
         # ffn
         tgt = self.forward_ffn(tgt)
 
@@ -379,14 +376,14 @@ class DeformableTransformerDecoder(nn.Module):
         self.d_model = d_model
         self.no_sine_embed = no_sine_embed
         if use_dab:
-            self.query_scale = MLP(d_model, d_model, d_model, 2)
+            self.query_scale = MLP(d_model, d_model, d_model, 3)
             if self.no_sine_embed:
-                self.ref_point_head = MLP(4, d_model, d_model, 3)
+                self.ref_point_head = MLP(6, d_model, d_model, 4)
             else:
-                self.ref_point_head = MLP(2 * d_model, d_model, d_model, 2)
+                self.ref_point_head = MLP(3 * d_model, d_model, d_model, 3)
         self.high_dim_query_update = high_dim_query_update
         if high_dim_query_update:
-            self.high_dim_query_proj = MLP(d_model, d_model, d_model, 2)
+            self.high_dim_query_proj = MLP(d_model, d_model, d_model, 3)
 
 
     def forward(self, tgt, reference_points, src, src_spatio_temporal_shapes,       
@@ -396,16 +393,18 @@ class DeformableTransformerDecoder(nn.Module):
         if self.use_dab:
             assert query_pos is None
         bs = src.shape[0]
-        reference_points = reference_points[None].repeat(bs, 1, 1) # bs, nq, 4(xywh)
-
+        if reference_points.size(0) != bs:
+            reference_points = reference_points[None].repeat(bs, 1, 1) # bs, nq, 4(xywh)
 
         intermediate = []
         intermediate_reference_points = []
         for lid, layer in enumerate(self.layers):
             # import ipdb; ipdb.set_trace()
             if reference_points.shape[-1] == 4:
+                z = t = torch.full((reference_points.size(0), reference_points.size(1), 1), 0.5, device=reference_points.device)
+                reference_points = torch.cat([z, reference_points[:,:,:2], t, reference_points[:,:,2:]], -1)
                 reference_points_input = reference_points[:, :, None] \
-                                         * torch.cat([src_valid_ratios, src_valid_ratios], -1)[:, None] # bs, nq, 4, 4
+                                         * torch.cat([src_valid_ratios, src_valid_ratios], -1)[:, None] # bs, nq, 4, 6
             else:
                 assert reference_points.shape[-1] == 2
                 reference_points_input = reference_points[:, :, None] * src_valid_ratios[:, None]
@@ -466,8 +465,8 @@ def build_deformable_transformer(cfg):
     return DeformableTransformer(
         d_model=cfg.CONFIG.MODEL.D_MODEL,
         nhead=cfg.CONFIG.MODEL.NHEAD,
-        num_encoder_layers=cfg.CONFIG.MODEL.ENC_LAYERS,
-        num_decoder_layers=cfg.CONFIG.MODEL.DEC_LAYERS,
+        num_encoder_layers=1,
+        num_decoder_layers=1,
         dim_feedforward=cfg.CONFIG.MODEL.DIM_FEEDFORWARD,
         dropout=cfg.CONFIG.MODEL.DROPOUT,
         activation="relu",
@@ -500,16 +499,23 @@ def gen_sineembed_for_position(pos_tensor):
     scale = 2 * math.pi
     dim_t = torch.arange(128, dtype=torch.float32, device=pos_tensor.device)
     dim_t = 10000 ** (2 * (dim_t // 2) / 128)
-    x_embed = pos_tensor[:, :, 0] * scale
-    y_embed = pos_tensor[:, :, 1] * scale
+    z_embed = pos_tensor[:, :, 0] * scale
+    x_embed = pos_tensor[:, :, 1] * scale
+    y_embed = pos_tensor[:, :, 2] * scale
+    pos_z = z_embed[:, :, None] / dim_t
     pos_x = x_embed[:, :, None] / dim_t
     pos_y = y_embed[:, :, None] / dim_t
+    pos_z = torch.stack((pos_z[:, :, 0::2].sin(), pos_z[:, :, 1::2].cos()), dim=3).flatten(2)
     pos_x = torch.stack((pos_x[:, :, 0::2].sin(), pos_x[:, :, 1::2].cos()), dim=3).flatten(2)
     pos_y = torch.stack((pos_y[:, :, 0::2].sin(), pos_y[:, :, 1::2].cos()), dim=3).flatten(2)
-    if pos_tensor.size(-1) == 2:
-        pos = torch.cat((pos_y, pos_x), dim=2)
-    elif pos_tensor.size(-1) == 4:
-        w_embed = pos_tensor[:, :, 2] * scale
+    if pos_tensor.size(-1) == 3:
+        pos = torch.cat((pos_t, pos_y, pos_x), dim=2)
+    elif pos_tensor.size(-1) == 6:
+        t_embed = pos_tensor[:, :, 3] * scale
+        pos_t = t_embed[:, :, None] / dim_t
+        pos_t = torch.stack((pos_t[:, :, 0::2].sin(), pos_t[:, :, 1::2].cos()), dim=3).flatten(2)
+
+        w_embed = pos_tensor[:, :, 3] * scale
         pos_w = w_embed[:, :, None] / dim_t
         pos_w = torch.stack((pos_w[:, :, 0::2].sin(), pos_w[:, :, 1::2].cos()), dim=3).flatten(2)
 
@@ -517,7 +523,7 @@ def gen_sineembed_for_position(pos_tensor):
         pos_h = h_embed[:, :, None] / dim_t
         pos_h = torch.stack((pos_h[:, :, 0::2].sin(), pos_h[:, :, 1::2].cos()), dim=3).flatten(2)
 
-        pos = torch.cat((pos_y, pos_x, pos_w, pos_h), dim=2)
+        pos = torch.cat((pos_z, pos_y, pos_x, pos_t, pos_w, pos_h), dim=2)
     else:
         raise ValueError("Unknown pos_tensor shape(-1):{}".format(pos_tensor.size(-1)))
     return pos
