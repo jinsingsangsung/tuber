@@ -215,10 +215,10 @@ class DETR(nn.Module):
         q_class = torch.cat([q_class[-1], q_inter[-1]], dim=-1)
         outputs_class = self.class_embed(self.dropout(q_class))
         # outputs_coord = self.bbox_embed(hs).sigmoid()
-    
+
         out = {'pred_logits': outputs_class, 'pred_boxes': outputs_coord[-1], 'pred_logits_b': outputs_class_b[-1],}
         if self.aux_loss:
-            out['aux_outputs'] = self._set_aux_loss(outputs_class, outputs_coord, outputs_class_b)
+            out['aux_outputs'] = self._set_aux_loss(outputs_class.unsqueeze(0), outputs_coord, outputs_class_b)
         return out
 
     @torch.jit.unused

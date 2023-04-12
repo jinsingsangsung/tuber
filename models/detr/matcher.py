@@ -57,7 +57,6 @@ class HungarianMatcher(nn.Module):
         """
         bs, num_queries = outputs["pred_logits"].shape[:2]
         # bs, num_queries = outputs["pred_boxes"].shape[:2]
-
         out_bbox = outputs["pred_boxes"].flatten(0, 1)
         # Also concat the target labels
         tgt_bbox = torch.cat([v["boxes"] for v in targets])
