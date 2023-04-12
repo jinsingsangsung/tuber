@@ -31,7 +31,7 @@ class DETR(nn.Module):
     """ This is the DETR module that performs object detection """
     def __init__(self, backbone, transformer, num_classes, num_queries, num_frames,
                  hidden_dim, temporal_length, aux_loss=False, generate_lfb=False, two_stage=False, random_refpoints_xy=False, query_dim=4,
-                 backbone_name='CSN-152', ds_rate=1, last_stride=True, dataset_mode='ava', bbox_embed_diff_each_layer=False, training=True):
+                 backbone_name='CSN-152', ds_rate=1, last_stride=True, dataset_mode='ava', bbox_embed_diff_each_layer=False, training=True, iter_update=True):
         """ Initializes the model.
         Parameters:
             backbone: torch module of the backbone to be used. See backbone.py
@@ -50,7 +50,10 @@ class DETR(nn.Module):
         self.dataset_mode = dataset_mode
         self.num_classes = num_classes
         self.bbox_embed_diff_each_layer = bbox_embed_diff_each_layer
-        
+        self.iter_update = iter_update
+        if self.iter_update:
+            self.transformer.decoder.bbox_embed = self.bbox_embed
+
         if self.dataset_mode != 'ava':
             self.avg_s = nn.AdaptiveAvgPool3d((1, 1, 1))
             self.query_embed = nn.Embedding(num_queries * temporal_length, hidden_dim)
