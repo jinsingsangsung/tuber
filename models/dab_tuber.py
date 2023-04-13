@@ -50,9 +50,6 @@ class DETR(nn.Module):
         self.dataset_mode = dataset_mode
         self.num_classes = num_classes
         self.bbox_embed_diff_each_layer = bbox_embed_diff_each_layer
-        self.iter_update = iter_update
-        if self.iter_update:
-            self.transformer.decoder.bbox_embed = self.bbox_embed
 
         if self.dataset_mode != 'ava':
             self.avg_s = nn.AdaptiveAvgPool3d((1, 1, 1))
@@ -96,6 +93,9 @@ class DETR(nn.Module):
             self.bbox_embed = nn.ModuleList([MLP(hidden_dim, hidden_dim, 4, 3) for i in range(6)])
         else:
             self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
+        self.iter_update = iter_update
+        if self.iter_update:
+            self.transformer.decoder.bbox_embed = self.bbox_embed
 
         prior_prob = 0.01
         bias_value = -math.log((1 - prior_prob) / prior_prob)
