@@ -17,13 +17,16 @@ def load_detr_weights(model, pretrain_dir, cfg):
         l = 0
     else:
         l = 1        
+    import pdb; pdb.set_trace()
     for k, v in checkpoint['model'].items():
         if k.split('.')[l] == 'transformer':
             pretrained_dict.update({k: v})
             if 'united' in cfg.CONFIG.LOG.EXP_NAME and 'linear1.weight' in k and 'encoder' in k:
-                pretrained_dict.update({k:v[:256].repeat(8,1)})
+                pretrained_dict.update({k:v[:1024]})
             elif 'encoder' in k and "sampling_offsets" in k:
                 pretrained_dict.update({k:torch.cat((v, v[:128]))})
+            elif 'united' in cfg.CONFIG.LOG.EXP_NAME and 'linear2.weight' in k and 'encoder' in k:
+                pretrained_dict.update({k:v[:1024]})
             elif 'cloca' in cfg.CONFIG.LOG.EXP_NAME:
                 new_k = 'module.transformer2.' + ".".join(k.split('.')[2:])
                 pretrained_dict.update({new_k: v})
@@ -39,6 +42,7 @@ def load_detr_weights(model, pretrain_dir, cfg):
             # print(v.shape) # v의 len이 135임! 따라서 query size > 135면 error남
             print("query_size:", query_size)
             # pretrained_dict.update({k: v[:query_size]})
+    import pdb; pdb.set_trace()
     pretrained_dict_ = {k: v for k, v in pretrained_dict.items() if k in model_dict} # model_dict에는 "module.query_embed.weight"라는 key가 있음
     unused_dict = {k: v for k, v in pretrained_dict.items() if not k in model_dict}
     # not_found_dict = {k: v for k, v in model_dict.items() if not k in pretrained_dict}

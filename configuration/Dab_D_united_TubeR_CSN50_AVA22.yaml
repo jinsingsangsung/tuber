@@ -8,7 +8,7 @@ DDP_CONFIG:
   AUTO_RANK_MATCH: True
   DIST_BACKEND: 'nccl'
   GPU: 0
-  DISTRIBUTED: False
+  DISTRIBUTED: True
 
 CONFIG:
   EVAL_ONLY: False
@@ -59,11 +59,11 @@ CONFIG:
     LAST_STRIDE: False
     GENERATE_LFB: False
     NAME: 'ava_detr_9_224'
-    ENC_LAYERS: 1
-    DEC_LAYERS: 2
+    ENC_LAYERS: 6
+    DEC_LAYERS: 6
     D_MODEL: 256
     NHEAD: 8
-    DIM_FEEDFORWARD: 2048
+    DIM_FEEDFORWARD: 1024
     QUERY_NUM: 15
     NORMALIZE_BEFORE: False
     DROPOUT: 0.1
@@ -76,9 +76,9 @@ CONFIG:
     PRETRAINED_PATH: "/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/AVA_Tuber/Dab_DN_D_/checkpoints/ckpt_epoch_0.pth"
     LOAD: False
     LOAD_FC: False
-    LOAD_DETR: True
+    LOAD_DETR: False
     POSITION_EMBEDDING: "sine"
-    NUM_FEATURE_LEVELS: 4
+    NUM_FEATURE_LEVELS: 1
     NUM_DEC_N_POINTS: 4
     NUM_ENC_N_POINTS: 4
     SCALAR: 5

@@ -75,7 +75,7 @@ class DETR(nn.Module):
         else:
             self.input_proj = nn.ModuleList([
                 nn.Sequential(
-                    nn.Conv2d(backbone.num_channels[0], hidden_dim, kernel_size=1),
+                    nn.Conv2d(backbone.num_channels[-1], hidden_dim, kernel_size=1),
                     nn.GroupNorm(32, hidden_dim),
                 )])        
         
@@ -155,8 +155,7 @@ class DETR(nn.Module):
         poses = list()
 
         bs = samples.tensors.shape[0]
-
-        for l, feat in enumerate(features[1:]): # 첫 번째 feature는 버림
+        for l, feat in enumerate(features[1:][-self.num_feature_levels:]): # 첫 번째 feature는 버림
             src, mask = feat.decompose()
             src_proj_l = self.input_proj[l](src) # channel 통일
 
@@ -164,8 +163,8 @@ class DETR(nn.Module):
             src_proj_l = src_proj_l.reshape(-1, n//bs, c, h, w).permute(0,2,1,3,4).contiguous() # bs,c,t,h,w
 
             mask = mask.reshape(-1, n//bs, h, w)
-            np, cp, hp, wp = pos[l+1].shape
-            pos_l = pos[l+1].reshape(-1, np//bs, cp, hp, wp).permute(0,2,1,3,4).contiguous()
+            np, cp, hp, wp = pos[1:][-self.num_feature_levels:][l].shape
+            pos_l = pos[1:][-self.num_feature_levels:][l].reshape(-1, np//bs, cp, hp, wp).permute(0,2,1,3,4).contiguous()
             srcs.append(src_proj_l)
             masks.append(mask)
             poses.append(pos_l)
@@ -190,7 +189,11 @@ class DETR(nn.Module):
                 srcs.append(src)
                 masks.append(mask)
                 poses.append(pos_l)   
-     
+
+        srcs = srcs[-self.num_feature_levels:]
+        masks = masks[-self.num_feature_levels:]
+        poses = poses[-self.num_feature_levels:]
+
         tgt_embed = self.tgt_embed.weight
         embedweight = self.refpoint_embed.weight      # nq x t, 4
         sub_embedweight = self.subrefpoint_embed.weight # m x nq x t, 4
@@ -266,6 +269,7 @@ def build_model(cfg):
                  ds_rate=cfg.CONFIG.MODEL.DS_RATE,
                  last_stride=cfg.CONFIG.MODEL.LAST_STRIDE,
                  dataset_mode=cfg.CONFIG.DATA.DATASET_NAME,
+                 num_feature_levels=cfg.CONFIG.MODEL.NUM_FEATURE_LEVELS,
                  )
 
     matcher = build_matcher(cfg)
