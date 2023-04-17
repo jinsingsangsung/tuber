@@ -16,7 +16,9 @@ def load_detr_weights(model, pretrain_dir, cfg):
     for k, v in checkpoint['model'].items():
         if k.split('.')[1] == 'transformer':
             pretrained_dict.update({k: v})
-            if 'cloca' in cfg.CONFIG.LOG.EXP_NAME:
+            if 'united' in cfg.CONFIG.LOG.EXP_NAME and 'linear1.weight' in k and 'encoder' in k:
+                pretrained_dict.update({k:v.repeat(1,2)})
+            elif 'cloca' in cfg.CONFIG.LOG.EXP_NAME:
                 new_k = 'module.transformer2.' + ".".join(k.split('.')[2:])
                 pretrained_dict.update({new_k: v})
         elif k.split('.')[1] == 'bbox_embed':

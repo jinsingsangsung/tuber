@@ -12,15 +12,13 @@ from utils.misc import (NestedTensor, nested_tensor_from_tensor_list,
                        accuracy, accuracy_sigmoid, get_world_size, interpolate,
                        is_dist_avail_and_initialized, inverse_sigmoid)
 
-from models.backbone_builder import build_backbone
+from models.backbone_builder2 import build_backbone
 from models.detr.segmentation import (dice_loss, sigmoid_focal_loss)
-from models.dab_sep_detr.dab_transformer import build_transformer
-from models.dab_sep_detr.transformer_layers import TransformerEncoderLayer, TransformerEncoder, PositionalEncoding
-from models.dab_sep_detr.dab_transformer import TransformerDecoderCustom, TransformerDecoderLayer
-from models.dab_sep_detr.criterion import PostProcess, PostProcessAVA, MLP
-from models.dab_sep_detr.criterion import SetCriterion, SetCriterionAVA
+from models.dab_united_detr.dab_transformer import build_transformer
+from models.transformer.transformer_layers import TransformerEncoderLayer, TransformerEncoder
+from models.dab_united_detr.criterion import PostProcess, PostProcessAVA, MLP
+from models.dab_united_detr.criterion import SetCriterion, SetCriterionAVA
 from models.transformer.transformer_layers import LSTRTransformerDecoder, LSTRTransformerDecoderLayer, layer_norm
-# from models.dn_dab_deformable_detr.dn_components import prepare_for_dn, dn_post_process, compute_dn_loss
 
 import copy
 import math
@@ -51,26 +49,17 @@ class DETR(nn.Module):
         self.dataset_mode = dataset_mode
         self.num_classes = num_classes
         self.bbox_embed_diff_each_layer = bbox_embed_diff_each_layer
-        
-        if self.dataset_mode != 'ava':
-            self.avg_s = nn.AdaptiveAvgPool3d((1, 1, 1))
-            self.query_embed = nn.Embedding(num_queries * temporal_length, hidden_dim)
-        else:
-            self.query_embed = nn.Embedding(num_queries, hidden_dim)
-        
         self.query_dim = query_dim
         assert query_dim in [2, 4]
-        self.refpoint_embed = nn.Embedding(num_queries, 4)
-        self.refpoint_embed2 = nn.Embedding(num_queries, 4)
+        self.refpoint_embed = nn.Embedding(num_queries * temporal_length, 4) # NT x 4
+        self.subrefpoint_embed = nn.Embedding(1 * num_queries * temporal_length, 4) # MNT x 4 (M=4)
         self.random_refpoints_xy = random_refpoints_xy
         if random_refpoints_xy:
             # import ipdb; ipdb.set_trace()
             self.refpoint_embed.weight.data[:, :2].uniform_(0,1)
             self.refpoint_embed.weight.data[:, :2] = inverse_sigmoid(self.refpoint_embed.weight.data[:, :2])
             self.refpoint_embed.weight.data[:, :2].requires_grad = False          
-            self.refpoint_embed2.weight.data[:, :2].uniform_(0,1)
-            self.refpoint_embed2.weight.data[:, :2] = inverse_sigmoid(self.refpoint_embed2.weight.data[:, :2])
-            self.refpoint_embed2.weight.data[:, :2].requires_grad = False    
+
         if "SWIN" in backbone_name:
             print("using swin")
             self.input_proj = nn.Conv3d(1024, hidden_dim, kernel_size=1)
@@ -84,29 +73,25 @@ class DETR(nn.Module):
         # self.class_proj = nn.Conv3d(backbone.num_channels[-1], hidden_dim, kernel_size=(4,1,1))
         encoder_layer = TransformerEncoderLayer(hidden_dim, 8, 2048, 0.1, "relu", normalize_before=False)
         self.encoder = TransformerEncoder(encoder_layer, num_layers=1, norm=None)
-        self.cross_attn = nn.MultiheadAttention(256, num_heads=8, dropout=0.1)
-        dab_decoder_layer = TransformerDecoderLayer(hidden_dim, 8, 2048, 0.1, "relu", normalize_before=False)
-        decoder_norm = nn.LayerNorm(hidden_dim)
-        self.dab_decoder = TransformerDecoderCustom(dab_decoder_layer, num_layers=3, norm=decoder_norm, return_intermediate=True, query_dim=4, modulate_hw_attn=True)
-        
+        # self.cross_attn = nn.MultiheadAttention(256, num_heads=8, dropout=0.1)
 
         if self.dataset_mode == 'ava':
             self.class_embed_b = nn.Linear(hidden_dim, 3)
-            self.class_embed = nn.Linear(hidden_dim*2, num_classes)
+            self.class_embed = nn.Linear(hidden_dim, num_classes)
         else:
             self.class_embed_b = nn.Linear(2048, 2)
-            self.class_embed = nn.Linear(hidden_dim*2, num_classes + 1)
+            self.class_embed = nn.Linear(hidden_dim, num_classes + 1)
 
         if bbox_embed_diff_each_layer:
             self.bbox_embed = nn.ModuleList([MLP(hidden_dim, hidden_dim, 4, 3) for i in range(6)])
+            self.bbox_embed2 = nn.ModuleList([MLP(hidden_dim, hidden_dim, 4, 3) for i in range(3)])
         else:
             self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
-        
+            self.bbox_embed2 = MLP(hidden_dim, hidden_dim, 4, 3)
         self.iter_update = iter_update
-
         if self.iter_update:
             self.transformer.decoder.bbox_embed = self.bbox_embed
-            self.dab_decoder.bbox_embed = self.bbox_embed
+            self.transformer.decoder2.bbox_embed = self.bbox_embed2
 
         prior_prob = 0.01
         bias_value = -math.log((1 - prior_prob) / prior_prob)
@@ -127,14 +112,12 @@ class DETR(nn.Module):
         self.generate_lfb = generate_lfb
         self.last_stride = last_stride
         self.training = training
-        self.pe = PositionalEncoding(hidden_dim)
+
 
     def freeze_params(self):
         for param in self.backbone.parameters():
             param.requires_grad = False
         for param in self.transformer.parameters():
-            param.requires_grad = False
-        for param in self.query_embed.parameters():
             param.requires_grad = False
         for param in self.bbox_embed.parameters():
             param.requires_grad = False
@@ -161,19 +144,14 @@ class DETR(nn.Module):
         if not isinstance(samples, NestedTensor):
             samples = nested_tensor_from_tensor_list(samples)
 
-        features, pos, xt = self.backbone(samples) # both are list of length 4
+        features, pos = self.backbone(samples) # both are list of length 4
         src, mask = features[-1].decompose()
         assert mask is not None
-        # bs = samples.tensors.shape[0]
+        bs = samples.tensors.shape[0]
 
-        embedweight = self.refpoint_embed.weight      # nq, 4
-
-        hs, reference = self.transformer(self.input_proj(src), mask, embedweight, pos[-1])
-        if self.dataset_mode == 'ava':
-            outputs_class_b = self.class_embed_b(hs)
-        else:
-            outputs_class_b = self.class_embed_b(self.avg_s(xt).squeeze(-1).squeeze(-1).squeeze(-1))
-            outputs_class_b = outputs_class_b.unsqueeze(0).repeat(6, 1, 1)
+        embedweight = self.refpoint_embed.weight      # nq x t, 4
+        sub_embedweight = self.subrefpoint_embed.weight # m x nq x t, 4
+        hs, reference, hs2, references2 = self.transformer(self.input_proj(src), mask, embedweight, pos[-1], sub_embedweight)
 
         ######## localization head
 
@@ -191,58 +169,34 @@ class DETR(nn.Module):
                 tmp[..., :self.query_dim] += reference_before_sigmoid[lvl]
                 outputs_coord = tmp.sigmoid()
                 outputs_coords.append(outputs_coord)
-            outputs_coord = torch.stack(outputs_coords)
+            outputs_coord = torch.stack(outputs_coords)        
 
-        ############# momentum
-        lay_n, bs, nq, dim = hs.shape
-
-        src_c = self.class_proj(xt)        
-        hs_t_agg = hs.contiguous().view(lay_n, bs, 1, nq, dim)
-        src_flatten = src_c.view(1, bs, self.hidden_dim, -1).repeat(lay_n, 1, 1, 1).view(lay_n * bs, self.hidden_dim, -1).permute(2, 0, 1).contiguous()
-        if not self.is_swin:
-            src_flatten, _ = self.encoder(src_flatten, orig_shape=src_c.shape)
-
-        hs_query = hs_t_agg.view(lay_n * bs, nq, dim).permute(1, 0, 2).contiguous()
-        q_class = self.cross_attn(hs_query, src_flatten, src_flatten)[0]
-        q_class = q_class.permute(1, 0, 2).contiguous().view(lay_n, bs, nq, self.hidden_dim)
-        
-        ##### q_class: actor feature itself
-        ##### let's build "interaction feature" 
-        tgt = torch.zeros(self.num_queries, bs, self.hidden_dim, device=hs.device)
-        mask = mask[:,-1,...].flatten(1).repeat(1, src_c.size(2))
-        reference = reference[-1].permute(1,0,2).contiguous()
-        memory = src_c.view(bs, self.hidden_dim, -1).permute(2, 0, 1).contiguous()
-        pe = self.pe(memory)
-        # embedweight2 = self.refpoint_embed2.weight.unsqueeze(1).repeat(1, bs, 1)
-        # q_inter, reference2 = self.dab_decoder(tgt, memory, memory_key_padding_mask=mask, pos=pe, refpoints_unsigmoid=embedweight2)
-        q_inter = self.dab_decoder(tgt, memory, memory_key_padding_mask=mask, pos=pe, refpoints_unsigmoid=reference)[0]
-        # reference = reference[-1]
-        # reference2 = reference2[-1]
-
-        q_class = torch.cat([q_class[-1], q_inter[-1]], dim=-1)
-        outputs_class = self.class_embed(self.dropout(q_class))
+        outputs_class = self.class_embed(self.dropout(hs2))
         # outputs_coord = self.bbox_embed(hs).sigmoid()
 
-        out = {'pred_logits': outputs_class, 'pred_boxes': outputs_coord[-1], 'pred_logits_b': outputs_class_b[-1],}
+        if self.dataset_mode == "ava":
+            outputs_class = outputs_class.reshape(-1, bs, self.num_queries, self.temporal_length, self.num_classes)[..., self.temporal_length//2, :]
+            outputs_coord = outputs_coord.reshape(-1, bs, self.num_queries, self.temporal_length, 4)[..., self.temporal_length//2, :]
+
+        out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1]}
         if self.aux_loss:
-            out['aux_outputs'] = self._set_aux_loss(outputs_class.unsqueeze(0), outputs_coord, outputs_class_b)
+            out['aux_outputs'] = self._set_aux_loss(outputs_class, outputs_coord)
         return out
 
     @torch.jit.unused
-    def _set_aux_loss(self, outputs_class, outputs_coord, outputs_class_b):
+    def _set_aux_loss(self, outputs_class, outputs_coord):
         # this is a workaround to make torchscript happy, as torchscript
         # doesn't support dictionary with non-homogeneous values, such
         # as a dict having both a Tensor and a list.
 
-        return [{'pred_logits': a, 'pred_boxes': b, 'pred_logits_b': c}
-                for a, b ,c in zip(outputs_class[:-1], outputs_coord[:-1], outputs_class_b[:-1])]
+        return [{'pred_logits': a, 'pred_boxes': b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
 
 
 def build_model(cfg):
     if cfg.CONFIG.DATA.DATASET_NAME == 'ava':
-        from models.detr.matcher import build_matcher
+        from models.dab_united_detr.matcher import build_matcher
     else:
-        from models.detr.matcher_ucf import build_matcher
+        from models.dab_united_detr.matcher import build_matcher
     num_classes = cfg.CONFIG.DATA.NUM_CLASSES
     print('num_classes', num_classes)
 
