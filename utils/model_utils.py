@@ -13,17 +13,23 @@ def load_detr_weights(model, pretrain_dir, cfg):
     model_dict = model.state_dict()
 
     pretrained_dict = {}
+    if "dab-d-tuber-detr" in cfg.CONFIG.MODEL.PRETRAIN_TRANSFORMER_DIR:
+        l = 0
+    else:
+        l = 1        
     for k, v in checkpoint['model'].items():
-        if k.split('.')[1] == 'transformer':
+        if k.split('.')[l] == 'transformer':
             pretrained_dict.update({k: v})
             if 'united' in cfg.CONFIG.LOG.EXP_NAME and 'linear1.weight' in k and 'encoder' in k:
-                pretrained_dict.update({k:v.repeat(1,2)})
+                pretrained_dict.update({k:v[:256].repeat(8,1)})
+            elif 'encoder' in k and "sampling_offsets" in k:
+                pretrained_dict.update({k:torch.cat((v, v[:128]))})
             elif 'cloca' in cfg.CONFIG.LOG.EXP_NAME:
                 new_k = 'module.transformer2.' + ".".join(k.split('.')[2:])
                 pretrained_dict.update({new_k: v})
-        elif k.split('.')[1] == 'bbox_embed':
+        elif k.split('.')[l] == 'bbox_embed':
             pretrained_dict.update({k: v})
-        elif k.split('.')[1] == 'query_embed':
+        elif k.split('.')[l] == 'query_embed':
             if not cfg.CONFIG.MODEL.SINGLE_FRAME:
                 query_size = cfg.CONFIG.MODEL.QUERY_NUM * (cfg.CONFIG.MODEL.TEMP_LEN // cfg.CONFIG.MODEL.DS_RATE) # 10 * 32 //8
                 pretrained_dict.update({k:v[:query_size].repeat(cfg.CONFIG.MODEL.DS_RATE, 1)})
