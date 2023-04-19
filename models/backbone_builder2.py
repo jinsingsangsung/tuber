@@ -20,7 +20,7 @@ from models.transformer.position_encoding import build_position_encoding
 
 from models.backbones.ir_CSN_50_variant import build_CSN
 from models.backbones.ir_CSN_152 import build_CSN as build_CSN_152
-from models.transformer.transformer_layers import LSTRTransformerDecoder, LSTRTransformerDecoderLayer, layer_norm
+from models.transformer.transformer_layers import layer_norm #, LSTRTransformerDecoder, LSTRTransformerDecoderLayer, 
 
 
 class Backbone(nn.Module):
@@ -48,9 +48,9 @@ class Backbone(nn.Module):
                 print("max pool: {}".format(cfg.CONFIG.MODEL.TEMP_LEN // cfg.CONFIG.MODEL.DS_RATE))
             elif cfg.CONFIG.MODEL.TEMPORAL_DS_STRATEGY == 'decode':
                 self.query_pool = nn.Embedding(1, 2048)
-                self.pool_decoder = LSTRTransformerDecoder(
-                    LSTRTransformerDecoderLayer(d_model=2048, nhead=8, dim_feedforward=2048, dropout=0.1), 1,
-                    norm=layer_norm(d_model=2048, condition=True))
+                # self.pool_decoder = LSTRTransformerDecoder(
+                #     LSTRTransformerDecoderLayer(d_model=2048, nhead=8, dim_feedforward=2048, dropout=0.1), 1,
+                #     norm=layer_norm(d_model=2048, condition=True))
 
         self.num_channels = num_channels
         self.backbone_name = cfg.CONFIG.MODEL.BACKBONE_NAME
