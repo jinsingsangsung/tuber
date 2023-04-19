@@ -179,7 +179,7 @@ class DETR(nn.Module):
         # lay_n, bst, nq, dim = hs.shape
         # hw, bst, ch = memory.shape
         bs, _, t, h, w = src.shape
-        memory, _ = self.encoder(memory, src.shape, mask, pos_embed)
+        memory = self.encoder(memory, src.shape, mask, pos_embed)
         ##### prepare for the second decoder
         tgt = self.patterns.weight[:, None, None, :].repeat(1, self.num_queries, bs*t, 1).flatten(0, 1) # n_q*n_pat, bs, d_model
         embedweight = embedweight.unsqueeze(1).repeat(self.num_patterns, bs*t, 1) # n_q*n_pat, bst, d_model

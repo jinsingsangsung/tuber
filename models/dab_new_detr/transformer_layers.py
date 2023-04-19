@@ -42,19 +42,33 @@ class TransformerEncoder(nn.Module):
     def forward(self, src, orig_shape,
                 mask: Optional[Tensor] = None,
                 pos: Optional[Tensor] = None):
-        output = src
+
+        """
+        takes
+        spatially-mixed src: hw, bs*t, ch
+        orig_shape: bs, 2048, t, h, w
+        src_key_padding_mask: bs*t, hw
+        pos: hw, bs*t, ch
+        """
+        bs, _, t, h, w = orig_shape
+        ch = src.shape[-1]
+        output = src.view(h*w, bs, t, ch).flatten(0,1).permute(1,0,2).contiguous() #t, hw*bs, ch
+        pos_t = pos.view(h*w, bs, t, ch).flatten(0,1).permute(1,0,2).contiguous() #t, hw*bs, ch
+        mask_t = mask.view(t, bs, h*w).permute(2,1,0).contiguous().flatten(0,1) #hw*bs, t
+
         for layer in self.layers:
-            output, attn = layer(output, orig_shape=orig_shape,
-                                 src_key_padding_mask=mask, pos=pos)
-        output = output.nan_to_num
+            output = layer(output, orig_shape=orig_shape,
+                                 src_key_padding_mask=mask_t, pos=pos_t)
+
+        # revert to the original shape
+        output = self.norm2(output).view(t, h*w, bs, ch).permute(1,2,0,3).contiguous().flatten(1,2)
+
         src_cat = torch.cat((src, output), dim=-1)
         src = self.linear2(self.dropout(self.activation(self.linear1(src_cat))))
         src = src + self.dropout2(src)
         src = self.norm(src)
         
-        
-        
-        return output, attn
+        return output 
 
 
 class TransformerEncoderLayer(nn.Module):
@@ -63,7 +77,7 @@ class TransformerEncoderLayer(nn.Module):
                  activation="relu", normalize_before=False):
         super().__init__()
 
-        self.self_attn_t = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
+        self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
         # Implementation of Feedforward model
         self.linear1 = nn.Linear(d_model, dim_feedforward)
         self.linear2 = nn.Linear(dim_feedforward, d_model)
@@ -83,31 +97,15 @@ class TransformerEncoderLayer(nn.Module):
                      orig_shape = None,
                      src_key_padding_mask: Optional[Tensor] = None,
                      pos: Optional[Tensor] = None):
-        """
-        takes
-        spatially-mixed src: hw, bs*t, ch
-        orig_shape: bs, 2048, t, h, w
-        src_key_padding_mask: bs*t, hw
-        pos: hw, bs*t, ch
-        """
-        bs, _, t, h, w = orig_shape
-        ch = src.shape[-1]
-        mask = src_key_padding_mask
 
-        src_t = src.view(h*w, bs, t, ch).flatten(0,1).permute(1,0,2).contiguous() #t, hwbs, ch
-        pos_t = pos.view(h*w, bs, t, ch).flatten(0,1).permute(1,0,2).contiguous() #t, hwbs, ch
-        mask_t = mask.view(bs, t, h*w).permute(2,0,1).contiguous().flatten(0,1) #hwbs, t
-        q_t = k_t = self.with_pos_embed(src_t, pos_t)
-        src2_t = self.self_attn_t(q_t, k_t, value=src_t, key_padding_mask=mask_t)[0]
-        src_t = src_t + self.dropout1(src2_t)
+        q = k = self.with_pos_embed(src, pos)
+        src2 = self.self_attn(q, k, value=src, key_padding_mask=src_key_padding_mask)[0]
+        src = src + self.dropout1(src2)
+        src = self.norm1(src)
+        src2 = self.linear2(self.dropout(self.activation(self.linear1(src))))
+        src = src + self.dropout2(src2)
 
-        src_t = self.norm1(src_t)
-        src_t2 = self.linear2(self.dropout(self.activation(self.linear1(src_t))))
-        src_t = src_t + self.dropout2(src_t2)
-        # make it to original input size to make it iterable
-        src_t = self.norm2(src_t).view(t, h*w, bs, ch).permute(1,2,0,3).contiguous().flatten(1,2)
-
-        return src_t, None
+        return src
 
     def forward_pre(self, src,
                     src_mask: Optional[Tensor] = None,
