@@ -73,7 +73,7 @@ class VideoDataset(Dataset):
         self.index_to_sample_t = []
 
         if mode == 'val' or mode == 'test':
-            self.dataset_samples = self.dataset['test_videos'][0]
+            self.dataset_samples = self.dataset['test_videos'][0] #split
         elif mode == 'train':
             self.dataset_samples = self.dataset['train_videos'][0]
 
@@ -99,10 +99,10 @@ class VideoDataset(Dataset):
 
     def __getitem__(self, index):
         sample_id, frame_id = self.index_to_sample_t[index]
-        if self.mode == 'train':
-            p_t = random.randint(1, self.clip_len - 2)
-        else:
-            p_t = self.clip_len // 2
+        # if self.mode == 'train':
+            # p_t = random.randint(1, self.clip_len - 2)
+        # else:
+        p_t = self.clip_len // 2
 
         target = self.load_annotation(sample_id, frame_id, index, p_t)
         imgs = self.loadvideo(frame_id, sample_id, target, p_t)
@@ -146,7 +146,7 @@ class VideoDataset(Dataset):
             # self.person_size = len(tubes)
             for t in tubes:
                 box_ = t[(t[:, 0] == start), 0:5]
-                key_point = key_pos // 8
+                # key_point = key_pos // 8
 
                 if len(box_) > 0:
                     box = box_[0]
