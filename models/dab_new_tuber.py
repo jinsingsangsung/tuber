@@ -54,7 +54,7 @@ class DETR(nn.Module):
         
         self.query_dim = query_dim
         assert query_dim in [2, 4]
-        self.refpoint_embed = nn.Embedding(num_queries, 4)
+        self.refpoint_embed = nn.Embedding(num_queries*temporal_length, 4)
         self.random_refpoints_xy = random_refpoints_xy
         if random_refpoints_xy:
             # import ipdb; ipdb.set_trace()
@@ -154,8 +154,7 @@ class DETR(nn.Module):
         src, mask = features[-1].decompose()
         assert mask is not None
         # bs = samples.tensors.shape[0]
-
-        embedweight = self.refpoint_embed.weight      # nq, 4
+        embedweight = self.refpoint_embed.weight.view(self.num_queries, self.temporal_length, 4)      # nq, t, 4
         hs, reference, memory, mask, pos_embed = self.transformer(self.input_proj(src), mask, embedweight, pos[-1])
 
         ######## localization head
@@ -182,10 +181,10 @@ class DETR(nn.Module):
         memory = self.encoder(memory, src.shape, mask, pos_embed)
         ##### prepare for the second decoder
         tgt = self.patterns.weight[:, None, None, :].repeat(1, self.num_queries, bs*t, 1).flatten(0, 1) # n_q*n_pat, bs, d_model
-        embedweight = embedweight.unsqueeze(1).repeat(self.num_patterns, bs*t, 1) # n_q*n_pat, bst, d_model
+        embedweight = embedweight.repeat(self.num_patterns, bs, 1) # n_pat*n_q, bst, 4
         hs_c, ref_c = self.decoder(tgt, memory, memory_key_padding_mask=mask, pos=pos_embed, refpoints_unsigmoid=embedweight)
 
-        outputs_class = self.class_embed(self.dropout(hs_c)).reshape(-1, bs*t, self.num_queries, self.num_patterns, self.num_classes).max(dim = 3)[0]
+        outputs_class = self.class_embed(self.dropout(hs_c)).reshape(-1, bs*t, self.num_patterns, self.num_queries, self.num_classes).max(dim = 2)[0]
      
         # outputs_coord = self.bbox_embed(hs).sigmoid()
         if self.dataset_mode == "ava":

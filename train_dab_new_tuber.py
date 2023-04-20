@@ -63,10 +63,7 @@ def main_worker(cfg):
     else:
         raise AssertionError("optimizer is one of SGD or ADAMW")
     # create lr scheduler
-    if cfg.CONFIG.TRAIN.LR_POLICY == "step":
-        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=cfg.CONFIG.TRAIN.LR_MILESTONE, gamma=cfg.CONFIG.TRAIN.STEP)
-    else:
-        lr_scheduler = build_scheduler(cfg, optimizer, len(train_loader))
+    lr_scheduler = build_scheduler(cfg, optimizer, len(train_loader))
 
     # docs: add resume option
     if cfg.CONFIG.MODEL.LOAD:

@@ -119,7 +119,7 @@ class Transformer(nn.Module):
         src = src.flatten(2).permute(2, 0, 1) # hw, bst, c
         pos_embed = pos_embed.permute(0,2,1,3,4).contiguous().flatten(0,1)
         pos_embed = pos_embed.flatten(2).permute(2, 0, 1)
-        refpoint_embed = refpoint_embed.unsqueeze(1).repeat(1, t*bs, 1)
+        refpoint_embed = refpoint_embed.repeat(1, bs, 1) #n_q, bs * t, 4
         mask = mask.flatten(0,1).flatten(1)
 
         memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed) 
@@ -130,7 +130,7 @@ class Transformer(nn.Module):
             tgt = torch.zeros(num_queries, bs*t, self.d_model, device=refpoint_embed.device)
         else:
             tgt = self.patterns.weight[:, None, None, :].repeat(1, self.num_queries, bs*t, 1).flatten(0, 1) # n_q*n_pat, bs, d_model
-            refpoint_embed = refpoint_embed.repeat(self.num_patterns, 1, 1) # n_q*n_pat, bs, d_model
+            refpoint_embed = refpoint_embed.repeat(self.num_patterns, 1, 1) # n_pat*n_q, bs, d_model
             # import ipdb; ipdb.set_trace()
         hs, references = self.decoder(tgt, memory, memory_key_padding_mask=mask,
                           pos=pos_embed, refpoints_unsigmoid=refpoint_embed)
