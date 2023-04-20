@@ -149,7 +149,7 @@ class DETR(nn.Module):
         """
         if not isinstance(samples, NestedTensor):
             samples = nested_tensor_from_tensor_list(samples)
-
+        import pdb; pdb.set_trace()
         features, pos = self.backbone(samples)
         src, mask = features[-1].decompose()
         assert mask is not None
@@ -259,9 +259,14 @@ def build_model(cfg):
                                     data_file=cfg.CONFIG.DATA.DATASET_NAME,
                                     evaluation=cfg.CONFIG.EVAL_ONLY)
     else:
-        criterion = SetCriterion(num_classes,
-                        matcher=matcher, weight_dict=weight_dict,
-                        losses=losses)
+        criterion = SetCriterion(cfg.CONFIG.LOSS_COFS.WEIGHT,
+                                    num_classes,
+                                    num_queries=cfg.CONFIG.MODEL.QUERY_NUM,
+                                    matcher=matcher, weight_dict=weight_dict,
+                                    eos_coef=cfg.CONFIG.LOSS_COFS.EOS_COF,                                    
+                                    losses=losses,
+                                    data_file=cfg.CONFIG.DATA.DATASET_NAME,
+                                    evaluation=cfg.CONFIG.EVAL_ONLY)
 
     postprocessors = {'bbox': PostProcessAVA() if cfg.CONFIG.DATA.DATASET_NAME == 'ava' else PostProcess()}
 

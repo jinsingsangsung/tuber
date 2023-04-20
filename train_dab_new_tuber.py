@@ -11,7 +11,6 @@ from utils.video_action_recognition import train_tuber_detection, validate_tuber
 from pipelines.video_action_recognition_config import get_cfg_defaults
 from pipelines.launch import spawn_workers
 from utils.utils import build_log_dir
-from datasets.ava_frame import build_dataloader
 from utils.lr_scheduler import build_scheduler
 
 
@@ -32,6 +31,14 @@ def main_worker(cfg):
     model = deploy_model(model, cfg, is_tuber=True)
     num_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print('Number of parameters in the model: %6.2fM' % (num_parameters / 1000000))
+
+    if cfg.CONFIG.DATA.DATASET_NAME == 'ava':
+        from datasets.ava_frame import build_dataloader
+    elif cfg.CONFIG.DATA.DATASET_NAME == 'jhmdb':
+        from datasets.jhmdb_frame import build_dataloader
+    else:
+        build_dataloader = None
+        print("invalid dataset name")
 
     # create dataset and dataloader
     train_loader, val_loader, train_sampler, val_sampler, mg_sampler = build_dataloader(cfg)
@@ -97,7 +104,7 @@ def main_worker(cfg):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train video action recognition transformer models.')
     parser.add_argument('--config-file',
-                        default='./configuration/Dab_new_TubeR_CSN50_AVA22.yaml',
+                        default='./configuration/Dab_new_TubeR_CSN152_JHMDB.yaml',
                         help='path to config file.')
     parser.add_argument('--num_gpu', default=4, type=int)
     args = parser.parse_args()
