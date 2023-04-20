@@ -79,10 +79,10 @@ class VideoDataset(Dataset):
 
         self.index_to_sample = [vid for vid in self.dataset_samples]
         max_vid_len = max([self.dataset['nframes'][vid] for vid in self.dataset['nframes'].keys()])
-        assert max_vid_len < clip_len,\
-            "max video length of the dataset is {}, and clip length (currently {}) needs to be larger than that".format(max_vid_len, clip_len)
+        assert max_vid_len <= clip_len,\
+            "max video length of the dataset is {}, and clip length (currently {}) needs to be same or larger than that".format(max_vid_len, clip_len)
 
-        print(self.index_to_sample.__len__(), "videos indexed")
+        print(self.index_to_sample.__len__(), "{} videos indexed".format(mode))
 
         self.labelmap = self.dataset['labels']
         self.max_person = 0
@@ -98,7 +98,7 @@ class VideoDataset(Dataset):
         sample_id = self.index_to_sample[index]
 
         target = self.load_annotation(sample_id)
-        imgs = self.loadvideo(sample_id)
+        imgs = self.loadvideo(sample_id, target)
 
         if self._transforms is not None:
             imgs, target = self._transforms(imgs, target)
@@ -163,7 +163,7 @@ class VideoDataset(Dataset):
             self.index_cnt = self.index_cnt + 1
 
         else:
-            boxes = torch.as_tensor(boxes, dtype=torch.float32).reshape(-1, 5)
+            boxes = torch.as_tensor(boxes, dtype=torch.float32).reshape(-1, 5) # 1, t, 5 -> t, 5
             boxes[:, 1::2].clamp_(min=0, max=nw)
             boxes[:, 2::2].clamp_(min=0, max=nh)
 
@@ -184,18 +184,19 @@ class VideoDataset(Dataset):
             target["size"] = torch.as_tensor([int(nh), int(nw)])
             target["vis"] = torch.as_tensor(vis)
             self.index_cnt = self.index_cnt + 1
-        return target
+            ## TODO: extend targets to 40 frames when video_len < clip_len
+        return target 
 
     # load the video based on keyframe
-    def loadvideo(self, mid_point, sample_id, target, p_t):
+    def loadvideo(self, sample_id, target):
         from PIL import Image
         import numpy as np
-
+        ## TODO: extend targets to 40 frames when video_len < clip_len
         buffer = []
         # if len(glob(self.video_path + "/" + sample_id + "/*.jpg")) < 66:
         #     print(111)
-        start = max(mid_point - p_t, 0)
-        end = min(mid_point + self.clip_len - p_t, self.dataset["nframes"][sample_id] - 1)
+        # start = max(mid_point - p_t, 0)
+        # end = min(mid_point + self.clip_len - p_t, self.dataset["nframes"][sample_id] - 1)
         frame_ids_ = [s for s in range(start, end)]
         if len(frame_ids_) < self.clip_len:
             front_size = (self.clip_len - len(frame_ids_)) // 2
