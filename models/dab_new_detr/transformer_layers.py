@@ -61,7 +61,7 @@ class TransformerEncoder(nn.Module):
                                  src_key_padding_mask=mask_t, pos=pos_t)
 
         # revert to the original shape
-        output = self.norm2(output).view(t, h*w, bs, ch).permute(1,2,0,3).contiguous().flatten(1,2)
+        output = self.norm(output).view(t, h*w, bs, ch).permute(1,2,0,3).contiguous().flatten(1,2)
 
         src_cat = torch.cat((src, output), dim=-1)
         src = self.linear2(self.dropout(self.activation(self.linear1(src_cat))))
