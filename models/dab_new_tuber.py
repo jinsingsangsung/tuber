@@ -16,8 +16,8 @@ from models.backbone_builder2 import build_backbone
 from models.detr.segmentation import (dice_loss, sigmoid_focal_loss)
 from models.dab_new_detr.dab_transformer import build_transformer
 # from models.transformer.transformer_layers import TransformerEncoderLayer, TransformerEncoder
-from models.criterion import PostProcess, PostProcessAVA, MLP
-from models.criterion import SetCriterion, SetCriterionAVA
+from models.dab_new_detr.criterion import PostProcess, PostProcessAVA, MLP
+from models.dab_new_detr.criterion import SetCriterion, SetCriterionAVA
 from models.dab_new_detr.transformer_layers import TransformerEncoderLayer, TransformerEncoder
 from models.dab_new_detr.dab_transformer import TransformerDecoderLayer, TransformerDecoder
 # from models.dn_dab_deformable_detr.dn_components import prepare_for_dn, dn_post_process, compute_dn_loss
