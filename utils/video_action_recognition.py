@@ -170,9 +170,7 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
         if max_norm > 0: torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
         optimizer.step()
         # optimizer_c.step()
-        if cfg.CONFIG.TRAIN.LR_POLICY == 'cosine':
-            lr_scheduler.step_update(epoch * len(data_loader) + idx)
-
+        lr_scheduler.step_update(epoch * len(data_loader) + idx)
         batch_time.update(time.time() - end)
         end = time.time()
         # batch_bar.set_postfix(
