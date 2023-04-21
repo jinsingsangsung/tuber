@@ -83,11 +83,11 @@ def main_worker(cfg):
         if cfg.DDP_CONFIG.DISTRIBUTED:
             train_sampler.set_epoch(epoch)
 
-        # train_tuber_detection(cfg, model, criterion, train_loader, optimizer, epoch, cfg.CONFIG.LOSS_COFS.CLIPS_MAX_NORM, lr_scheduler, writer)
+        train_tuber_detection(cfg, model, criterion, train_loader, optimizer, epoch, cfg.CONFIG.LOSS_COFS.CLIPS_MAX_NORM, lr_scheduler, writer)
 
-        # if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0 and (
-        #         epoch % cfg.CONFIG.LOG.SAVE_FREQ == 0 or epoch == cfg.CONFIG.TRAIN.EPOCH_NUM - 1):
-        #     save_checkpoint(cfg, epoch, model, max_accuracy, optimizer, lr_scheduler)
+        if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0 and (
+                epoch % cfg.CONFIG.LOG.SAVE_FREQ == 0 or epoch == cfg.CONFIG.TRAIN.EPOCH_NUM - 1):
+            save_checkpoint(cfg, epoch, model, max_accuracy, optimizer, lr_scheduler)
 
         if (epoch % cfg.CONFIG.VAL.FREQ == 0 or epoch == cfg.CONFIG.TRAIN.EPOCH_NUM - 1) and cfg.CONFIG.DATA.DATASET_NAME == 'ava':
             validate_tuber_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)
