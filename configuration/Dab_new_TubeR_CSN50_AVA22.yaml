@@ -39,6 +39,7 @@ CONFIG:
     BATCH_SIZE: 1
     FREQ: 2
     PUT_GT: False
+    TYPE: "frame"
 
   DATA:
     DATASET_NAME: 'ava'
@@ -112,6 +113,6 @@ CONFIG:
     SAVE_DIR: 'checkpoints'
     EVAL_DIR: '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/AVA_Tuber/eval'
     SAVE_FREQ: 1
-    RES_DIR: Dab_new_TubeR_270-28_0419
-    EXP_NAME: Dab_new_TubeR_270-28_0419
+    RES_DIR: Dab_new_TubeR_270-60_debug
+    EXP_NAME: Dab_new_TubeR_270-60_debug
     DISPLAY_FREQ: 1000

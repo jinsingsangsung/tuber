@@ -39,6 +39,7 @@ CONFIG:
     BATCH_SIZE: 1
     FREQ: 2
     PUT_GT: False
+    TYPE: "frame"
 
   DATA:
     DATASET_NAME: 'jhmdb'
@@ -52,7 +53,7 @@ CONFIG:
     FRAME_RATE: 2
 
   MODEL:
-    SINGLE_FRAME: True
+    SINGLE_FRAME: False
     BACKBONE_NAME: CSN-152
     TEMPORAL_DS_STRATEGY: decoder
     LAST_STRIDE: False

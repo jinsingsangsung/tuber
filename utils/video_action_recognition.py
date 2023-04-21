@@ -653,20 +653,26 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
             scores, boxes, output_b = postprocessors['bbox'](outputs, orig_target_sizes)
         except:
             scores, boxes = postprocessors['bbox'](outputs, orig_target_sizes)
-        for bidx in range(scores.shape[0]):
+
+        B = scores.shape[0]
+        T = scores.shape[1]
+        scores = scores.reshape(-1, *scores.shape[-2:])
+        boxes = boxes.reshape(-1, *boxes.shape[-2:])
+
+        for bidx in range(B):
 
             if len(targets[bidx]["raw_boxes"]) == 0:
                 continue
 
             frame_id = batch_id[bidx][0]
-            key_pos = batch_id[bidx][1]
+            # key_pos = batch_id[bidx][1]
 
             # out_key_pos = key_pos // cfg.CONFIG.MODEL.DS_RATE
-            out_key_pos = key_pos
+            # out_key_pos = key_pos
             # print("key pos: {}, ds_rate: {}".format(key_pos, cfg.CONFIG.MODEL.DS_RATE))
-
-            buff_output.append(scores[bidx, out_key_pos * cfg.CONFIG.MODEL.QUERY_NUM:(out_key_pos + 1) * cfg.CONFIG.MODEL.QUERY_NUM, :])
-            buff_anno.append(boxes[bidx, out_key_pos * cfg.CONFIG.MODEL.QUERY_NUM:(out_key_pos + 1) * cfg.CONFIG.MODEL.QUERY_NUM, :])
+            
+            buff_output.append(scores[bidx*T:bidx*(T+1), :, :])
+            buff_anno.append(boxes[bidx:bidx*(T+1), :, :])
             try:
                 buff_binary.append(output_b)
             except:
@@ -679,7 +685,8 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
                 except:
                     pass
 
-            val_label = targets[bidx]["labels"]
+            val_label = targets[bidx]["labels"] # length T
+            # make one-hot vector
             val_category = torch.full((len(val_label), cfg.CONFIG.DATA.NUM_CLASSES), 0)
             for vl in range(len(val_label)):
                 label = int(val_label[vl])
@@ -757,9 +764,8 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
 
     buff_GT_label = np.concatenate(buff_GT_label, axis=0)
     buff_GT_anno = np.concatenate(buff_GT_anno, axis=0)
-
+    
     print(buff_output.shape, buff_anno.shape, len(buff_id), buff_GT_anno.shape, buff_GT_label.shape, len(buff_GT_id))
-
     tmp_path = '{}/{}/{}.txt'
     with open(tmp_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, cfg.DDP_CONFIG.GPU_WORLD_RANK), 'w') as f:
         for x in range(len(buff_id)):
