@@ -2,10 +2,12 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 import numpy as np
-from models.transformer.util import box_ops
+# from models.transformer.util import box_ops
+from utils import box_ops
 from utils.misc import (NestedTensor, nested_tensor_from_tensor_list,
                        accuracy, accuracy_sigmoid, get_world_size, interpolate,
                        is_dist_avail_and_initialized)
+from models.dab_new_detr.segmentation import sigmoid_focal_loss, dice_loss
 
 
 class SetCriterionAVA(nn.Module):
@@ -57,9 +59,7 @@ class SetCriterionAVA(nn.Module):
         #     loss_ce_b = F.cross_entropy(src_logits_b.transpose(1, 2), target_classes_b, self.empty_weight.to(src_logits.device))
         # except:
         #     pass
-
         src_logits_sig = src_logits.sigmoid()
-
         target_classes_o = torch.cat([t["labels"][J] for t, (_, J) in zip(targets, indices)])
         target_classes = torch.full(src_logits.shape, 0,
                                     dtype=torch.float32, device=src_logits.device)
@@ -260,23 +260,29 @@ class SetCriterion(nn.Module):
         targets dicts must contain the key "labels" containing a tensor of dim [nb_target_boxes]
         """
         assert 'pred_logits' in outputs
-        src_logits = outputs['pred_logits']
-
+        src_logits = outputs['pred_logits'].flatten(0,1) #bs*t, n_q, n_c
+        T = outputs['pred_logits'].size(1)
         idx = self._get_src_permutation_idx(indices)
 
-        src_logits_b = outputs['pred_logits_b']
-        target_classes_b = torch.cat([t['vis'] for t in targets]).view(-1)
+        # src_logits_b = outputs['pred_logits_b']
+        # target_classes_b = torch.cat([t['vis'] for t in targets]).view(-1)
         
-        loss_ce_b = F.cross_entropy(src_logits_b, target_classes_b)
+        # loss_ce_b = F.cross_entropy(src_logits_b, target_classes_b)
 
-        target_classes_o = torch.cat([t["labels"][J] for t, (_, J) in zip(targets, indices)])
+        target_classes_o = torch.cat([t["labels"] for t in targets])
+        # bs*t
+
+        # target_classes_o = torch.cat([unbatched_targets[J*T+i] for i, (_, J) in enumerate(indices)])
+        # bs*t
+
         target_classes = torch.full(src_logits.shape[:2], self.num_classes,
                                     dtype=torch.int64, device=src_logits.device)
+        # bs*t, n_q 
         target_classes[idx] = target_classes_o
 
         loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
         losses = {'loss_ce': loss_ce}
-        losses['loss_ce_b'] = loss_ce_b
+        # losses['loss_ce_b'] = loss_ce_b
 
         if log:
             # TODO this should probably be a separate loss, not hacked in this one here
@@ -306,17 +312,25 @@ class SetCriterion(nn.Module):
 
         assert 'pred_boxes' in outputs
         idx = self._get_src_permutation_idx(indices)
-        src_boxes = outputs['pred_boxes'][idx]
-        target_boxes_list = []
-        count = 0
-        for t, (_, i) in zip(targets, indices):
-            if int(t['vis']):
-                target_boxes_list.append(t['boxes'][i])
-                count += len(t['boxes'])
-            else:
-                # target_boxes_list.append(src_boxes[count])
-                count += 1
-        target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0)
+        # idx[0]: range(bs*t)
+        # idx[1]: the matched idx corresponds to idx[0]
+        T = outputs['pred_boxes'].size(1)
+        src_boxes = outputs['pred_boxes'].flatten(0,1)[idx]
+        # target_boxes_list = []
+        # count = 0
+        # for t, (_, i) in zip(targets, indices):
+        #     if int(t['vis']):
+        #         target_boxes_list.append(t['boxes'][i])
+        #         count += len(t['boxes'])
+        #     else:
+        #         # target_boxes_list.append(src_boxes[count])
+        #         count += 1
+        # count: b*t
+        # target_boxes_list: b*t, 4
+
+        target_boxes = torch.cat([t["boxes"] for t in targets])
+        # bs*t, 4
+        # target_boxes = torch.cat([unbatched_targets[i] for i, (_, J) in enumerate(indices)], dim=0)
         target_boxes = target_boxes[:, 1:]
 
         loss_bbox = F.l1_loss(src_boxes, target_boxes, reduction='none')
@@ -324,10 +338,7 @@ class SetCriterion(nn.Module):
         losses = {}
         if num_boxes > 0:
             losses['loss_bbox'] = loss_bbox.sum() / num_boxes
-
-            loss_giou = 1 - torch.diag(box_ops.generalized_box_iou(
-                box_ops.box_cxcywh_to_xyxy(src_boxes),
-                box_ops.box_cxcywh_to_xyxy(target_boxes)))
+            loss_giou = 1 - box_ops.batched_generalized_box_iou(box_ops.box_cxcywh_to_xyxy(src_boxes).unsqueeze(1),box_ops.box_cxcywh_to_xyxy(target_boxes).unsqueeze(1))
             losses['loss_giou'] = loss_giou.sum() / num_boxes
         else:
             loss_dumy = F.l1_loss(torch.as_tensor([1]).to(targets[0]["key_pos"].device), torch.as_tensor([1]).to(targets[0]["key_pos"].device), reduction='none')
@@ -392,11 +403,14 @@ class SetCriterion(nn.Module):
              targets: list of dicts, such that len(targets) == batch_size.
                       The expected keys in each dict depends on the losses applied, see each loss' doc
         """
-        key_frames = torch.from_numpy(np.array([[self.num_queries * (targets[i]["key_pos"].cpu()) + j for j in range(self.num_queries)] for i in range(len(targets))]))
-        key_frames = key_frames.view(len(key_frames), self.num_queries, 1).to(targets[0]["key_pos"].device)
-        outputs_without_aux = {k: v.gather(1, key_frames.repeat(1, 1, v.shape[-1])) if k in ['pred_boxes', 'pred_logits'] else v for k, v in outputs.items() if k != 'aux_outputs'}
+        # key_frames = torch.from_numpy(np.array([[self.num_queries * (targets[i]["key_pos"].cpu()) + j for j in range(self.num_queries)] for i in range(len(targets))]))
+        # key_frames = key_frames.view(len(key_frames), self.num_queries, 1).to(targets[0]["key_pos"].device)
+        # outputs_without_aux = {k: v.gather(1, key_frames.repeat(1, 1, v.shape[-1])) if k in ['pred_boxes', 'pred_logits'] else v for k, v in outputs.items() if k != 'aux_outputs'}
+        outputs_without_aux = {k: v for k, v in outputs.items() if k != 'aux_outputs'}
         # Retrieve the matching between the outputs of the last layer and the targets
         indices = self.matcher(outputs_without_aux, targets)
+        # indices: list of length 40
+
         # _, sidx = self._get_src_permutation_idx(indices)
         # Compute the average number of target boxes accross all nodes, for normalization purposes
         num_boxes = sum(len(t["labels"]) for t in targets)
@@ -410,8 +424,9 @@ class SetCriterion(nn.Module):
         # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
         if 'aux_outputs' in outputs:
             for i, aux_outputs_ in enumerate(outputs['aux_outputs']):
-                aux_outputs = {k: v.gather(1, key_frames.repeat(1, 1, v.shape[-1])) if k in ['pred_boxes', 'pred_logits'] else v for k, v in aux_outputs_.items() if k != 'aux_outputs'}
-                indices = self.matcher(aux_outputs, targets)
+                # aux_outputs = {k: v.gather(1, key_frames.repeat(1, 1, v.shape[-1])) if k in ['pred_boxes', 'pred_logits'] else v for k, v in aux_outputs_.items() if k != 'aux_outputs'}
+                # aux_outputs = {k: v for k, v in outputs.items() if k == 'aux_outputs'}
+                indices = self.matcher(aux_outputs_, targets)
                 for loss in self.losses:
                     if loss == 'masks':
                         # Intermediate masks losses are too costly to compute, we ignore them.
@@ -420,7 +435,7 @@ class SetCriterion(nn.Module):
                     if loss == 'labels':
                         # Logging is enabled only for the last layer
                         kwargs = {'log': False}
-                    l_dict = self.get_loss(loss, aux_outputs, targets, indices, num_boxes, **kwargs)
+                    l_dict = self.get_loss(loss, aux_outputs_, targets, indices, num_boxes, **kwargs)
                     l_dict = {k + f'_{i}': v for k, v in l_dict.items()}
                     losses.update(l_dict)
 

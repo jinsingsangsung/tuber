@@ -55,7 +55,7 @@ class VideoDataset(Dataset):
                  mode='train'):
         self.directory = directory
         cache_file = os.path.join(directory, 'JHMDB-GT.pkl')
-        assert os.path.isfile(cache_file), "Missing cache file for dataset "
+        assert os.path.isfile(cache_file), "Missing cache file for dataset"
 
         with open(cache_file, 'rb') as fid:
             dataset = pickle.load(fid, encoding='iso-8859-1')
@@ -70,15 +70,15 @@ class VideoDataset(Dataset):
         self.index_cnt = 0
 
         # get a list of videos
-        self.index_to_sample_t = []
-
         if mode == 'val' or mode == 'test':
-            self.dataset_samples = self.dataset['test_videos'][0] #split
+            self.dataset_samples = self.dataset['test_videos'][0] # split number 0, 1, 2
         elif mode == 'train':
             self.dataset_samples = self.dataset['train_videos'][0]
 
         self.index_to_sample = [vid for vid in self.dataset_samples]
         max_vid_len = max([self.dataset['nframes'][vid] for vid in self.dataset['nframes'].keys()])
+        # total_tubes = sum([len(self.dataset['gttubes'][k].values()) for k in self.dataset['gttubes'].keys()])
+
         assert max_vid_len <= clip_len,\
             "max video length of the dataset is {}, and clip length (currently {}) needs to be same or larger than that".format(max_vid_len, clip_len)
 
@@ -121,6 +121,7 @@ class VideoDataset(Dataset):
         boxes, classes = [], []
         target = {}
         vis = [0]
+        tube_len = []
 
         oh = self.dataset['resolution'][sample_id][0]
         ow = self.dataset['resolution'][sample_id][1]
@@ -135,9 +136,9 @@ class VideoDataset(Dataset):
         for ilabel, tubes in self.dataset['gttubes'][sample_id].items():
             # self.max_person = len(tubes) if self.max_person < len(tubes) else self.max_person
             # self.person_size = len(tubes)
+            # in JHMDB, there is only one tube per video: len(tubes) = 1
             for t in tubes:
                 box_ = t[:, 0:5] # all frames
-                # key_point = key_pos // 8
                 tube = []
                 # resizing process
                 if len(box_[0]) > 0: # if box is valid
@@ -147,8 +148,9 @@ class VideoDataset(Dataset):
                         p_x2 = np.int_(box[3] / ow * nw)
                         p_y2 = np.int_(box[4] / oh * nh)
                         tube.append([box[0], p_x1, p_y1, p_x2, p_y2])
-                    classes.append(np.clip(ilabel, 0, 24))
+                        classes.append(np.clip(ilabel, 0, 24))
                     boxes.append(tube)
+                    tube_len.append(len(t))
 
                     vis[0] = 1
 
@@ -164,27 +166,36 @@ class VideoDataset(Dataset):
 
         else:
             boxes = torch.as_tensor(boxes, dtype=torch.float32).reshape(-1, 5) # 1, t, 5 -> t, 5
-            boxes[:, 1::2].clamp_(min=0, max=nw)
-            boxes[:, 2::2].clamp_(min=0, max=nh)
+            boxes[:, 1::3].clamp_(min=0, max=nw)
+            boxes[:, 2::3].clamp_(min=0, max=nh)
 
-            if boxes.shape[0]:
-                raw_boxes = F.pad(boxes, (1, 0, 0, 0), value=self.index_cnt)
+            #make len(boxes) to self.clip_len
+            front_pad = (self.clip_len - len(boxes))//2
+            end_pad = self.clip_len - len(boxes) - front_pad
+            boxes = F.pad(boxes[None, None, ...], (0, 0, front_pad, end_pad), mode="replicate").squeeze()
+
+            if boxes.shape[0]: # equals clip_len
+                raw_boxes = F.pad(boxes, (1, 0, 0, 0), value=self.index_cnt) # put index number in the first column
             else:
                 raw_boxes = boxes
 
             classes = torch.as_tensor(classes, dtype=torch.int64)
+            classes = F.pad(classes, (front_pad, end_pad), value=classes[0])
             # print('classes', classes.shape)
 
-            target["image_id"] = [str(sample_id).replace("/", "_") + '-' + str(start), key_pos]
-            target["key_pos"] = torch.as_tensor(key_pos)
+
+            
+            target["image_id"] = [str(sample_id).replace("/", "_")]
             target['boxes'] = boxes
             target['raw_boxes'] = raw_boxes
             target["labels"] = classes
             target["orig_size"] = torch.as_tensor([int(nh), int(nw)])
             target["size"] = torch.as_tensor([int(nh), int(nw)])
             target["vis"] = torch.as_tensor(vis)
+            target['pad_idx'] = torch.tensor(front_pad)
+            target['tube_len'] = torch.tensor(tube_len)
             self.index_cnt = self.index_cnt + 1
-            ## TODO: extend targets to 40 frames when video_len < clip_len
+
         return target 
 
     # load the video based on keyframe
@@ -197,9 +208,10 @@ class VideoDataset(Dataset):
         #     print(111)
         # start = max(mid_point - p_t, 0)
         # end = min(mid_point + self.clip_len - p_t, self.dataset["nframes"][sample_id] - 1)
-        frame_ids_ = [s for s in range(start, end)]
+        end = self.dataset["nframes"][sample_id] - 1
+        frame_ids_ = [s for s in range(end)]
         if len(frame_ids_) < self.clip_len:
-            front_size = (self.clip_len - len(frame_ids_)) // 2
+            front_size = target["pad_idx"]
             front = [0 for _ in range(front_size)]
             back = [end for _ in range(self.clip_len - len(frame_ids_) - front_size)]
             frame_ids_ = front + frame_ids_ + back
@@ -220,7 +232,7 @@ class VideoDataset(Dataset):
         return imgs
 
     def __len__(self):
-        return len(self.index_to_sample_t)
+        return len(self.index_to_sample)
 
 
 def make_transforms(image_set, cfg):

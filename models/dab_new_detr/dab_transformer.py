@@ -130,7 +130,7 @@ class Transformer(nn.Module):
             tgt = torch.zeros(num_queries, bs*t, self.d_model, device=refpoint_embed.device)
         else:
             tgt = self.patterns.weight[:, None, None, :].repeat(1, self.num_queries, bs*t, 1).flatten(0, 1) # n_q*n_pat, bs, d_model
-            refpoint_embed = refpoint_embed.repeat(self.num_patterns, 1, 1) # n_pat*n_q, bs, d_model
+            refpoint_embed = refpoint_embed.repeat(self.num_patterns, 1, 1) # n_pat*n_q, bs*t, d_model
             # import ipdb; ipdb.set_trace()
         hs, references = self.decoder(tgt, memory, memory_key_padding_mask=mask,
                           pos=pos_embed, refpoints_unsigmoid=refpoint_embed)
@@ -242,7 +242,7 @@ class TransformerDecoder(nn.Module):
 
             # modulated HW attentions
             if self.modulate_hw_attn:
-                refHW_cond = self.ref_anchor_head(output).sigmoid() # nq, bs, 2
+                refHW_cond = self.ref_anchor_head(output).sigmoid() # nq, bs*t, 2
                 query_sine_embed[..., self.d_model // 2:] *= (refHW_cond[..., 0] / obj_center[..., 2]).unsqueeze(-1)
                 query_sine_embed[..., :self.d_model // 2] *= (refHW_cond[..., 1] / obj_center[..., 3]).unsqueeze(-1)
 

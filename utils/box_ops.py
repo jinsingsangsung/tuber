@@ -6,6 +6,21 @@ import torch
 from torchvision.ops.boxes import box_area
 
 
+def batched_box_area(boxes: torch.Tensor) -> torch.Tensor:
+    """
+    Computes the area of a set of bounding boxes, which are specified by its
+    (x1, y1, x2, y2) coordinates.
+
+    Arguments:
+        boxes (Tensor[B, N, 4]): boxes for which the area will be computed. They
+            are expected to be in (x1, y1, x2, y2) format
+
+    Returns:
+        area (Tensor[B, N]): area for each box
+    """
+    return (boxes[..., 2] - boxes[..., 0]) * (boxes[..., 3] - boxes[..., 1])
+
+
 def box_cxcywh_to_xyxy(x):
     x_c, y_c, w, h = x.unbind(-1)
     b = [(x_c - 0.5 * w), (y_c - 0.5 * h),
@@ -37,6 +52,33 @@ def box_iou(boxes1, boxes2):
     return iou, union
 
 
+def batched_box_iou(boxes1, boxes2):
+    """
+    Computes the IoU between two sets of bounding boxes.
+    Both sets of boxes are expected to be in
+    [x0, y0, x1, y1] format.
+
+    Args:
+      boxes1: A tensor of shape [B, N, 4].
+      boxes2: A tensor of shape [B, M, 4].
+
+    Returns:
+      A tensor of shape [B, N, M] representing the IoU between
+      each pair of boxes.
+    """
+    area1 = batched_box_area(boxes1)  # [B, N]
+    area2 = batched_box_area(boxes2)  # [B, M]
+
+    lt = torch.max(boxes1[:, :, None, :2], boxes2[:, None, :, :2])  # [B, N, M, 2]
+    rb = torch.min(boxes1[:, :, None, 2:], boxes2[:, None, :, 2:])  # [B, N, M, 2]
+
+    wh = (rb - lt).clamp(min=0)  # [B, N, M, 2]
+    inter = wh[:, :, :, 0] * wh[:, :, :, 1]  # [B, N, M]
+
+    union = area1[:, :, None] + area2[:, None] - inter
+    iou = inter / union
+    return iou, union
+
 def generalized_box_iou(boxes1, boxes2):
     """
     Generalized IoU from https://giou.stanford.edu/
@@ -64,6 +106,36 @@ def generalized_box_iou(boxes1, boxes2):
 
     return iou - (area - union) / area
 
+def batched_generalized_box_iou(boxes1, boxes2):
+    """
+    Generalized IoU from https://giou.stanford.edu/
+
+    The boxes should be in [x0, y0, x1, y1] format
+
+    Returns a [B, N, M] pairwise matrix, where B is the number of batch dimensions,
+    N = boxes1.shape[-2], and M = boxes2.shape[-2]
+    """
+    # degenerate boxes gives inf / nan results
+    # so do an early check
+    if not (boxes1[..., 2:] >= boxes1[..., :2]).all():
+        print(boxes1)
+    # else:
+        # print(boxes1)
+    assert (boxes1[..., 2:] >= boxes1[..., :2]).all()
+    assert (boxes2[..., 2:] >= boxes2[..., :2]).all()
+    iou, union = batched_box_iou(boxes1, boxes2)
+
+    wh_ = []
+    for (box1, box2) in zip(boxes1, boxes2):
+        lt = (torch.min(box1[..., None, :2], box2[..., :2]))  # [N,M,2]
+        rb = (torch.max(box1[..., None, 2:], box2[..., 2:]))  # [N,M,2]
+        wh = (rb - lt).clamp(min=0)  # [N,M,2]
+        wh_.append(wh)
+
+    wh = torch.stack(wh_, 0) # [B, N, M, 2]
+    
+    area = wh[..., 0] * wh[..., 1]
+    return iou - (area - union) / area
 
 def masks_to_boxes(masks):
     """Compute the bounding boxes around the provided masks

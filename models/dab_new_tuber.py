@@ -83,13 +83,15 @@ class DETR(nn.Module):
         self.decoder = TransformerDecoder(decoder_layer=decoder_layer, num_layers=3, norm=decoder_norm, return_intermediate=True, query_dim=4, modulate_hw_attn=True, bbox_embed_diff_each_layer=True)
         self.num_patterns = 4
         self.patterns = nn.Embedding(self.num_patterns, hidden_dim)
-        if self.dataset_mode == 'ava':
-            self.class_embed = nn.Linear(hidden_dim, num_classes)
-        else:
-            self.class_embed = nn.Linear(hidden_dim, num_classes + 1)
         prior_prob = 0.01
         bias_value = -math.log((1 - prior_prob) / prior_prob)
-        self.class_embed.bias.data = torch.ones(num_classes) * bias_value
+        if self.dataset_mode == 'ava':
+            self.class_embed = nn.Linear(hidden_dim, num_classes)
+            self.class_embed.bias.data = torch.ones(num_classes) * bias_value
+        else:
+            self.class_embed = nn.Linear(hidden_dim, num_classes+1)
+            self.class_embed.bias.data = torch.ones(num_classes+1) * bias_value
+        
 
         if bbox_embed_diff_each_layer:
             self.bbox_embed = nn.ModuleList([MLP(hidden_dim, hidden_dim, 4, 3) for i in range(transformer.num_dec_layers)])
@@ -149,7 +151,6 @@ class DETR(nn.Module):
         """
         if not isinstance(samples, NestedTensor):
             samples = nested_tensor_from_tensor_list(samples)
-        import pdb; pdb.set_trace()
         features, pos = self.backbone(samples)
         src, mask = features[-1].decompose()
         assert mask is not None
@@ -183,13 +184,16 @@ class DETR(nn.Module):
         tgt = self.patterns.weight[:, None, None, :].repeat(1, self.num_queries, bs*t, 1).flatten(0, 1) # n_q*n_pat, bs, d_model
         embedweight = embedweight.repeat(self.num_patterns, bs, 1) # n_pat*n_q, bst, 4
         hs_c, ref_c = self.decoder(tgt, memory, memory_key_padding_mask=mask, pos=pos_embed, refpoints_unsigmoid=embedweight)
-
-        outputs_class = self.class_embed(self.dropout(hs_c)).reshape(-1, bs*t, self.num_patterns, self.num_queries, self.num_classes).max(dim = 2)[0]
-     
-        # outputs_coord = self.bbox_embed(hs).sigmoid()
+        lay_n = self.decoder.num_layers
+        outputs_class = self.class_embed(self.dropout(hs_c)).reshape(lay_n, bs*t, self.num_patterns, self.num_queries, -1).max(dim = 2)[0]
+        
         if self.dataset_mode == "ava":
             outputs_class = outputs_class.reshape(-1, bs, t, self.num_queries, self.num_classes)[:,:,self.temporal_length//2,:,:]
             outputs_coord = outputs_coord.reshape(-1, bs, t, self.num_queries, 4)[:,:,self.temporal_length//2,:,:]
+        else:
+            outputs_class = outputs_class.reshape(-1, bs, t, self.num_queries, self.num_classes+1)
+            outputs_coord = outputs_coord.reshape(-1, bs, t, self.num_queries, 4)
+            
         out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1]}
         if self.aux_loss:
             out['aux_outputs'] = self._set_aux_loss(outputs_class, outputs_coord)
