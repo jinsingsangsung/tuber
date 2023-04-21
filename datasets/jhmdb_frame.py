@@ -99,10 +99,10 @@ class VideoDataset(Dataset):
 
     def __getitem__(self, index):
         sample_id, frame_id = self.index_to_sample_t[index]
-        # if self.mode == 'train':
-            # p_t = random.randint(1, self.clip_len - 2)
-        # else:
-        p_t = self.clip_len // 2
+        if self.mode == 'train':
+            p_t = random.randint(1, self.clip_len - 2)
+        else:
+            p_t = self.clip_len // 2
 
         target = self.load_annotation(sample_id, frame_id, index, p_t)
         imgs = self.loadvideo(frame_id, sample_id, target, p_t)
