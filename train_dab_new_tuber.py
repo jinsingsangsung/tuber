@@ -89,10 +89,11 @@ def main_worker(cfg):
                 epoch % cfg.CONFIG.LOG.SAVE_FREQ == 0 or epoch == cfg.CONFIG.TRAIN.EPOCH_NUM - 1):
             save_checkpoint(cfg, epoch, model, max_accuracy, optimizer, lr_scheduler)
 
-        if (epoch % cfg.CONFIG.VAL.FREQ == 0 or epoch == cfg.CONFIG.TRAIN.EPOCH_NUM - 1) and cfg.CONFIG.DATA.DATASET_NAME == 'ava':
-            validate_tuber_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)
-        else:
-            validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)
+        if (epoch % cfg.CONFIG.VAL.FREQ == 0 or epoch == cfg.CONFIG.TRAIN.EPOCH_NUM - 1):
+            if cfg.CONFIG.DATA.DATASET_NAME == 'ava':
+                validate_tuber_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)
+            else:
+                validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)
         
     if writer is not None:
         writer.close()
