@@ -670,9 +670,9 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
             # out_key_pos = key_pos // cfg.CONFIG.MODEL.DS_RATE
             # out_key_pos = key_pos
             # print("key pos: {}, ds_rate: {}".format(key_pos, cfg.CONFIG.MODEL.DS_RATE))
-            
-            buff_output.append(scores[bidx*T:bidx*(T+1), :, :])
-            buff_anno.append(boxes[bidx:bidx*(T+1), :, :])
+            # scores: BT x num_q x num_c
+            buff_output.append(scores[bidx*T:(bidx+1)*T, :, :].reshape(-1, scores.shape[-1]))
+            buff_anno.append(boxes[bidx*T:(bidx+1)*T, :, :].reshape(-1, boxes.shape[-1]))
             try:
                 buff_binary.append(output_b)
             except:
@@ -765,7 +765,7 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
     buff_GT_label = np.concatenate(buff_GT_label, axis=0)
     buff_GT_anno = np.concatenate(buff_GT_anno, axis=0)
     
-    print(buff_output.shape, buff_anno.shape, len(buff_id), buff_GT_anno.shape, buff_GT_label.shape, len(buff_GT_id))
+    # print(buff_output.shape, buff_anno.shape, len(buff_id), buff_GT_anno.shape, buff_GT_label.shape, len(buff_GT_id))
     tmp_path = '{}/{}/{}.txt'
     with open(tmp_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, cfg.DDP_CONFIG.GPU_WORLD_RANK), 'w') as f:
         for x in range(len(buff_id)):
@@ -803,7 +803,7 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
         print_string = 'mAP: {mAP:.5f}'.format(mAP=mAP[0])
         print(print_string)
         print(mAP)
-        writer.add_scalar('val/val_mAP_epoch', mAP[0], epoch)
+        # writer.add_scalar('val/val_mAP_epoch', mAP[0], epoch)
         Map_ = mAP[0]
     if Map_ != 0:
         metrics_data = json.dumps({

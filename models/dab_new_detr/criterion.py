@@ -264,11 +264,11 @@ class SetCriterion(nn.Module):
         T = outputs['pred_logits'].size(1)
         idx = self._get_src_permutation_idx(indices)
 
-        # src_logits_b = outputs['pred_logits_b']
-        # target_classes_b = torch.cat([t['vis'] for t in targets]).view(-1)
+        src_logits_b = outputs['pred_logits_b'].flatten(0,1)
+        target_classes_b = torch.full(src_logits_b.shape[:2], 2, device=src_logits_b.device)
+        target_classes_b[idx] = 1
+        loss_ce_b = F.cross_entropy(src_logits_b.transpose(1,2), target_classes_b)
         
-        # loss_ce_b = F.cross_entropy(src_logits_b, target_classes_b)
-
         target_classes_o = torch.cat([t["labels"] for t in targets])
         # bs*t
 
@@ -277,12 +277,12 @@ class SetCriterion(nn.Module):
 
         target_classes = torch.full(src_logits.shape[:2], self.num_classes,
                                     dtype=torch.int64, device=src_logits.device)
-        # bs*t, n_q 
+        # bs*t, n_q
         target_classes[idx] = target_classes_o
-
+        
         loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
         losses = {'loss_ce': loss_ce}
-        # losses['loss_ce_b'] = loss_ce_b
+        losses['loss_ce_b'] = loss_ce_b
 
         if log:
             # TODO this should probably be a separate loss, not hacked in this one here

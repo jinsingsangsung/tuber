@@ -136,7 +136,7 @@ class VideoDataset(Dataset):
         for ilabel, tubes in self.dataset['gttubes'][sample_id].items():
             # self.max_person = len(tubes) if self.max_person < len(tubes) else self.max_person
             # self.person_size = len(tubes)
-            # in JHMDB, there is only one tube per video: len(tubes) = 1
+            # in JHMDB, there is only one tube per video: thus, len(tubes) = 1
             for t in tubes:
                 box_ = t[:, 0:5] # all frames
                 tube = []
@@ -169,10 +169,11 @@ class VideoDataset(Dataset):
             boxes[:, 1::3].clamp_(min=0, max=nw)
             boxes[:, 2::3].clamp_(min=0, max=nh)
 
-            #make len(boxes) to self.clip_len
+            # make len(boxes) to self.clip_len
             front_pad = (self.clip_len - len(boxes))//2
             end_pad = self.clip_len - len(boxes) - front_pad
             boxes = F.pad(boxes[None, None, ...], (0, 0, front_pad, end_pad), mode="replicate").squeeze()
+            assert len(boxes) == self.clip_len
 
             if boxes.shape[0]: # equals clip_len
                 raw_boxes = F.pad(boxes, (1, 0, 0, 0), value=self.index_cnt) # put index number in the first column
@@ -180,7 +181,8 @@ class VideoDataset(Dataset):
                 raw_boxes = boxes
 
             classes = torch.as_tensor(classes, dtype=torch.int64)
-            classes = F.pad(classes, (front_pad, end_pad), value=classes[0])
+            classes = F.pad(classes, (front_pad, end_pad), value=classes[0]) # Note that every frame has the same class label
+            
             # print('classes', classes.shape)
 
 
