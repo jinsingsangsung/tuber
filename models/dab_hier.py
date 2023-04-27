@@ -32,7 +32,7 @@ class DETR(nn.Module):
     """ This is the DETR module that performs object detection """
     def __init__(self, backbone, transformer, num_classes, num_queries, num_frames,
                  hidden_dim, temporal_length, aux_loss=False, generate_lfb=False, two_stage=False, random_refpoints_xy=False, query_dim=4,
-                 backbone_name='CSN-152', ds_rate=1, last_stride=True, dataset_mode='ava', bbox_embed_diff_each_layer=True, training=True, iter_update=True):
+                 backbone_name='CSN-152', ds_rate=1, last_stride=True, dataset_mode='ava', bbox_embed_diff_each_layer=False, training=True, iter_update=True):
         """ Initializes the model.
         Parameters:
             backbone: torch module of the backbone to be used. See backbone.py
@@ -76,21 +76,23 @@ class DETR(nn.Module):
         nn.init.constant_(self.input_proj.bias, 0)    
         # self.class_proj = nn.Conv3d(backbone.num_channels[-1], hidden_dim, kernel_size=(4,1,1))
 
-        encoder_layer = TransformerEncoderLayer(hidden_dim, 8, 2048, 0.1, "relu", normalize_before=False)
-        self.encoder = TransformerEncoder(encoder_layer=encoder_layer, num_layers=2)
-        decoder_layer = TransformerDecoderLayer(hidden_dim, 8, 2048, 0.1, "relu", normalize_before=False)        
-        decoder_norm = nn.LayerNorm(hidden_dim)
-        self.decoder = TransformerDecoder(decoder_layer=decoder_layer, num_layers=3, norm=decoder_norm, return_intermediate=True, query_dim=4, modulate_hw_attn=True, bbox_embed_diff_each_layer=True)
-        self.num_patterns = 3
-        self.num_pattern_level = 4
-        self.patterns = nn.Embedding(self.num_patterns*self.num_pattern_level, hidden_dim)
+        # encoder_layer = TransformerEncoderLayer(hidden_dim, 8, 2048, 0.1, "relu", normalize_before=False)
+        # self.encoder = TransformerEncoder(encoder_layer=encoder_layer, num_layers=2)
+        # decoder_layer = TransformerDecoderLayer(hidden_dim, 8, 2048, 0.1, "relu", normalize_before=False)        
+        # decoder_norm = nn.LayerNorm(hidden_dim)
+        # self.decoder = TransformerDecoder(decoder_layer=decoder_layer, num_layers=3, norm=decoder_norm, return_intermediate=True, query_dim=4, modulate_hw_attn=True, bbox_embed_diff_each_layer=True)
+        # self.num_patterns = 3
+        # self.num_pattern_level = 4
+        # self.patterns = nn.Embedding(self.num_patterns*self.num_pattern_level, hidden_dim)
         prior_prob = 0.01
         bias_value = -math.log((1 - prior_prob) / prior_prob)
         if self.dataset_mode == 'ava':
             self.class_embed = nn.Linear(hidden_dim, num_classes)
+            self.class_embed_b = nn.Linear(hidden_dim, 3)
             self.class_embed.bias.data = torch.ones(num_classes) * bias_value
         else:
             self.class_embed = nn.Linear(hidden_dim, num_classes+1)
+            self.class_embed_b = nn.Linear(hidden_dim, 3)
             self.class_embed.bias.data = torch.ones(num_classes+1) * bias_value
         
 
@@ -157,8 +159,8 @@ class DETR(nn.Module):
         assert mask is not None
         # bs = samples.tensors.shape[0]
         embedweight = self.refpoint_embed.weight.view(self.num_queries, self.temporal_length, 4)      # nq, t, 4
-        hs, reference, memory, mask, pos_embed = self.transformer(self.input_proj(src), mask, embedweight, pos[-1])
-
+        hs, reference, cls_hs = self.transformer(self.input_proj(src), mask, embedweight, pos[-1])
+        outputs_class_b = self.class_embed_b(hs)
         ######## localization head
         if not self.bbox_embed_diff_each_layer:
             reference_before_sigmoid = inverse_sigmoid(reference)
@@ -176,47 +178,39 @@ class DETR(nn.Module):
                 outputs_coords.append(outputs_coord)
             outputs_coord = torch.stack(outputs_coords)        
 
-        ######## mix temporal features for classification
-        # lay_n, bst, nq, dim = hs.shape
-        # hw, bst, ch = memory.shape
         bs, _, t, h, w = src.shape
-        # memory = self.encoder(memory, src.shape, mask, pos_embed)
-        ##### prepare for the second decoder
-        # tgt = self.patterns.weight[:, None, None, :].repeat(1, self.num_queries, bs*t, 1).flatten(0, 1) # n_q*n_pat, bs, d_model
-        # embedweight = embedweight.repeat(self.num_patterns, bs, 1) # n_pat*n_q, bst, 4
-        # hs_c, ref_c = self.decoder(tgt, memory, memory_key_padding_mask=mask, pos=pos_embed, refpoints_unsigmoid=embedweight)
         lay_n = self.transformer.decoder.num_layers
-        # outputs_class = self.class_embed(self.dropout(hs)).reshape(lay_n, bs*t, self.num_patterns, self.num_queries, -1).max(dim = 2)[0]
-        outputs_class = self.class_embed(self.dropout(hs)).reshape(lay_n, bs*t, self.num_queries, -1)
+        outputs_class = self.class_embed(self.dropout(cls_hs)).reshape(lay_n, bs*t, self.num_queries, -1)
         
         if self.dataset_mode == "ava":
             outputs_class = outputs_class.reshape(-1, bs, t, self.num_queries, self.num_classes)[:,:,self.temporal_length//2,:,:]
             outputs_coord = outputs_coord.reshape(-1, bs, t, self.num_queries, 4)[:,:,self.temporal_length//2,:,:]
+            outputs_class_b = outputs_class_b.reshape(-1, bs, t, self.num_queries, 3)[:,:,self.temporal_length//2,:,:]
         else:
             outputs_class = outputs_class.reshape(-1, bs, t, self.num_queries, self.num_classes+1)
             outputs_coord = outputs_coord.reshape(-1, bs, t, self.num_queries, 4)
-            
-        out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1]}
+            outputs_class_b = outputs_class_b.reshape(-1, bs, t, self.num_queries, 3)
+        out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1], 'pred_logits_b': outputs_class_b[-1],}
         if self.aux_loss:
-            out['aux_outputs'] = self._set_aux_loss(outputs_class, outputs_coord)
+            out['aux_outputs'] = self._set_aux_loss(outputs_class, outputs_coord, outputs_class_b)
 
         return out
 
     @torch.jit.unused
-    def _set_aux_loss(self, outputs_class, outputs_coord):
+    def _set_aux_loss(self, outputs_class, outputs_coord, outputs_class_b):
         # this is a workaround to make torchscript happy, as torchscript
         # doesn't support dictionary with non-homogeneous values, such
         # as a dict having both a Tensor and a list.
 
-        return [{'pred_logits': a, 'pred_boxes': b }
-                for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
+        return [{'pred_logits': a, 'pred_boxes': b, 'pred_logits_b': c}
+                for a, b, c in zip(outputs_class[:-1], outputs_coord[:-1], outputs_class_b[:-1])]
 
 
 def build_model(cfg):
     if cfg.CONFIG.DATA.DATASET_NAME == 'ava':
-        from models.dab_new_detr.matcher import build_matcher
+        from models.dab_hier_detr.matcher import build_matcher
     else:
-        from models.dab_new_detr.matcher_ucf import build_matcher
+        from models.dab_hier_detr.matcher_ucf import build_matcher
     num_classes = cfg.CONFIG.DATA.NUM_CLASSES
     print('num_classes', num_classes)
 

@@ -51,14 +51,14 @@ class SetCriterionAVA(nn.Module):
         src_logits = outputs['pred_logits']
 
         idx = self._get_src_permutation_idx(indices)
-        # try:
-        #     src_logits_b = outputs['pred_logits_b']
-        #     target_classes_b = torch.full(src_logits_b.shape[:2], 2,
-        #                         dtype=torch.int64, device=src_logits.device)
-        #     target_classes_b[idx] = 1
-        #     loss_ce_b = F.cross_entropy(src_logits_b.transpose(1, 2), target_classes_b, self.empty_weight.to(src_logits.device))
-        # except:
-        #     pass
+        try:
+            src_logits_b = outputs['pred_logits_b']
+            target_classes_b = torch.full(src_logits_b.shape[:2], 2,
+                                dtype=torch.int64, device=src_logits.device)
+            target_classes_b[idx] = 1
+            loss_ce_b = F.cross_entropy(src_logits_b.transpose(1, 2), target_classes_b, self.empty_weight.to(src_logits.device))
+        except:
+            pass
         src_logits_sig = src_logits.sigmoid()
         target_classes_o = torch.cat([t["labels"][J] for t, (_, J) in zip(targets, indices)])
         target_classes = torch.full(src_logits.shape, 0,
@@ -78,10 +78,10 @@ class SetCriterionAVA(nn.Module):
             # loss_ce = -(((1 - src_logits_sig)**self.focal_loss_gamma * target_classes * torch.log(src_logits_sig + eps) + src_logits_sig**self.focal_loss_gamma * (1-target_classes) * torch.log(1-src_logits_sig+eps))*weights).sum()
 
         losses = {'loss_ce': loss_ce}
-        # try:
-        #     losses['loss_ce_b'] = loss_ce_b
-        # except:
-        #     pass
+        try:
+            losses['loss_ce_b'] = loss_ce_b
+        except:
+            pass
         if log:
             # docs this should probably be a separate loss, not hacked in this one here
             losses['class_error'] = 100 - accuracy_sigmoid(src_logits[idx], target_classes_o)[0]

@@ -84,7 +84,7 @@ class MultiheadAttention(Module):
     bias_k: Optional[torch.Tensor]
     bias_v: Optional[torch.Tensor]
 
-    def __init__(self, embed_dim, num_heads, dropout=0., bias=True, add_bias_kv=False, add_zero_attn=False, kdim=None, vdim=None):
+    def __init__(self, embed_dim, num_heads, dropout=0., bias=True, add_bias_kv=False, add_zero_attn=False, kdim=None, vdim=None, stop_middle=False):
         super(MultiheadAttention, self).__init__()
         self.embed_dim = embed_dim
         self.kdim = kdim if kdim is not None else embed_dim
@@ -107,7 +107,7 @@ class MultiheadAttention(Module):
         self.v_proj_weight = None
 
         self.add_zero_attn = add_zero_attn
-
+        self.stop_middle = stop_middle
         self._reset_parameters()
 
     def _reset_parameters(self):
@@ -170,7 +170,8 @@ class MultiheadAttention(Module):
                 key_padding_mask=key_padding_mask, need_weights=need_weights,
                 attn_mask=attn_mask, use_separate_proj_weight=True,
                 q_proj_weight=self.q_proj_weight, k_proj_weight=self.k_proj_weight,
-                v_proj_weight=self.v_proj_weight, out_dim=self.vdim)
+                v_proj_weight=self.v_proj_weight, out_dim=self.vdim,
+                stop_middle=self.stop_middle)
         else:
             return multi_head_attention_forward(
                 query, key, value, self.embed_dim, self.num_heads,
@@ -179,7 +180,8 @@ class MultiheadAttention(Module):
                 self.dropout, self.out_proj.weight, self.out_proj.bias,
                 training=self.training,
                 key_padding_mask=key_padding_mask, need_weights=need_weights,
-                attn_mask=attn_mask, out_dim=self.vdim)
+                attn_mask=attn_mask, out_dim=self.vdim,
+                stop_middle=self.stop_middle)
 
 
 def multi_head_attention_forward(query: Tensor,
@@ -205,7 +207,8 @@ def multi_head_attention_forward(query: Tensor,
                                  v_proj_weight: Optional[Tensor] = None,
                                  static_k: Optional[Tensor] = None,
                                  static_v: Optional[Tensor] = None,
-                                 out_dim: Optional[Tensor] = None
+                                 out_dim: Optional[Tensor] = None,
+                                 stop_middle: bool = False,
                                  ) -> Tuple[Tensor, Optional[Tensor]]:
     r"""
     Args:
@@ -380,7 +383,11 @@ def multi_head_attention_forward(query: Tensor,
     attn_output_weights = softmax(
             attn_output_weights - attn_output_weights.max(dim=-1, keepdim=True)[0], dim=-1)
     attn_output_weights = dropout(attn_output_weights, p=dropout_p, training=training)
-
+    
+    if stop_middle:
+        attn_output_weights = attn_output_weights.view(bsz, num_heads, tgt_len, src_len)
+        return attn_output_weights.sum(dim=1) / num_heads + 0*out_proj_bias.sum() + 0*out_proj_weight.sum()
+    
     attn_output = torch.bmm(attn_output_weights, v)
     assert list(attn_output.size()) == [bsz * num_heads, tgt_len, v_head_dim]
     attn_output = attn_output.transpose(0, 1).contiguous().view(tgt_len, bsz, out_dim)
