@@ -68,9 +68,12 @@ class HungarianMatcher(nn.Module):
         # Compute the giou cost betwen boxes
         cost_giou = -generalized_box_iou(box_cxcywh_to_xyxy(out_bbox), box_cxcywh_to_xyxy(tgt_bbox))
 
-        out_classes = outputs["pred_logits"].flatten(0,1).sigmoid()
-        tgt_classes = torch.cat([v["labels"] for v in targets])
-        cost_class = (torch.mm(out_classes, tgt_classes.T) + torch.mm(1 - out_classes, 1 - tgt_classes.T))/out_classes.shape[-1]
+        # out_classes = outputs["pred_logits"].flatten(0,1).sigmoid()
+        # tgt_classes = torch.cat([v["labels"] for v in targets])
+        # cost_class = (torch.mm(out_classes, tgt_classes.T) + torch.mm(1 - out_classes, 1 - tgt_classes.T))/out_classes.shape[-1]
+
+        out_prob = outputs["pred_logits_b"].flatten(0, 1).softmax(-1)
+        cost_class = -out_prob[:, 1:2].repeat(1, len(tgt_bbox))
 
         # cost_class = torch.cdist(out_classes, tgt_classes, p=1)
         # out_prob = outputs["pred_logits_b"].flatten(0, 1).softmax(-1)
