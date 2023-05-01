@@ -83,20 +83,20 @@ class HungarianMatcher(nn.Module):
         cost_giou = -batched_generalized_box_iou(box_cxcywh_to_xyxy(out_bbox).reshape(-1, num_queries, 4), box_cxcywh_to_xyxy(tgt_bbox).reshape(-1, 1, 4)).reshape(bs, t, num_queries, 1)
         # bs, t, nq, 1
 
-        out_prob = outputs["pred_logits"].flatten(0, 1).softmax(-1)
+        # out_prob = outputs["pred_logits"].flatten(0, 1).softmax(-1)
         # bs*t, nq, num_classes
         
 
         # print(outputs["pred_logits_b"][..., 1:2].shape, bs, t)
-        cost_class = -out_prob[..., tgt_ids[0]].reshape(bs, t, num_queries, 1) * outputs["pred_logits_b"][..., 1:2]
+        # cost_class = -out_prob[..., tgt_ids[0]].reshape(bs, t, num_queries, 1) * outputs["pred_logits_b"][..., 1:2]
         # bs, t, nq, 1
 
         out_prob_b = outputs["pred_logits_b"].softmax(-1)
-        cost_class_b = -out_prob_b[..., 1:2]
+        cost_class = -out_prob_b[..., 1:2]
         # Final cost matrix
         if not self.binary_loss:
             cost_class_b = 0
-        C = self.cost_bbox * cost_bbox + self.cost_class * cost_class + self.cost_giou * cost_giou + cost_class_b
+        C = self.cost_bbox * cost_bbox + self.cost_class * cost_class + self.cost_giou * cost_giou  # + cost_class_b
         # bs, t, num_queries, len(tgt_bbox)
         C = C.view(bs*t, num_queries, -1).cpu()
         # import pdb; pdb.set_trace()
