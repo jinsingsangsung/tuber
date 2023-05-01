@@ -12,14 +12,16 @@ import math
 
 
 def parse_id():
-    activity_list = ['Basketball', 'BasketballDunk', 'Biking', 'CliffDiving', 'CricketBowling', 'Diving', 'Fencing', 'FloorGymnastics', 'GolfSwing', 'HorseRiding', 'IceDancing', 'LongJump', 'PoleVault', 'RopeClimbing', 'SalsaSpin', 'SkateBoarding', 'Skiing', 'Skijet', 'SoccerJuggling', 'Surfing', 'TennisSwing', 'TrampolineJumping', 'VolleyballSpiking', 'WalkingWithDog']
+    activity_list = ['brush_hair', 'catch', 'clap', 'climb_stairs', 'golf', 
+                    'jump', 'kick_ball', 'pick', 'pour', 'pullup', 'push',
+                    'run', 'shoot_ball', 'shoot_bow', 'shoot_gun', 'sit',
+                    'stand', 'swing_baseball', 'throw', 'walk', 'wave']
     categories = []
     for i, act_name in enumerate(activity_list):
         categories.append({'id': i + 1, 'name': act_name})
     return categories
 
-
-class STDetectionEvaluaterUCF(object):
+class STDetectionEvaluaterJHMDB(object):
     '''
     evaluater class designed for multi-iou thresholds
         based on https://github.com/activitynet/ActivityNet/blob/master/Evaluation/get_ava_performance.py
@@ -32,7 +34,7 @@ class STDetectionEvaluaterUCF(object):
         evaluate(): run evaluation code
     '''
 
-    def __init__(self, tiou_thresholds=[0.5], load_from_dataset=False, class_num=24):
+    def __init__(self, tiou_thresholds=[0.5], load_from_dataset=False, class_num=21):
         categories = parse_id()
         self.class_num = class_num
         self.categories = categories
@@ -67,12 +69,12 @@ class STDetectionEvaluaterUCF(object):
                 if not vname in gt_videos:
                     gt_videos[vname] = {
                         "tubes": [],
-                        "gt_classes": []
+                        "gt_classes": 0
                     }
                 data = [float(x) for x in data]
                 scores = np.array(data[6:])
                 gt_videos[vname]["tubes"].append([data[1], data[2], data[3], data[4], data[5]])
-                if len(gt_videos[vname]["gt_classes"]) == 0:
+                if gt_videos[vname]["gt_classes"] == 0:
                     gt_videos[vname]["gt_classes"] = int(scores.nonzero()[0])+1
 
                 if (data[4] - data[2]) * (data[5] - data[3]) < 10:
@@ -94,7 +96,10 @@ class STDetectionEvaluaterUCF(object):
                     )
                     sample_dict_per_image[image_key]['labels'].append(x + 1)
                     sample_dict_per_image[image_key]['scores'].append(scores[x])
-
+        
+        for k in list(gt_videos.keys()):
+            gt_videos[k]["tubes"] = np.asarray(gt_videos[k]["tubes"])
+            
         # write into evaluator
         for image_key, info in sample_dict_per_image.items():
             if len(info['bbox']) == 0: continue
@@ -115,6 +120,7 @@ class STDetectionEvaluaterUCF(object):
 
     def load_detection_from_path(self, file_lst):
         # loading data from files
+        num_queries = 10
         t_end = time.time()
         sample_dict_per_image = {}
         all_boxes = {} # for video-map
@@ -135,6 +141,7 @@ class STDetectionEvaluaterUCF(object):
                 
                 if not image_key in all_boxes:
                     all_boxes[image_key] = {}
+                    
 
                 if not image_key in sample_dict_per_image:
                     sample_dict_per_image[image_key] = {
@@ -149,13 +156,27 @@ class STDetectionEvaluaterUCF(object):
                 )
                 sample_dict_per_image[image_key]['labels'].append(x+1)
                 sample_dict_per_image[image_key]['scores'].append(scores[x])
-                all_boxes[x] = np.asarray([data[0], data[1], data[2], data[3], scores[x]], dtype=float)
+                
+                for s in range(len(scores)):
+                    if not (s+1) in all_boxes[image_key]:
+                        all_boxes[image_key][s+1] = []
+                    
+                    if s != x:
+                        all_boxes[image_key][s+1].append([data[0], data[1], data[2], data[3], 0])
+                    else:
+                        all_boxes[image_key][s+1].append([data[0], data[1], data[2], data[3], scores[x]])
+
                 # for x in range(len(scores)):
                 #     sample_dict_per_image[image_key]['bbox'].append(
                 #         np.asarray([data[0], data[1], data[2], data[3]], dtype=float)
                 #     )
                 #     sample_dict_per_image[image_key]['labels'].append(x+1)
                 #     sample_dict_per_image[image_key]['scores'].append(scores[x])
+
+        for k in list(all_boxes.keys()):
+            for s in range(len(scores)):
+                all_boxes[k][s+1] = np.asarray(all_boxes[image_key][s+1], dtype=float)
+
         print("start adding into evaluator")
         for v_evaluator in self.video_map_evaluator:
             v_evaluator.add_pred(all_boxes)
@@ -198,7 +219,7 @@ class STDetectionEvaluaterUCF(object):
             result.update(metrics)
             v_result.update(v_metrics)
             mAP.append(metrics['PascalBoxes_Precision/mAP@{}IOU'.format(iou)])
-            v_mAP.append(v_metrics["video-mAP@IOU".format(iou)])
+            v_mAP.append(v_metrics["video-mAP@{}IOU".format(iou)])
         return mAP, result, v_mAP, v_result
 
 #
