@@ -671,19 +671,23 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
             # out_key_pos = key_pos
             # print("key pos: {}, ds_rate: {}".format(key_pos, cfg.CONFIG.MODEL.DS_RATE))
             # scores: BT x num_q x num_c
-            buff_output.append(scores[bidx*T:(bidx+1)*T, :, :].reshape(-1, scores.shape[-1]))
-            buff_anno.append(boxes[bidx*T:(bidx+1)*T, :, :].reshape(-1, boxes.shape[-1]))
+            front_pad = targets[bidx]["front_pad"]
+            end_pad = targets[bidx]["end_pad"]
+            buff_output.append(scores[bidx*T+front_pad:(bidx+1)*T-end_pad, :, :].reshape(-1, scores.shape[-1]))
+            buff_anno.append(boxes[bidx*T+front_pad:(bidx+1)*T-end_pad, :, :].reshape(-1, boxes.shape[-1]))
             try:
                 buff_binary.append(output_b)
             except:
                 pass
 
-            for l in range(cfg.CONFIG.MODEL.QUERY_NUM):
-                buff_id.extend([frame_id])
-                try:
-                    buff_binary.append(output_b[..., 0])
-                except:
-                    pass
+            for t in range(T-front_pad-end_pad):
+                buff_GT_id.extend([frame_id + "_{}".format(t)])
+                for l in range(cfg.CONFIG.MODEL.QUERY_NUM):
+                    buff_id.extend([frame_id + "_{}".format(t)])
+                    try:
+                        buff_binary.append(output_b[..., 0])
+                    except:
+                        pass
 
             val_label = targets[bidx]["labels"] # length T
             # make one-hot vector
@@ -691,19 +695,17 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
             for vl in range(len(val_label)):
                 label = int(val_label[vl])
                 val_category[vl, label] = 1
-            val_label = val_category
+            val_label = val_category[front_pad:T-end_pad]
 
             raw_boxes = targets[bidx]["raw_boxes"]
-            raw_boxes = raw_boxes.reshape(-1, raw_boxes.shape[-1])
+            raw_boxes = raw_boxes.reshape(-1, raw_boxes.shape[-1])[front_pad:T-end_pad]
+
             # print('raw_boxes',raw_boxes.shape)
 
             buff_GT_label.append(val_label.detach().cpu().numpy())
             buff_GT_anno.append(raw_boxes.detach().cpu().numpy())
-
-            img_id_item = [batch_id[int(raw_boxes[x, 0] - targets[0]["raw_boxes"][0, 0])][0] for x in
-                           range(len(raw_boxes))]
-
-            buff_GT_id.extend(img_id_item)
+            # img_id_item = [batch_id[int(raw_boxes[x, 0] - targets[0]["raw_boxes"][0, 0])][0] for x in range(len(raw_boxes))]
+            # buff_GT_id.extend(img_id_item)
 
         batch_time.update(time.time() - end)
         end = time.time()
@@ -764,7 +766,6 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
 
     buff_GT_label = np.concatenate(buff_GT_label, axis=0)
     buff_GT_anno = np.concatenate(buff_GT_anno, axis=0)
-    
     # print(buff_output.shape, buff_anno.shape, len(buff_id), buff_GT_anno.shape, buff_GT_label.shape, len(buff_GT_id))
     tmp_path = '{}/{}/{}.txt'
     with open(tmp_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, cfg.DDP_CONFIG.GPU_WORLD_RANK), 'w') as f:

@@ -99,9 +99,10 @@ class VideoDataset(Dataset):
 
         target = self.load_annotation(sample_id)
         imgs = self.loadvideo(sample_id, target)
-
+        assert target["boxes"].shape[0] == self.clip_len
         if self._transforms is not None:
             imgs, target = self._transforms(imgs, target)
+        assert target["boxes"].shape[0] == self.clip_len
         if self.mode == 'test':
             if target['boxes'].shape[0] == 0:
                 target['boxes'] = torch.concat([target["boxes"], torch.from_numpy(np.array([[0, 0, 0, 1, 1]]))])
@@ -111,7 +112,6 @@ class VideoDataset(Dataset):
 
         imgs = torch.stack(imgs, dim=0)
         imgs = imgs.permute(1, 0, 2, 3)
-
         return imgs, target
 
     def load_annotation(self, sample_id):
@@ -194,7 +194,8 @@ class VideoDataset(Dataset):
             target["orig_size"] = torch.as_tensor([int(nh), int(nw)])
             target["size"] = torch.as_tensor([int(nh), int(nw)])
             target["vis"] = torch.as_tensor(vis)
-            target['pad_idx'] = torch.tensor(front_pad)
+            target['front_pad'] = torch.tensor(front_pad)
+            target['end_pad'] = torch.tensor(end_pad)
             target['tube_len'] = torch.tensor(tube_len)
             self.index_cnt = self.index_cnt + 1
 
@@ -213,7 +214,7 @@ class VideoDataset(Dataset):
         end = self.dataset["nframes"][sample_id] - 1
         frame_ids_ = [s for s in range(end)]
         if len(frame_ids_) < self.clip_len:
-            front_size = target["pad_idx"]
+            front_size = target["front_pad"]
             front = [0 for _ in range(front_size)]
             back = [end for _ in range(self.clip_len - len(frame_ids_) - front_size)]
             frame_ids_ = front + frame_ids_ + back
@@ -225,13 +226,15 @@ class VideoDataset(Dataset):
             except:
                 print(target)
                 raise "error"
-            buffer.append(np.array(tmp))
-        buffer = np.stack(buffer, axis=0)
-
-        imgs = []
-        for i in range(buffer.shape[0]):
-            imgs.append(Image.fromarray(buffer[i, :, :, :].astype(np.uint8)))
-        return imgs
+            # buffer.append(np.array(tmp))
+            buffer.append(tmp)
+        # buffer = np.stack(buffer, axis=0)
+        
+        # imgs = []
+        # for i in range(buffer.shape[0]):
+            # imgs.append(Image.fromarray(buffer[i, :, :, :].astype(np.uint8)))
+        # return imgs
+        return buffer
 
     def __len__(self):
         return len(self.index_to_sample)
