@@ -682,9 +682,9 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
                 pass
 
             for t in range(T-front_pad-end_pad):
-                buff_GT_id.extend([frame_id + "_{}".format(t)])
+                buff_GT_id.extend([frame_id + f"_{t:02d}"])
                 for l in range(cfg.CONFIG.MODEL.QUERY_NUM):
-                    buff_id.extend([frame_id + "_{}".format(t)])
+                    buff_id.extend([frame_id + f"_{t:02d}"])
                     try:
                         buff_binary.append(output_b[..., 0])
                     except:
