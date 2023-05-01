@@ -14,6 +14,7 @@ import math
 from .utils import AverageMeter, accuracy, calculate_mAP, read_labelmap
 from evaluates.evaluate_ava import STDetectionEvaluater, STDetectionEvaluaterSinglePerson
 from evaluates.evaluate_ucf import STDetectionEvaluaterUCF
+from evaluates.evaluate_jhmdb import STDetectionEvaluaterJHMDB
 
 import requests
 import traceback
@@ -791,21 +792,31 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
     torch.distributed.barrier()
     # aggregate files
     Map_ = 0
+    Map_v = 0
     # aggregate files
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
         # read results
-        evaluater = STDetectionEvaluaterUCF(class_num=cfg.CONFIG.DATA.NUM_CLASSES)
+        if cfg.CONFIG.DATA.DATASET_NAME == "ucf":
+            evaluater = STDetectionEvaluaterUCF(class_num=cfg.CONFIG.DATA.NUM_CLASSES)
+        elif cfg.CONFIG.DATA.DATASET_NAME == "jhmdb":
+            evaluater = STDetectionEvaluaterJHMDB(class_num=cfg.CONFIG.DATA.NUM_CLASSES)
         file_path_lst = [tmp_GT_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, x) for x in range(cfg.DDP_CONFIG.GPU_WORLD_SIZE)]
         evaluater.load_GT_from_path(file_path_lst)
         file_path_lst = [tmp_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, x) for x in range(cfg.DDP_CONFIG.GPU_WORLD_SIZE)]
         evaluater.load_detection_from_path(file_path_lst)
-        mAP, metrics = evaluater.evaluate()
+        mAP, metrics, v_mAP, v_metrics = evaluater.evaluate()
         print(metrics)
         print_string = 'mAP: {mAP:.5f}'.format(mAP=mAP[0])
         print(print_string)
         print(mAP)
+        print("video-level eval")
+        print(v_metrics)
+        print_string = 'mAP: {v_mAP:.5f}'.format(v_mAP=v_mAP[0])
+        print(print_string)
+        print(v_mAP)
         # writer.add_scalar('val/val_mAP_epoch', mAP[0], epoch)
         Map_ = mAP[0]
+        Map_v = v_mAP[0]
     if Map_ != 0:
         metrics_data = json.dumps({
                 '@epoch': epoch,
@@ -816,7 +827,8 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
                 'val_loss_giou': float(losses_giou.avg),
                 'val_loss_ce': float(losses_ce.avg),
                 # 'val_loss_ce_b': losses_ce_b.avg,
-                'val_mAP': Map_
+                'val_mAP': Map_,
+                'val_v_mAP': Map_v
                 })
         try:
             # Report JSON data to the NSML metric API server with a simple HTTP POST request.
@@ -826,4 +838,4 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
             traceback.print_exc()  
 
     torch.distributed.barrier()
-    return Map_
+    return Map_, Map_v
