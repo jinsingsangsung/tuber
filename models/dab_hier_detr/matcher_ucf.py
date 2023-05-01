@@ -8,7 +8,7 @@ from scipy.optimize import linear_sum_assignment
 from torch import nn
 
 from utils.box_ops import box_cxcywh_to_xyxy, batched_generalized_box_iou
-
+from evaluates.utils import compute_video_map
 
 class HungarianMatcher(nn.Module):
     """This class computes an assignment between the targets and the predictions of the network
@@ -64,22 +64,34 @@ class HungarianMatcher(nn.Module):
         tgt_bbox = tgt_bbox[:,1:]                               # bs*t, 4
         tgt_ids = torch.cat([v["labels"] for v in targets]) 
         # tgt_ids = F.one_hot(tgt_ids, num_classes=num_classes) # bs*t, 22
+        iou3d = []
+        pad = torch.zeros((len(tgt_bbox), 1), device=tgt_bbox.device)
+
+        if len(tgt_bbox) != out_bbox.shape[0]: print([len(v["boxes"]) for v in targets], len(targets), out_bbox.size(0))
         
+        _tgt_bbox = torch.cat([pad, box_cxcywh_to_xyxy(tgt_bbox)], -1)
+        _out_bbox = torch.cat([pad[:, None].repeat(1, out_bbox.size(1), 1), box_cxcywh_to_xyxy(out_bbox)], -1)
+        for n in range(out_bbox.size(1)):
+            iou3d.append(compute_video_map.iou3d_voc(_out_bbox[:, n, :].detach().cpu().numpy(), _tgt_bbox.detach().cpu().numpy()))
+        iou3d = torch.tensor(iou3d, device=tgt_bbox.device)[:, None] # n_q, 1 #3d iou
+
         # Compute the L1 cost between boxes
         cost_bbox = torch.cdist(out_bbox.reshape(bs*t, num_queries, 4), tgt_bbox[:, None], p=1).reshape(bs, t, num_queries, 1)
         # bs, t, nq, 1
+        
         # Compute the giou cost betwen boxes
         cost_giou = -batched_generalized_box_iou(box_cxcywh_to_xyxy(out_bbox).reshape(-1, num_queries, 4), box_cxcywh_to_xyxy(tgt_bbox).reshape(-1, 1, 4)).reshape(bs, t, num_queries, 1)
         # bs, t, nq, 1
 
         out_prob = outputs["pred_logits"].flatten(0, 1).softmax(-1)
         # bs*t, nq, num_classes
-
-        cost_class = -out_prob[..., tgt_ids[0]].reshape(bs, t, num_queries, 1)
+        
+        # print(outputs["pred_logits_b"][..., 1:2].shape, bs, t)
+        cost_class = -out_prob[..., tgt_ids[0]].reshape(bs, t, num_queries, 1) * outputs["pred_logits_b"][..., 1:2]
         # bs, t, nq, 1
-
+        
         # Final cost matrix
-        C = self.cost_bbox * cost_bbox + self.cost_class * cost_class + self.cost_giou * cost_giou
+        C = (self.cost_bbox * cost_bbox + self.cost_class * cost_class + self.cost_giou * cost_giou) * iou3d
         C = C.view(bs*t, num_queries, -1).cpu()
         # import pdb; pdb.set_trace()
         # sizes = [len(v["boxes"]) for v in targets]
@@ -88,6 +100,8 @@ class HungarianMatcher(nn.Module):
         for i in range(bs):
             for j in range(t):
                 indices.append(linear_sum_assignment(C[i*t+j]))
+        lst = [int(j) for (j,k) in indices]
+        idx = max(set(lst), key=lst.count)
         # len(indices): bs * t
         # each element: b번째 batch의 t번째 frame에 해당하는 GT에는 indices[b*T+t] 번째 query가 matching됨
         # element may look like, (array([3]), array([0])): GT box는 하나이기 때문에 두 번째 원소는 항상 array([0])임.
@@ -98,7 +112,7 @@ class HungarianMatcher(nn.Module):
         #     res.append((torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)))
         #
         # return res
-        return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
+        return [(torch.as_tensor([idx], dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
 
 
 def build_matcher(cfg):
