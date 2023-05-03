@@ -175,7 +175,7 @@ class STDetectionEvaluaterJHMDB(object):
 
         for k in list(all_boxes.keys()):
             for s in range(len(scores)):
-                all_boxes[k][s+1] = np.asarray(all_boxes[image_key][s+1], dtype=float)
+                all_boxes[k][s+1] = np.asarray(all_boxes[k][s+1], dtype=float)
 
         print("start adding into evaluator")
         for v_evaluator in self.video_map_evaluator:
