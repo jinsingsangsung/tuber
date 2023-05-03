@@ -27,7 +27,11 @@ class VideoMAPEvaluator(object):
         gt_videos = self.gt_videos
         all_boxes = self.all_boxes
         iou_thresh = self.iou
-
+        if len(all_boxes.keys()) == 0:
+            metrics = {}
+            metrics["video-mAP@{}IOU".format(self.iou)] = 0
+            print("need better result to compute video mAP")
+            return metrics
         def imagebox_to_videts(img_boxes, CLASSES):
             # image names
             keys = list(all_boxes.keys())
@@ -69,6 +73,11 @@ class VideoMAPEvaluator(object):
             cls_ind += 1
             # [ video_index, [[frame_index, x1,y1,x2,y2]] ]
             gt = [g[1:] for g in gt_videos_format if g[0]==cls_ind]
+            # len(pred_videos_format): class_num * num_videos
+            # pred_videos_format[i]: list of length 3 where each element is:
+            #     class_label: (i // num_classes) + 1
+            #     video_idx: (i % num_classes) + 1
+            #     list of n frames that has bounding boxes, confidence scores
             pred_cls = [p[1:] for p in pred_videos_format if p[0]==cls_ind]
             cls_len = None
             ap = video_ap_one_class(gt, pred_cls, iou_thresh, bTemporal, cls_len)
