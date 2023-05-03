@@ -98,7 +98,7 @@ class STDetectionEvaluaterJHMDB(object):
                     sample_dict_per_image[image_key]['scores'].append(scores[x])
         
         for k in list(gt_videos.keys()):
-            gt_videos[k]["tubes"] = np.asarray(gt_videos[k]["tubes"])
+            gt_videos[k]["tubes"] = np.expand_dims(np.asarray(gt_videos[k]["tubes"]), axis=0)
             
         # write into evaluator
         for image_key, info in sample_dict_per_image.items():
