@@ -31,6 +31,7 @@ class VideoMAPEvaluator(object):
         def imagebox_to_videts(img_boxes, CLASSES):
             # image names
             keys = list(all_boxes.keys())
+            keys.sort()
             res = []
             # without 'background'
             for cls_ind, cls in enumerate(CLASSES[0:]):
@@ -254,14 +255,14 @@ def video_ap_one_class(gt, pred_videos, iou_thresh = 0.2, bTemporal = False, gtl
 def gt_to_videts(gt_v):
     # return  [label, video_index, [[frame_index, x1,y1,x2,y2], [], []] ]
     keys = list(gt_v.keys())
-    # keys.sort()
+    keys.sort()
     res = []
     for i in range(len(keys)):
         # annotation of the video: tubes and gt_classes
         v_annot = gt_v[keys[i]]
-        # for j in range(len(v_annot['tubes'])):
-            # res.append([v_annot['gt_classes'], i+1, v_annot['tubes'][j]])
-        res.append([v_annot['gt_classes'], i+1, v_annot['tubes']])
+        for j in range(len(v_annot['tubes'])):
+            res.append([v_annot['gt_classes'], i+1, v_annot['tubes'][j]])
+        # res.append([v_annot['gt_classes'], i+1, v_annot['tubes']])
     return res
 
 
