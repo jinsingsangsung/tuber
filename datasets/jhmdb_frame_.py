@@ -46,9 +46,6 @@ def tubelet_has_gt(tube_list, i, K):
     # is inside (tubelet_in_tube) at least a tube in tube_list.
     return any([tubelet_in_tube(tube, i, K) for tube in tube_list])
 
-
-# ['Basketball', 'BasketballDunk', 'Biking', 'CliffDiving', 'CricketBowling', 'Diving', 'Fencing', 'FloorGymnastics', 'GolfSwing', 'HorseRiding', 'IceDancing', 'LongJump', 'PoleVault', 'RopeClimbing', 'SalsaSpin', 'SkateBoarding', 'Skiing', 'Skijet', 'SoccerJuggling', 'Surfing', 'TennisSwing', 'TrampolineJumping', 'VolleyballSpiking', 'WalkingWithDog']
-
 class VideoDataset(Dataset):
 
     def __init__(self, directory, video_path, transforms, clip_len=8, crop_size=224, resize_size=256,
@@ -148,7 +145,7 @@ class VideoDataset(Dataset):
                         p_x2 = np.int_(box[3] / ow * nw)
                         p_y2 = np.int_(box[4] / oh * nh)
                         tube.append([box[0], p_x1, p_y1, p_x2, p_y2])
-                        classes.append(np.clip(ilabel, 0, 24))
+                        classes.append(np.clip(ilabel, 0, 21))
                     boxes.append(tube)
                     tube_len.append(len(t))
 
