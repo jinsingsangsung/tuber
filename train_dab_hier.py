@@ -36,6 +36,8 @@ def main_worker(cfg):
         from datasets.ava_frame import build_dataloader
     elif cfg.CONFIG.DATA.DATASET_NAME == 'jhmdb':
         from datasets.jhmdb_frame_ import build_dataloader
+    elif cfg.CONFIG.DATA.DATASET_NAME == 'ucf':
+        from datasets.ucf_frame import build_dataloader
     else:
         build_dataloader = None
         print("invalid dataset name")
@@ -105,7 +107,7 @@ def main_worker(cfg):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train video action recognition transformer models.')
     parser.add_argument('--config-file',
-                        default='./configuration/Dab_hier_CSN50_AVA22.yaml',
+                        default='./configuration/Dab_hier_CSN152_UCF.yaml',
                         help='path to config file.')
     args = parser.parse_args()
 
