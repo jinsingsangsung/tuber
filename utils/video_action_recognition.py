@@ -586,7 +586,7 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
             os.remove(tmp_dir)
             print("remove {}".format(tmp_dir))
         print("all tmp files removed")
-
+    
     for idx, data in enumerate(data_loader):
         data_time.update(time.time() - end)
 
@@ -659,7 +659,7 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
         T = scores.shape[1]
         scores = scores.reshape(-1, *scores.shape[-2:])
         boxes = boxes.reshape(-1, *boxes.shape[-2:])
-
+        
         for bidx in range(B):
 
             if len(targets[bidx]["raw_boxes"]) == 0:
@@ -667,7 +667,6 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
 
             frame_id = batch_id[bidx][0]
             # key_pos = batch_id[bidx][1]
-
             # out_key_pos = key_pos // cfg.CONFIG.MODEL.DS_RATE
             # out_key_pos = key_pos
             # print("key pos: {}, ds_rate: {}".format(key_pos, cfg.CONFIG.MODEL.DS_RATE))
@@ -680,7 +679,7 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
                 buff_binary.append(output_b)
             except:
                 pass
-
+            
             for t in range(T-front_pad-end_pad):
                 buff_GT_id.extend([frame_id + f"_{t:02d}"])
                 for l in range(cfg.CONFIG.MODEL.QUERY_NUM):
@@ -769,18 +768,19 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
     buff_GT_anno = np.concatenate(buff_GT_anno, axis=0)
     # print(buff_output.shape, buff_anno.shape, len(buff_id), buff_GT_anno.shape, buff_GT_label.shape, len(buff_GT_id))
     tmp_path = '{}/{}/{}.txt'
+
     with open(tmp_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, cfg.DDP_CONFIG.GPU_WORLD_RANK), 'w') as f:
         for x in range(len(buff_id)):
             data = np.concatenate([buff_anno[x], buff_output[x]])
             f.write("{} {}\n".format(buff_id[x], data.tolist()))
-    try:
-        tmp_binary_path = '{}/{}/binary_{}.txt'
-        with open(tmp_binary_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, cfg.DDP_CONFIG.GPU_WORLD_RANK), 'w') as f:
-            for x in range(len(buff_id)):
-                data = buff_binary[x]
-                f.write("{} {}\n".format(buff_id[x], data.tolist()))
-    except:
-        pass
+    # try:
+    #     tmp_binary_path = '{}/{}/binary_{}.txt'
+    #     with open(tmp_binary_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, cfg.DDP_CONFIG.GPU_WORLD_RANK), 'w') as f:
+    #         for x in range(len(buff_id)):
+    #             data = buff_binary[x]
+    #             f.write("{} {}\n".format(buff_id[x], data.tolist()))
+    # except:
+    #     pass
 
     tmp_GT_path = '{}/{}/GT_{}.txt'
     with open(tmp_GT_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, cfg.DDP_CONFIG.GPU_WORLD_RANK), 'w') as f:

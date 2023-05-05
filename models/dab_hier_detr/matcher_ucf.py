@@ -64,16 +64,16 @@ class HungarianMatcher(nn.Module):
         tgt_bbox = tgt_bbox[:,1:]                               # bs*t, 4
         tgt_ids = torch.cat([v["labels"] for v in targets]) 
         # tgt_ids = F.one_hot(tgt_ids, num_classes=num_classes) # bs*t, 22
-        iou3d = []
-        pad = torch.zeros((len(tgt_bbox), 1), device=tgt_bbox.device)
+        # iou3d = []
+        # pad = torch.zeros((len(tgt_bbox), 1), device=tgt_bbox.device)
 
-        if len(tgt_bbox) != out_bbox.shape[0]: print([len(v["boxes"]) for v in targets], len(targets), out_bbox.size(0))
+        # if len(tgt_bbox) != out_bbox.shape[0]: print([len(v["boxes"]) for v in targets], len(targets), out_bbox.size(0))
         
-        _tgt_bbox = torch.cat([pad, box_cxcywh_to_xyxy(tgt_bbox)], -1)
-        _out_bbox = torch.cat([pad[:, None].repeat(1, out_bbox.size(1), 1), box_cxcywh_to_xyxy(out_bbox)], -1)
-        for n in range(out_bbox.size(1)):
-            iou3d.append(compute_video_map.iou3d_voc(_out_bbox[:, n, :].detach().cpu().numpy(), _tgt_bbox.detach().cpu().numpy()))
-        iou3d = torch.tensor(iou3d, device=tgt_bbox.device)[:, None] # n_q, 1 #3d iou
+        # _tgt_bbox = torch.cat([pad, box_cxcywh_to_xyxy(tgt_bbox)], -1)
+        # _out_bbox = torch.cat([pad[:, None].repeat(1, out_bbox.size(1), 1), box_cxcywh_to_xyxy(out_bbox)], -1)
+        # for n in range(out_bbox.size(1)):
+        #     iou3d.append(compute_video_map.iou3d_voc(_out_bbox[:, n, :].detach().cpu().numpy(), _tgt_bbox.detach().cpu().numpy()))
+        # iou3d = torch.tensor(iou3d, device=tgt_bbox.device)[:, None] # n_q, 1 #3d iou
 
         # Compute the L1 cost between boxes
         cost_bbox = torch.cdist(out_bbox.reshape(bs*t, num_queries, 4), tgt_bbox[:, None], p=1).reshape(bs, t, num_queries, 1)

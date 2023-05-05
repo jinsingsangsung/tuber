@@ -82,7 +82,6 @@ def main_worker(cfg):
     for epoch in range(cfg.CONFIG.TRAIN.START_EPOCH, cfg.CONFIG.TRAIN.EPOCH_NUM):
         if cfg.DDP_CONFIG.DISTRIBUTED:
             train_sampler.set_epoch(epoch)
-
         train_tuber_detection(cfg, model, criterion, train_loader, optimizer, epoch, cfg.CONFIG.LOSS_COFS.CLIPS_MAX_NORM, lr_scheduler, writer)
 
         if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0 and (
@@ -108,12 +107,10 @@ if __name__ == '__main__':
     parser.add_argument('--config-file',
                         default='./configuration/Dab_hier_CSN50_AVA22.yaml',
                         help='path to config file.')
-    parser.add_argument('--num_gpu', default=4, type=int)
     args = parser.parse_args()
 
     cfg = get_cfg_defaults()
     cfg.merge_from_file(args.config_file)
-    cfg.DDP_CONFIG.GPU_WORLD_SIZE = args.num_gpu
     import socket 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.connect(("8.8.8.8", 80))
