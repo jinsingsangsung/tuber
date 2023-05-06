@@ -72,7 +72,7 @@ class HungarianMatcher(nn.Module):
         # _tgt_bbox = torch.cat([pad, box_cxcywh_to_xyxy(tgt_bbox)], -1)
         # _out_bbox = torch.cat([pad[:, None].repeat(1, out_bbox.size(1), 1), box_cxcywh_to_xyxy(out_bbox)], -1)
         # for n in range(out_bbox.size(1)):
-        #     iou3d.append(compute_video_map.iou3d_voc(_out_bbox[:, n, :].detach().cpu().numpy(), _tgt_bbox.detach().cpu().numpy()))
+            # iou3d.append(compute_video_map.iou3d_voc(_out_bbox[:, n, :].detach().cpu().numpy(), _tgt_bbox.detach().cpu().numpy()))
         # iou3d = torch.tensor(iou3d, device=tgt_bbox.device)[:, None] # n_q, 1 #3d iou
 
         # Compute the L1 cost between boxes
@@ -88,7 +88,7 @@ class HungarianMatcher(nn.Module):
         
 
         # print(outputs["pred_logits_b"][..., 1:2].shape, bs, t)
-        # cost_class = -out_prob[..., tgt_ids[0]].reshape(bs, t, num_queries, 1) * outputs["pred_logits_b"][..., 1:2]
+        # cost_class = -out_prob[..., tgt_ids[0]].reshape(bs, t, num_queries, 1)# * outputs["pred_logits_b"].softmax(-1)[..., 1:2]
         # bs, t, nq, 1
 
         out_prob_b = outputs["pred_logits_b"].softmax(-1)
@@ -96,7 +96,7 @@ class HungarianMatcher(nn.Module):
         # Final cost matrix
         if not self.binary_loss:
             cost_class_b = 0
-        C = self.cost_bbox * cost_bbox + self.cost_class * cost_class + self.cost_giou * cost_giou  # + cost_class_b
+        C = self.cost_bbox * cost_bbox + self.cost_class * cost_class + self.cost_giou * cost_giou # + cost_class_b
         # bs, t, num_queries, len(tgt_bbox)
         C = C.view(bs*t, num_queries, -1).cpu()
         # import pdb; pdb.set_trace()
