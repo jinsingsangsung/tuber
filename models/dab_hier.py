@@ -209,8 +209,10 @@ class DETR(nn.Module):
 def build_model(cfg):
     if cfg.CONFIG.DATA.DATASET_NAME == 'ava':
         from models.dab_hier_detr.matcher import build_matcher
-    else:
+    elif cfg.CONFIG.DATA.DATASET_NAME == 'jhmdb':
         from models.dab_hier_detr.matcher_ucf import build_matcher
+    else:
+        from models.dab_hier_detr.matcher_ucf_ import build_matcher
     num_classes = cfg.CONFIG.DATA.NUM_CLASSES
     print('num_classes', num_classes)
 

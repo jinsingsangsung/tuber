@@ -151,7 +151,7 @@ class VideoDataset(Dataset):
         for ilabel, tubes in self.dataset['gttubes'][vid_id].items():
             # self.max_person = len(tubes) if self.max_person < len(tubes) else self.max_person
             # self.person_size = len(tubes)
-            # in UCF, there is only one tube per video: thus, len(tubes) = 1
+            # in UCF, there can be several tube per video: thus, len(tubes) != 1
 
             # see if there is a overlapping region between clip and GT
             clip_start_frame = c_frame-self.clip_len//2
@@ -160,12 +160,13 @@ class VideoDataset(Dataset):
                 pad_front = True
             if clip_end_frame > nframes:
                 pad_end = True
-
+            if len(tubes) > 1:
+                print(vid_id, len(tubes))
             for t in tubes:
                 box_ = t[:, 0:5] # all frames
                 tube = []
                 gt_start_frame = int(box_[0][0])
-                gt_end_frame = int(box_[0][-1])
+                gt_end_frame = int(box_[-1][0])
 
                 # case 1: GT and clip do not overlap
                 if clip_end_frame < gt_start_frame or clip_start_frame > gt_end_frame:
@@ -203,7 +204,7 @@ class VideoDataset(Dataset):
                             p_y2 = np.int_(box[4] / oh * nh)
                             tube.append([box[0], p_x1, p_y1, p_x2, p_y2])
                             classes.append(np.clip(ilabel, 0, 24))
-                    tube.extend([[n, -1, -1, -1, -1] for n in range(gt_end_frame, clip_end_frame)])
+                    tube.extend([[n, -1, -1, -1, -1] for n in range(gt_end_frame+1, clip_end_frame+1)])
                     classes.extend([-1 for _ in range(clip_end_frame-gt_end_frame)])
                     boxes.append(tube)
                     tube_len.append(len(box_[clip_start_frame-gt_start_frame:,:]))
@@ -212,7 +213,7 @@ class VideoDataset(Dataset):
                 # case4: clip overlaps inside the GT
                 elif clip_start_frame > gt_start_frame and clip_end_frame < gt_end_frame:
                     if len(box_[0]) > 0: # if box is valid
-                        for box in box_[clip_start_frame-gt_start_frame: clip_start_frame-gt_start_frame+self.clip_len,:]:
+                        for box in box_[clip_start_frame-gt_start_frame: clip_end_frame-gt_end_frame,:]:
                             p_x1 = np.int_(box[1] / ow * nw)
                             p_y1 = np.int_(box[2] / oh * nh)
                             p_x2 = np.int_(box[3] / ow * nw)
@@ -220,7 +221,7 @@ class VideoDataset(Dataset):
                             tube.append([box[0], p_x1, p_y1, p_x2, p_y2])
                             classes.append(np.clip(ilabel, 0, 24))
                         boxes.append(tube)
-                        tube_len.append(len(box_[clip_start_frame:,:]))   
+                        tube_len.append(self.clip_len)   
                     else:
                         print("box is not valid")
                         print(box_)
@@ -247,26 +248,21 @@ class VideoDataset(Dataset):
             boxes[:, 1::3].clamp_(min=-1, max=nw)
             boxes[:, 2::3].clamp_(min=-1, max=nh)
 
-
-        # if pad_front:
-        #     boxes = F.pad(boxes[None, None, ...], (0, 0, front_pad, 0), mode="replicate").squeeze()
-        #     classes = F.pad(classes, (front_pad, 0), value=classes[0])
-        # if pad_end:
-        #     boxes = F.pad(boxes[None, None, ...], (0, 0, 0, end_pad), mode="replicate").squeeze()
-        #     classes = F.pad(classes, (0, end_pad), value=classes[-1])
+            if len(boxes) != 0 and len(boxes)%self.clip_len != 0:
+                print("len boxes is not", self.clip_len)
+                print(len(boxes), self.clip_len)
+                print(clip_start_frame, clip_end_frame, gt_start_frame, gt_end_frame)
+                print(boxes)
+                raise AssertionError
         
-        if len(boxes) != self.clip_len:
-            print(len(boxes), self.clip_len)
-            print(clip_start_frame, clip_end_frame, gt_start_frame, gt_end_frame)
-            raise AssertionError
-        assert len(classes) == self.clip_len
-        if boxes.shape[0]: # equals clip_len
-            raw_boxes = F.pad(boxes, (1, 0, 0, 0), value=self.index_cnt) # put index number in the first column
-        else:
-            raw_boxes = boxes
+            assert len(classes) == self.clip_len
+            if boxes.shape[0]: # equals clip_len
+                raw_boxes = F.pad(boxes, (1, 0, 0, 0), value=self.index_cnt) # put index number in the first column
+            else:
+                raw_boxes = boxes
 
             classes = torch.as_tensor(classes, dtype=torch.int64)
-            
+                
             target["image_id"] = [str(sample_id).replace("/", "_")]
             target['boxes'] = boxes
             target['raw_boxes'] = raw_boxes
@@ -292,14 +288,16 @@ class VideoDataset(Dataset):
         if clip_start_frame <= 0:
             frame_ids_ = [1 for _ in range(front_pad)]
             frame_ids_.extend([s for s in range(clip_end_frame)])
-        if clip_end_frame > nframes:
+        elif clip_end_frame > nframes:
             frame_ids_ = [s for s in range(clip_start_frame, nframes+1)]
             frame_ids_.extend([nframes for _ in range(end_pad)])
+        else:
+            frame_ids_ = [s for s in range(clip_start_frame, clip_end_frame+1)]
 
         assert len(frame_ids_) == self.clip_len
         
         for frame_idx in frame_ids_:
-            tmp = Image.open(os.path.join(self.video_path, vid_id, "{:0>5}.png".format(frame_idx)))
+            tmp = Image.open(os.path.join(self.video_path, vid_id, "{:0>5}.jpg".format(frame_idx)))
             try:
                 tmp = tmp.resize((target['orig_size'][1], target['orig_size'][0]))
             except:
