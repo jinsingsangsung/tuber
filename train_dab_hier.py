@@ -13,6 +13,8 @@ from pipelines.launch import spawn_workers
 from utils.utils import build_log_dir
 from utils.lr_scheduler import build_scheduler
 
+import random
+import numpy as np
 
 def main_worker(cfg):
     # create tensorboard and logs
