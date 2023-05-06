@@ -107,10 +107,17 @@ def main_worker(cfg):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train video action recognition transformer models.')
     parser.add_argument('--config-file',
-                        default='./configuration/Dab_hier_CSN152_UCF.yaml',
+                        default='./configuration/Dab_hier_CSN50_AVA22.yaml',
                         help='path to config file.')
     args = parser.parse_args()
-
+    parser.add_argument('--random_seed', default=1, help='random_seed')
+    args = parser.parse_args()
+    random.seed(args.random_seed)
+    np.random.seed(args.random_seed)
+    torch.manual_seed(args.random_seed)
+    torch.cuda.manual_seed(args.random_seed)
+    torch.cuda.manual_seed_all(args.random_seed)
+    args = parser.parse_args()
     cfg = get_cfg_defaults()
     cfg.merge_from_file(args.config_file)
     import socket 
