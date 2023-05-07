@@ -59,7 +59,7 @@ CONFIG:
     LAST_STRIDE: False
     GENERATE_LFB: False
     NAME: 'ava_detr_9_224'
-    ENC_LAYERS: 4
+    ENC_LAYERS: 3
     DEC_LAYERS: 6
     D_MODEL: 256
     NHEAD: 8
@@ -69,7 +69,7 @@ CONFIG:
     NORMALIZE_BEFORE: False
     DROPOUT: 0.1
     DS_RATE: 8
-    TEMP_LEN: 40
+    TEMP_LEN: 32
     SAMPLE_RATE: 2
     PRETRAINED: True
     PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_152_ft_kinetics_from_ig65m_f126851907.mat"
@@ -112,6 +112,6 @@ CONFIG:
     SAVE_DIR: 'checkpoints'
     EVAL_DIR: '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/UCF/eval'
     SAVE_FREQ: 5
-    RES_DIR: Dab_hier_270-90_0505
-    EXP_NAME: Dab_hier_270-90_0505
+    RES_DIR: Dab_hier_270-40_0507
+    EXP_NAME: Dab_hier_270-40_0507
     DISPLAY_FREQ: 20

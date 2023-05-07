@@ -18,7 +18,7 @@ class HungarianMatcher(nn.Module):
     while the others are un-matched (and thus treated as non-objects).
     """
 
-    def __init__(self, cost_class: float = 1, cost_bbox: float = 1, cost_giou: float = 1, data_file: str = 'ava', binary_loss: bool = False, before: bool = False):
+    def __init__(self, cost_class: float = 1, cost_bbox: float = 1, cost_giou: float = 1, data_file: str = 'ava', binary_loss: bool = False, before: bool = False, clip_len: int = 32):
         """Creates the matcher
 
         Params:
@@ -33,6 +33,7 @@ class HungarianMatcher(nn.Module):
         self.data_file = data_file
         self.binary_loss = binary_loss
         self.before = before
+        self.clip_len = clip_len
         assert cost_class != 0 or cost_bbox != 0 or cost_giou != 0, "all costs cant be 0"
 
     @torch.no_grad()
@@ -56,18 +57,35 @@ class HungarianMatcher(nn.Module):
             For each batch element, it holds:
                 len(index_i) = len(index_j) = min(num_queries, num_target_boxes)
         """
+        l = self.clip_len
         bs, t, num_queries = outputs["pred_logits"].shape[0:3]
         num_classes = outputs["pred_logits"].shape[-1]
-        out_bbox = outputs["pred_boxes"].flatten(0, 1)          # bs*t, nq, 4
+        out_bbox = outputs["pred_boxes"].permute(0,2,1,3).flatten(0, 1)    # bs*nq, t, 4
         # Also concat the target labels
-        tgt_bbox = torch.cat([v["boxes"] for v in targets])
-        tgt_bbox = tgt_bbox[:,1:]                               # bs*t, 4
-        tgt_ids = torch.cat([v["labels"] for v in targets]) 
-        # tgt_ids = F.one_hot(tgt_ids, num_classes=num_classes) # bs*t, 22
-        # iou3d = []
-        # pad = torch.zeros((len(tgt_bbox), 1), device=tgt_bbox.device)
+        # tgt_bbox = torch.cat([v["boxes"] for v in targets]) 
+        boxes_per_batch = []
+        tgt_bbox = []
+        if torch.cat([v["boxes"] for v in targets]).__len__() > l:
+            import pdb; pdb.set_trace()
+        for v in targets:
+            tgt_bbox_ = v["boxes"]
+            num_tubes = len(tgt_bbox_) // l
+            boxes_per_batch.append(num_tubes)
+            # tgt_bboxes = tgt_bbox_.split(l)
+            # tgt_bbox.append(torch.stack([tgt_bboxes[i] for i in range(num_tubes)], dim=0)) # num_tubes x clip_len x 5
+            tgt_bbox.append(tgt_bbox_.reshape(num_tubes, -1 ,5))
+        tgt_bbox = torch.cat(tgt_bbox, dim=0)[..., 1:]
+        tgt_ids = torch.cat([v["labels"] for v in targets])
 
-        # if len(tgt_bbox) != out_bbox.shape[0]: print([len(v["boxes"]) for v in targets], len(targets), out_bbox.size(0))
+        assert len(tgt_bbox) == len(tgt_ids)
+        # TODO: Matching strategy: tube? or frame? let's go with tube
+        # 1. make it generalizable to multiple actors, make a good output of matching indices (take the idea from ava)
+        # 2. discard the outputs with non-meaningful labels (actually null tube) how to return the idx?
+
+        import pdb; pdb.set_trace()
+
+        # iou3d = []
+        pad = torch.zeros((len(tgt_bbox), 1), device=tgt_bbox.device)
         
         # _tgt_bbox = torch.cat([pad, box_cxcywh_to_xyxy(tgt_bbox)], -1)
         # _out_bbox = torch.cat([pad[:, None].repeat(1, out_bbox.size(1), 1), box_cxcywh_to_xyxy(out_bbox)], -1)
@@ -122,4 +140,4 @@ class HungarianMatcher(nn.Module):
 
 
 def build_matcher(cfg):
-    return HungarianMatcher(cost_class=cfg.CONFIG.MATCHER.COST_CLASS, cost_bbox=cfg.CONFIG.MATCHER.COST_BBOX, cost_giou=cfg.CONFIG.MATCHER.COST_GIOU, data_file=cfg.CONFIG.DATA.DATASET_NAME, binary_loss=cfg.CONFIG.MATCHER.BNY_LOSS, before=cfg.CONFIG.MATCHER.BEFORE)
+    return HungarianMatcher(cost_class=cfg.CONFIG.MATCHER.COST_CLASS, cost_bbox=cfg.CONFIG.MATCHER.COST_BBOX, cost_giou=cfg.CONFIG.MATCHER.COST_GIOU, data_file=cfg.CONFIG.DATA.DATASET_NAME, binary_loss=cfg.CONFIG.MATCHER.BNY_LOSS, before=cfg.CONFIG.MATCHER.BEFORE, clip_len=cfg.CONFIG.DATA.TEMP_LEN)
