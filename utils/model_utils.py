@@ -180,12 +180,13 @@ def load_model_and_states(model, optimizer, scheduler, cfg):
     
     optimizer.load_state_dict(checkpoint['optimizer'])
     scheduler.load_state_dict(checkpoint['scheduler'])
+    start_epoch = checkpoint['epoch']+1
     random.setstate(checkpoint["random_python"])
     np.random.set_state(checkpoint["random_numpy"])
     torch.set_rng_state(checkpoint['random_pytorch'])
     if model.device == 'cuda':
         torch.cuda.set_rng_state(checkpoint['random_cuda'])
-    return model, optimizer, scheduler
+    return model, optimizer, scheduler, start_epoch
 
 
 def save_model(model, optimizer, epoch, cfg):
@@ -213,6 +214,10 @@ def save_checkpoint(cfg, epoch, model, max_accuracy, optimizer, lr_scheduler):
     if model.device == 'cuda':
         cuda_rng_state = torch.cuda.get_rng_state()
 
+    model_save_dir = os.path.join(cfg.CONFIG.LOG.BASE_PATH,
+                                  cfg.CONFIG.LOG.EXP_NAME,
+                                  cfg.CONFIG.LOG.SAVE_DIR)
+    
     save_state = {'model': model.state_dict(),
                   'optimizer': optimizer.state_dict(),
                   'lr_scheduler': lr_scheduler.state_dict(),
@@ -222,11 +227,9 @@ def save_checkpoint(cfg, epoch, model, max_accuracy, optimizer, lr_scheduler):
                   'random_python': random.getstate(),
                   'random_numpy': np.random.getstate(),
                   'random_pytorch': torch.get_rng_state(),
-                  'random_cuda': cuda_rng_state}
+                  'random_cuda': cuda_rng_state,
+                  }
 
-    model_save_dir = os.path.join(cfg.CONFIG.LOG.BASE_PATH,
-                                  cfg.CONFIG.LOG.EXP_NAME,
-                                  cfg.CONFIG.LOG.SAVE_DIR)
     if not os.path.exists(model_save_dir):
         os.makedirs(model_save_dir)
     log_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)

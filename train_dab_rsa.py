@@ -7,15 +7,16 @@ import torch.optim
 # from tensorboardX import SummaryWriter
 from models.dab_rsa import build_model
 from utils.model_utils import deploy_model, load_model, save_checkpoint
-from utils.video_action_recognition import train_tuber_detection, validate_tuber_detection, validate_tuber_ucf_detection
+from utils.video_action_recognition import train_tuber_detection, validate_tuber_detection, validate_tuber_ucf_detection, validate_tuber_jhmdb_detection
 from pipelines.video_action_recognition_config import get_cfg_defaults
 from pipelines.launch import spawn_workers
 from utils.utils import build_log_dir, print_log
 from utils.lr_scheduler import build_scheduler
-import os, requests
+from utils.nsml_utils import *
 from datetime import date
 import numpy as np
 import random
+import os
 
 def main_worker(cfg):
     # create tensorboard and logs
@@ -41,6 +42,8 @@ def main_worker(cfg):
         from datasets.ava_frame import build_dataloader
     elif cfg.CONFIG.DATA.DATASET_NAME == 'jhmdb':
         from datasets.jhmdb_frame_ import build_dataloader
+    elif cfg.CONFIG.DATA.DATASET_NAME == 'ucf':
+        from datasets.ucf_frame import build_dataloader    
     else:
         build_dataloader = None
         print("invalid dataset name")
@@ -77,6 +80,20 @@ def main_worker(cfg):
     # create lr scheduler
     lr_scheduler = build_scheduler(cfg, optimizer, len(train_loader))
 
+    if int(os.getenv('NSML_SESSION', '0')) > 0:
+        # 실험 이어하기의 경우
+        study = os.environ["NSML_STUDY"]
+        run = os.environ["NSML_RUN_NAME"].split("/")[-1]
+        exp_name = "{}-{}".format(study, run)
+        epochs_folder = os.listdir(os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.SAVE_DIR, exp_name)).sort()
+        latest_epoch = epochs_folder[-1]
+        cfg.CONFIG.MODEL.PRETRAINED_PATH = os.path.join(cfg.CONFIG.LOG.BASE_PATH, exp_name, cfg.CONFIG.SAVE_DIR, latest_epoch) # find the pretrained_path
+        model, optimizer, lr_scheduler, start_epoch = load_model_and_states(model, optimizer, lr_scheduler, cfg)
+        cfg.CONFIG.TRAIN.START_EPOCH = start_epoch
+        cfg.CONFIG.MODEL.LOAD = True
+        cfg.CONFIG.MODEL.LOAD_FC = True
+        cfg.CONFIG.MODEL.LOAD_DETR = False
+
     # docs: add resume option
     if cfg.CONFIG.MODEL.LOAD:
         model, _ = load_model(model, cfg, load_fc=cfg.CONFIG.MODEL.LOAD_FC)
@@ -96,11 +113,16 @@ def main_worker(cfg):
         if (epoch % cfg.CONFIG.VAL.FREQ == 0 or epoch == cfg.CONFIG.TRAIN.EPOCH_NUM - 1):
             if cfg.CONFIG.DATA.DATASET_NAME == 'ava':
                 validate_tuber_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)
+            elif cfg.CONFIG.DATA.DATASET_NAME == 'jhmdb':
+                validate_tuber_jhmdb_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)
             else:
-                validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)    
-        
+                validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)
+        if os.getenv('NSML_RANK', '0') == '0':
+            set_nsml_reschedule()
+
     if writer is not None:
         writer.close()
+    unset_nsml_reschedule()
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
@@ -113,7 +135,6 @@ if __name__ == '__main__':
     parser.add_argument('--config-file',
                         default='./configuration/Dab_rsa_CSN50_AVA22.yaml',
                         help='path to config file.')
-    parser.add_argument('--exp_name', default="Dab_rsa_{}-{}_{}", type=str)
     parser.add_argument('--random_seed', default=1, help='random_seed')
     parser.add_argument('--debug', action='store_true', help="debug, and ddp is disabled")
     args = parser.parse_args()
@@ -129,12 +150,12 @@ if __name__ == '__main__':
     cfg.merge_from_file(args.config_file)
     study = os.environ["NSML_STUDY"]
     run = os.environ["NSML_RUN_NAME"].split("/")[-1]
-    cfg.CONFIG.LOG.RES_DIR = args.exp_name.format(study, run, date.today())
-    cfg.CONFIG.LOG.EXP_NAME = args.exp_name.format(study, run, date.today())
+    cfg.CONFIG.LOG.RES_DIR = cfg.CONFIG.LOG.RES_DIR.format(study, run)
+    cfg.CONFIG.LOG.EXP_NAME = cfg.CONFIG.LOG.EXP_NAME.format(study, run)
     if args.debug:
         cfg.DDP_CONFIG.DISTRIBUTED = False
-        cfg.CONFIG.LOG.RES_DIR = cfg.CONFIG.LOG.RES_DIR.format(study+run)
-        cfg.CONFIG.LOG.EXP_NAME = cfg.CONFIG.LOG.EXP_DIR.format(study+run)
+        cfg.CONFIG.LOG.RES_DIR = "debug_{}".format(study+run)
+        cfg.CONFIG.LOG.EXP_NAME = "debug_{}".format(study+run)
 
     import socket 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

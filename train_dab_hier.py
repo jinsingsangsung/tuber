@@ -12,22 +12,12 @@ from pipelines.video_action_recognition_config import get_cfg_defaults
 from pipelines.launch import spawn_workers
 from utils.utils import build_log_dir, print_log
 from utils.lr_scheduler import build_scheduler
-import os, requests
+from utils.nsml_utils import *
 from datetime import date
 import numpy as np
 import random
 
 def main_worker(cfg):
-
-    # 실험 재등록 활성화
-    try:
-        api_host = os.environ["NSML_RUN_METADATA_API"]
-        api_secret = os.environ["NSML_RUN_SECRET"]
-        requests.put(f"{api_host}/v1/rescheduled", headers={"X-NSML-Run-Secret": api_secret}, json={"rescheduled": True}).raise_for_status()
-    except:
-        # Sometimes, the HTTP request might fail, but the training process should not be stopped.
-        import traceback
-        traceback.print_exc()
 
     # create tensorboard and logs
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
@@ -87,15 +77,24 @@ def main_worker(cfg):
         raise AssertionError("optimizer is one of SGD or ADAMW")
     # create lr scheduler
     lr_scheduler = build_scheduler(cfg, optimizer, len(train_loader))
-    import pdb; pdb.set_trace()
+
     if int(os.getenv('NSML_SESSION', '0')) > 0:
         # 실험 이어하기의 경우
-        cfg.CONFIG.MODEL.PRETRAINED_PATH = "제일 최근 모델 path 찾기"
-        model, optimizer, lr_scheduler = load_model_and_states(model, optimizer, lr_scheduler, cfg)
-        
-    # docs: add resume option
-    if cfg.CONFIG.MODEL.LOAD:
-        model, _ = load_model(model, cfg, load_fc=cfg.CONFIG.MODEL.LOAD_FC)
+        study = os.environ["NSML_STUDY"]
+        run = os.environ["NSML_RUN_NAME"].split("/")[-1]
+        exp_name = "{}-{}".format(study, run)
+        epochs_folder = os.listdir(os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.SAVE_DIR, exp_name)).sort()
+        latest_epoch = epochs_folder[-1]
+        cfg.CONFIG.MODEL.PRETRAINED_PATH = os.path.join(cfg.CONFIG.LOG.BASE_PATH, exp_name, cfg.CONFIG.SAVE_DIR, latest_epoch) # find the pretrained_path
+        model, optimizer, lr_scheduler, start_epoch = load_model_and_states(model, optimizer, lr_scheduler, cfg)
+        cfg.CONFIG.TRAIN.START_EPOCH = start_epoch
+        cfg.CONFIG.MODEL.LOAD = True
+        cfg.CONFIG.MODEL.LOAD_FC = True
+        cfg.CONFIG.MODEL.LOAD_DETR = False
+
+    else:
+        if cfg.CONFIG.MODEL.LOAD:
+            model, _ = load_model(model, cfg, load_fc=cfg.CONFIG.MODEL.LOAD_FC)
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0: 
         print_log(save_path, 'Start training...')
     start_time = time.time()
@@ -116,9 +115,12 @@ def main_worker(cfg):
                 validate_tuber_jhmdb_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)
             else:
                 validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)
-        
+        if os.getenv('NSML_RANK', '0') == '0':
+            set_nsml_reschedule()
+
     if writer is not None:
         writer.close()
+    unset_nsml_reschedule()
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
@@ -131,9 +133,9 @@ if __name__ == '__main__':
     parser.add_argument('--config-file',
                         default='./configuration/Dab_hier_CSN50_AVA22.yaml',
                         help='path to config file.')
-    parser.add_argument('--exp_name', default="dab_hier_{}-{}_{}", type=str)
     parser.add_argument('--random_seed', default=1, help='random_seed')
     parser.add_argument('--debug', action='store_true', help="debug, and ddp is disabled")
+    parser.add_argument()
     args = parser.parse_args()
     random.seed(args.random_seed)
     np.random.seed(args.random_seed)
@@ -147,12 +149,12 @@ if __name__ == '__main__':
     cfg.merge_from_file(args.config_file)
     study = os.environ["NSML_STUDY"]
     run = os.environ["NSML_RUN_NAME"].split("/")[-1]
-    cfg.CONFIG.LOG.RES_DIR = args.exp_name.format(study, run, date.today())
-    cfg.CONFIG.LOG.EXP_NAME = args.exp_name.format(study, run, date.today())
+    cfg.CONFIG.LOG.RES_DIR = cfg.CONFIG.LOG.RES_DIR.format(study, run)
+    cfg.CONFIG.LOG.EXP_NAME = cfg.CONFIG.LOG.EXP_NAME.format(study, run)
     if args.debug:
         cfg.DDP_CONFIG.DISTRIBUTED = False
-        cfg.CONFIG.LOG.RES_DIR = cfg.CONFIG.LOG.RES_DIR.format(study+run)
-        cfg.CONFIG.LOG.EXP_NAME = cfg.CONFIG.LOG.EXP_NAME.format(study+run)
+        cfg.CONFIG.LOG.RES_DIR = "debug_{}".format(study+run)
+        cfg.CONFIG.LOG.EXP_NAME = "debug_{}".format(study+run)
     
     import socket 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
