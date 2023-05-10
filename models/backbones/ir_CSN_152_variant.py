@@ -197,6 +197,7 @@ def build_model(n_classes=400,
                 use_affine=True,
                 tune_point=5,
                 last_stride=True,
+                gpu_world_rank=0,
                 log_path=None):
 
     model = ResNeXt(ResNeXtBottleneck,
