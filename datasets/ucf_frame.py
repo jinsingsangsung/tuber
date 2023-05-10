@@ -89,6 +89,7 @@ class VideoDataset(Dataset):
 
         print(self.video_to_sample.__len__(), "{} videos indexed".format(mode))
         index_to_sample = []
+        total_clips = 0
         for vid in self.video_to_sample:
             nframes = self.dataset['nframes'][vid] # note that not all frames are properly annotated
             # nframes = len(list(self.dataset['gttubes'][vid].values())[0][0]) # number of annotated frames
@@ -98,6 +99,8 @@ class VideoDataset(Dataset):
             end_pad = amount_to_pad - front_pad
             # let's take the center frame of the clip
             index_to_sample.extend([(vid, i*clip_len+(clip_len//2)-front_pad+1, front_pad, end_pad, nframes) for i in range(num_clips)])
+            total_clips += num_clips
+        print("total {} clips: {}".format(mode, total_clips))
         self.index_to_sample = index_to_sample
         self.labelmap = self.dataset['labels']
         self.max_person = 0
@@ -154,12 +157,10 @@ class VideoDataset(Dataset):
             # see if there is a overlapping region between clip and GT
             clip_start_frame = c_frame-self.clip_len//2
             clip_end_frame = c_frame+self.clip_len//2-1
-            # if clip_start_frame <= 0:
-            #     pad_front = True
-            # if clip_end_frame > nframes:
-            #     pad_end = True
-            if len(tubes) > 1:
-                print(vid_id, len(tubes))
+            pad_front = True if clip_start_frame <= 0 else False
+            pad_end = True if clip_end_frame > nframes else False
+            # if len(tubes) > 1:
+            #     print(vid_id, len(tubes))
             for t in tubes:
                 box_ = t[:, 0:5] # all frames
                 tube = []
@@ -176,9 +177,9 @@ class VideoDataset(Dataset):
                     classes.append(classes_)
                 
                 # case2: clip overlap the front part of the GT
-                elif clip_end_frame >= gt_start_frame and clip_start_frame <= gt_start_frame:
+                elif clip_end_frame >= gt_start_frame and clip_start_frame <= gt_start_frame and clip_end_frame < gt_end_frame:
                     classes_ = [self.num_classes for _ in range(gt_start_frame - clip_start_frame)]
-                    tube_ = [[n, -1, -1, -1, -1] for n in range(clip_start_frame, gt_start_frame)]
+                    tube.extend([[n, -1, -1, -1, -1] for n in range(clip_start_frame, gt_start_frame)])
                     # resizing process
                     if len(box_[0]) > 0: # if box is valid
                         for box in box_[:-gt_end_frame+clip_end_frame,:]:
@@ -186,15 +187,17 @@ class VideoDataset(Dataset):
                             p_y1 = np.int_(box[2] / oh * nh)
                             p_x2 = np.int_(box[3] / ow * nw)
                             p_y2 = np.int_(box[4] / oh * nh)
-                            tube_.append([box[0], p_x1, p_y1, p_x2, p_y2])
+                            tube.append([box[0], p_x1, p_y1, p_x2, p_y2])
                             classes_.append(np.clip(ilabel, 0, 24))
-                    boxes.append(tube_)
+                    boxes.append(tube)
                     classes.append(classes_)
                     tube_len.append(len(box_[:-gt_end_frame+clip_end_frame,:]))
-                    vis[0] = 1                    
+                    vis[0] = 1        
+                    if len(tube) != self.clip_len:
+                        print("case2:", clip_start_frame, clip_end_frame, gt_start_frame, gt_end_frame, len(tube))            
 
                 # case3: clip overlap the end part of the GT
-                elif clip_end_frame > gt_end_frame and clip_start_frame <= gt_end_frame:
+                elif clip_end_frame >= gt_end_frame and clip_start_frame >= gt_start_frame:
                     classes_ = []
                     if len(box_[0]) > 0: # if box is valid
                         for box in box_[clip_start_frame-gt_start_frame:,:]:
@@ -209,8 +212,10 @@ class VideoDataset(Dataset):
                     boxes.append(tube)
                     classes.append(classes_)
                     tube_len.append(len(box_[clip_start_frame-gt_start_frame:,:]))
-                    
+                    if len(tube) != self.clip_len:
+                        print("case3:", clip_start_frame, clip_end_frame, gt_start_frame, gt_end_frame, len(tube))                    
                     vis[0] = 1
+
                 # case4: clip overlaps inside the GT
                 elif clip_start_frame > gt_start_frame and clip_end_frame < gt_end_frame:
                     classes_ = []
@@ -227,6 +232,30 @@ class VideoDataset(Dataset):
                     classes.append(classes_)
 
                     vis[0] = 1 
+                    if len(tube) != self.clip_len:
+                        print("case4:", clip_start_frame, clip_end_frame, gt_start_frame, gt_end_frame, len(tube))
+                
+                # case5: clip overlaps over the whole GT
+                elif clip_start_frame <= gt_start_frame and clip_end_frame >= gt_end_frame:
+                    classes_ = [self.num_classes for _ in range(gt_start_frame - clip_start_frame)]
+                    tube.extend([[n, -1, -1, -1, -1] for n in range(clip_start_frame, gt_start_frame)])
+                    # resizing process
+                    if len(box_[0]) > 0: # if box is valid
+                        for box in box_:
+                            p_x1 = np.int_(box[1] / ow * nw)
+                            p_y1 = np.int_(box[2] / oh * nh)
+                            p_x2 = np.int_(box[3] / ow * nw)
+                            p_y2 = np.int_(box[4] / oh * nh)
+                            tube.append([box[0], p_x1, p_y1, p_x2, p_y2])
+                            classes_.append(np.clip(ilabel, 0, 24))
+                    classes_.extend([self.num_classes for _ in range(clip_end_frame - gt_end_frame)])
+                    tube.extend([[n, -1, -1, -1, -1] for n in range(gt_end_frame, clip_end_frame)])
+                    boxes.append(tube)
+                    classes.append(classes_)
+                    tube_len.append(self.clip_len)   
+                    if len(tube) != self.clip_len:
+                        print("case5:", clip_start_frame, clip_end_frame, gt_start_frame, gt_end_frame, len(tube))                    
+
 
                 else:
                     print("!edge case detected!")
@@ -257,15 +286,15 @@ class VideoDataset(Dataset):
             classes = torch.as_tensor(classes, dtype=torch.int64)
             # print(classes.shape) num_boxes, clip_len
                 
-            target["image_id"] = [str(sample_id).replace("/", "_")]
+            target["image_id"] = [str(vid_id).replace("/", "_")]
             target['boxes'] = boxes
             target['raw_boxes'] = raw_boxes
             target["labels"] = classes
             target["orig_size"] = torch.as_tensor([int(nh), int(nw)])
             target["size"] = torch.as_tensor([int(nh), int(nw)])
             target["vis"] = torch.as_tensor(vis)
-            target['front_pad'] = torch.tensor(front_pad)
-            target['end_pad'] = torch.tensor(end_pad)
+            target['front_pad'] = torch.tensor(front_pad) if pad_front else torch.tensor(0)
+            target['end_pad'] = torch.tensor(end_pad) if pad_end else torch.tensor(0)
             target['tube_len'] = torch.tensor(tube_len)
             self.index_cnt = self.index_cnt + 1
 

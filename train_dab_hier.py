@@ -7,7 +7,7 @@ import torch.optim
 # from tensorboardX import SummaryWriter
 from models.dab_hier import build_model
 from utils.model_utils import deploy_model, load_model, save_checkpoint
-from utils.video_action_recognition import train_tuber_detection, validate_tuber_detection, validate_tuber_ucf_detection
+from utils.video_action_recognition import train_tuber_detection, validate_tuber_detection, validate_tuber_ucf_detection, validate_tuber_jhmdb_detection
 from pipelines.video_action_recognition_config import get_cfg_defaults
 from pipelines.launch import spawn_workers
 from utils.utils import build_log_dir, print_log
@@ -96,8 +96,10 @@ def main_worker(cfg):
         if (epoch % cfg.CONFIG.VAL.FREQ == 0 or epoch == cfg.CONFIG.TRAIN.EPOCH_NUM - 1):
             if cfg.CONFIG.DATA.DATASET_NAME == 'ava':
                 validate_tuber_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)
+            elif cfg.CONFIG.DATA.DATASET_NAME == 'jhmdb':
+                validate_tuber_jhmdb_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)
             else:
-                validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)    
+                validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)
         
     if writer is not None:
         writer.close()

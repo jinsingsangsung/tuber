@@ -73,7 +73,7 @@ class STDetectionEvaluaterUCF(object):
                 scores = np.array(data[6:])
                 gt_videos[vname]["tubes"].append([data[1], data[2], data[3], data[4], data[5]])
                 if len(gt_videos[vname]["gt_classes"]) == 0:
-                    gt_videos[vname]["gt_classes"] = int(scores.nonzero()[0])+1
+                    gt_videos[vname]["gt_classes"].append(int(scores.nonzero()[0])+1)
 
                 if (data[4] - data[2]) * (data[5] - data[3]) < 10:
                     self.exclude_key.append(image_key)
@@ -149,7 +149,16 @@ class STDetectionEvaluaterUCF(object):
                 )
                 sample_dict_per_image[image_key]['labels'].append(x+1)
                 sample_dict_per_image[image_key]['scores'].append(scores[x])
-                all_boxes[x] = np.asarray([data[0], data[1], data[2], data[3], scores[x]], dtype=float)
+                # all_boxes[image_key][x+1] = np.asarray([data[0], data[1], data[2], data[3], scores[x]], dtype=float)
+
+                for s in range(len(scores)):
+                    if not (s+1) in all_boxes[image_key]:
+                        all_boxes[image_key][s+1] = []
+                    
+                    if s != x:
+                        all_boxes[image_key][s+1].append([data[0], data[1], data[2], data[3], 0])
+                    else:
+                        all_boxes[image_key][s+1].append([data[0], data[1], data[2], data[3], scores[x]])                
                 # for x in range(len(scores)):
                 #     sample_dict_per_image[image_key]['bbox'].append(
                 #         np.asarray([data[0], data[1], data[2], data[3]], dtype=float)
