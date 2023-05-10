@@ -7,7 +7,8 @@ Modified by Zhang Yanyi
 
 import torch
 import torch.nn as nn
-
+from utils.utils import print_log
+import os
 
 eps = 1e-3
 bn_mmt = 0.1
@@ -128,7 +129,7 @@ class ResNeXt(nn.Module):
                                        stride=2, temporal_stride=1, expansion=4)
 
         last_stride = 2 if last_stride else 1
-        print("last stride: {}".format(last_stride))
+        # print("last stride: {}".format(last_stride))
         self.layer4 = self._make_layer(block, in_planes=1024, planes=512, blocks=block_nums[3],
                                        stride=last_stride, temporal_stride=1, expansion=4)
 
@@ -196,7 +197,9 @@ def build_model(n_classes=400,
                 load_pretrain=True,
                 use_affine=True,
                 tune_point=5,
-                last_stride=True):
+                last_stride=True,
+                gpu_world_rank=0,
+                log_path=None):
 
     model = ResNeXt(ResNeXtBottleneck,
                     num_classes=n_classes,
@@ -207,9 +210,9 @@ def build_model(n_classes=400,
                     last_stride=last_stride)
 
     if load_pretrain and n_classes == 400 and load_fc:
-        load_weights(model, pretrain_path=pretrain_path, load_fc=load_fc, use_affine=use_affine, tune_point=tune_point)
+        load_weights(model, pretrain_path=pretrain_path, load_fc=load_fc, use_affine=use_affine, tune_point=tune_point, gpu_world_rank=gpu_world_rank, log_path=log_path)
     elif load_pretrain:
-        load_weights(model, pretrain_path=pretrain_path, load_fc=False, use_affine=use_affine, tune_point=tune_point)
+        load_weights(model, pretrain_path=pretrain_path, load_fc=False, use_affine=use_affine, tune_point=tune_point, gpu_world_rank=gpu_world_rank, log_path=log_path)
 
     return model
 
@@ -243,9 +246,10 @@ def copy_bn(layer, layer_name, weights, weights_dict_copy, use_affine=True):
                      weights_dict_copy=weights_dict_copy)
 
 
-def load_weights(model, pretrain_path, load_fc=True, use_affine=False, tune_point=5):
+def load_weights(model, pretrain_path, load_fc=True, use_affine=False, tune_point=5, gpu_world_rank=0, log_path=None):
     import scipy.io as sio
-    print("load weights plus")
+    if gpu_world_rank == 0:
+        print_log(log_path, "load weights plus")
     r_weights = sio.loadmat(pretrain_path)
     r_weights_copy = sio.loadmat(pretrain_path)
 
@@ -314,15 +318,17 @@ def load_weights(model, pretrain_path, load_fc=True, use_affine=False, tune_poin
                      weights=r_weights['last_out_L400_b'][0],
                      weights_dict_copy=r_weights_copy)
 
-    print("load pretrain model from " + pretrain_path)
-    print("load fc", load_fc)
+    if gpu_world_rank == 0:
+        print_log(log_path, "load pretrain model from " + pretrain_path)
+        print_log(log_path, "load fc", load_fc)
     for k, v in r_weights_copy.items():
         if "momentum" not in k and "model_iter" not in k and "__globals__" not in k and "__header__" not in k and "lr" not in k and "__version__" not in k:
-            print(k, v.shape)
+            if gpu_world_rank == 0: print_log(log_path, k, v.shape)
 
 
 def build_CSN(cfg):
     tune_point = 4
+    log_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
     model = build_model(n_classes=cfg.CONFIG.DATA.NUM_CLASSES,
                         sample_size=cfg.CONFIG.DATA.IMG_SIZE,
                         sample_duration=cfg.CONFIG.MODEL.TEMP_LEN,
@@ -331,7 +337,10 @@ def build_CSN(cfg):
                         load_pretrain=cfg.CONFIG.MODEL.PRETRAINED,
                         use_affine=False,
                         tune_point=tune_point,
-                        last_stride=cfg.CONFIG.MODEL.LAST_STRIDE)
-    print("tune point: {}".format(tune_point))
+                        last_stride=cfg.CONFIG.MODEL.LAST_STRIDE,
+                        gpu_world_rank=cfg.DDP_CONFIG.GPU_WORLD_RANK,
+                        log_path=log_path)
+    if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
+        print_log(log_path, "build CSN-152, tune point: {}".format(tune_point))
     return model
 
