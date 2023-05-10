@@ -144,8 +144,6 @@ if __name__ == '__main__':
     torch.cuda.manual_seed(args.random_seed)
     torch.cuda.manual_seed_all(args.random_seed)
 
-    args = parser.parse_args()
-
     cfg = get_cfg_defaults()
     cfg.merge_from_file(args.config_file)
     study = os.environ["NSML_STUDY"]
