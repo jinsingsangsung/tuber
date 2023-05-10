@@ -13,7 +13,6 @@ from pipelines.launch import spawn_workers
 from utils.utils import build_log_dir, print_log
 from utils.lr_scheduler import build_scheduler
 from utils.nsml_utils import *
-from datetime import date
 import numpy as np
 import random
 import os
@@ -31,6 +30,7 @@ def main_worker(cfg):
 
     # create model
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:    
+        print_log(save_path, datetime.datetime.today())
         print_log(save_path, 'Creating TubeR model: %s' % cfg.CONFIG.MODEL.NAME)
         print_log(save_path, "use single frame:", cfg.CONFIG.MODEL.SINGLE_FRAME)
     model, criterion, postprocessors = build_model(cfg)
@@ -85,10 +85,11 @@ def main_worker(cfg):
         # 실험 이어하기의 경우
         study = os.environ["NSML_STUDY"]
         run = os.environ["NSML_RUN_NAME"].split("/")[-1]
-        exp_name = "{}-{}".format(study, run)
-        epochs_folder = os.listdir(os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.SAVE_DIR, exp_name)).sort()
+        exp_name = cfg.CONFIG.LOG.EXP_NAME.format(study, run)
+        epochs_folder = os.listdir(os.path.join(cfg.CONFIG.LOG.BASE_PATH, exp_name, cfg.CONFIG.LOG.SAVE_DIR))
+        epochs_folder.sort()
         latest_epoch = epochs_folder[-1]
-        cfg.CONFIG.MODEL.PRETRAINED_PATH = os.path.join(cfg.CONFIG.LOG.BASE_PATH, exp_name, cfg.CONFIG.SAVE_DIR, latest_epoch) # find the pretrained_path
+        cfg.CONFIG.MODEL.PRETRAINED_PATH = os.path.join(cfg.CONFIG.LOG.BASE_PATH, exp_name, cfg.CONFIG.LOG.SAVE_DIR, latest_epoch) # find the pretrained_path
         model, optimizer, lr_scheduler, start_epoch = load_model_and_states(model, optimizer, lr_scheduler, cfg)
         cfg.CONFIG.TRAIN.START_EPOCH = start_epoch
         cfg.CONFIG.MODEL.LOAD = True
@@ -138,15 +139,12 @@ if __name__ == '__main__':
                         help='path to config file.')
     parser.add_argument('--random_seed', default=1, help='random_seed')
     parser.add_argument('--debug', action='store_true', help="debug, and ddp is disabled")
-    parser.add_argument()
     args = parser.parse_args()
     random.seed(args.random_seed)
     np.random.seed(args.random_seed)
     torch.manual_seed(args.random_seed)
     torch.cuda.manual_seed(args.random_seed)
     torch.cuda.manual_seed_all(args.random_seed)
-
-    args = parser.parse_args()
 
     cfg = get_cfg_defaults()
     cfg.merge_from_file(args.config_file)
@@ -156,8 +154,8 @@ if __name__ == '__main__':
     cfg.CONFIG.LOG.EXP_NAME = cfg.CONFIG.LOG.EXP_NAME.format(study, run)
     if args.debug:
         cfg.DDP_CONFIG.DISTRIBUTED = False
-        cfg.CONFIG.LOG.RES_DIR = "debug_{}".format(study+run)
-        cfg.CONFIG.LOG.EXP_NAME = "debug_{}".format(study+run)
+        cfg.CONFIG.LOG.RES_DIR = "debug_{}-{}".format(study,run)
+        cfg.CONFIG.LOG.EXP_NAME = "debug_{}-{}".format(study,run)
     
     import socket 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
