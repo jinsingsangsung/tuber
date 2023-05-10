@@ -59,7 +59,7 @@ CONFIG:
     LAST_STRIDE: False
     GENERATE_LFB: False
     NAME: 'ava_detr_9_224'
-    ENC_LAYERS: 3
+    ENC_LAYERS: 4
     DEC_LAYERS: 6
     D_MODEL: 256
     NHEAD: 8
@@ -114,4 +114,4 @@ CONFIG:
     SAVE_FREQ: 5
     RES_DIR: Dab_hier_270-40_0507
     EXP_NAME: Dab_hier_270-40_0507
-    DISPLAY_FREQ: 20
+    DISPLAY_FREQ: 1000
