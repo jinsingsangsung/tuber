@@ -11,7 +11,7 @@ import numpy as np
 import torch
 import math
 
-from .utils import AverageMeter, accuracy, calculate_mAP, read_labelmap
+from .utils import AverageMeter, accuracy, calculate_mAP, read_labelmap, print_log
 from evaluates.evaluate_ava import STDetectionEvaluater, STDetectionEvaluaterSinglePerson
 from evaluates.evaluate_ucf import STDetectionEvaluaterUCF
 from evaluates.evaluate_jhmdb import STDetectionEvaluaterJHMDB
@@ -100,8 +100,9 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
     end = time.time()
     model.train()
     criterion.train()
-    header = 'Epoch: [{}]'.format(epoch)
-    print_freq = 10
+    save_path = cfg.CONFIG.LOG.EXP_DIR
+    # header = 'Epoch: [{}]'.format(epoch)
+    # print_freq = 10
     # batch_bar = tqdm(total=len(data_loader), dynamic_ncols=True, leave=False, position=0, desc='train_detection')
     for idx, data in enumerate(data_loader):
 
@@ -183,15 +184,15 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
         if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
             if idx % cfg.CONFIG.LOG.DISPLAY_FREQ == 0:
                 print_string = '(train) Epoch: [{0}][{1}/{2}]'.format(epoch, idx + 1, len(data_loader))
-                print(print_string)
+                print_log(save_path, print_string)
                 for param in optimizer.param_groups:
                     lr = param['lr']
-                print('lr: ', lr)
+                print_log(save_path, 'lr: ', lr)
 
                 print_string = 'data_time: {data_time:.3f}, batch time: {batch_time:.3f}'.format(
                     data_time=data_time.val,
                     batch_time=batch_time.val)
-                print(print_string)
+                print_log(save_path, print_string)
 
             # reduce on single GPU
             loss_dict_reduced = loss_dict
@@ -218,8 +219,8 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
                     pass
 
             if not math.isfinite(loss_value):
-                print("Loss is {}, stopping training".format(loss_value))
-                print(loss_dict_reduced)
+                print_log(save_path, "Loss is {}, stopping training".format(loss_value))
+                print_log(save_path, loss_dict_reduced)
                 exit(1)
 
             if idx % cfg.CONFIG.LOG.DISPLAY_FREQ == 0:
@@ -230,7 +231,7 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
                     loss_giou=losses_giou.avg,
                     loss_ce=losses_ce.avg,
                 )
-                print(print_string)
+                print_log(save_path, print_string)
 
             # writer.add_scalar('train/class_error', class_err.avg, idx + epoch * len(data_loader))
             # writer.add_scalar('train/totall_loss', losses_avg.avg, idx + epoch * len(data_loader))
@@ -282,14 +283,16 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
     buff_GT_anno = []
     buff_GT_id = []
 
+    save_path = cfg.CONFIG.LOG.EXP_DIR
+
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
         tmp_path = "{}/{}".format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR)
         if not os.path.exists(tmp_path): os.makedirs(tmp_path)
         tmp_dirs_ = glob.glob("{}/{}/*.txt".format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR))
         for tmp_dir in tmp_dirs_:
             os.remove(tmp_dir)
-            print("remove {}".format(tmp_dir))
-        print("all tmp files removed")
+            print_log(save_path, "remove {}".format(tmp_dir))
+        print_log(save_path, "all tmp files removed")
 
     for idx, data in enumerate(data_loader):
         data_time.update(time.time() - end)
@@ -422,11 +425,11 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
         if (cfg.DDP_CONFIG.GPU_WORLD_RANK == 0):
             if idx % cfg.CONFIG.LOG.DISPLAY_FREQ == 0:
                 print_string = '(val) Epoch: [{0}][{1}/{2}]'.format(epoch, idx + 1, len(data_loader))
-                print(print_string)
+                print_log(save_path, print_string)
                 print_string = 'data_time: {data_time:.3f}, batch time: {batch_time:.3f}'.format(
                     data_time=data_time.val,
                     batch_time=batch_time.val)
-                print(print_string)
+                print_log(save_path, print_string)
 
             # reduce losses over all GPUs for logging purposes
             # loss_dict_reduced = utils.reduce_dict(loss_dict)
@@ -454,8 +457,8 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
                     pass
 
             if not math.isfinite(loss_value):
-                print("Loss is {}, stopping eval".format(loss_value))
-                print(loss_dict_reduced)
+                print_log(save_path, "Loss is {}, stopping eval".format(loss_value))
+                print_log(save_path, loss_dict_reduced)
                 exit(1)
             if idx % cfg.CONFIG.LOG.DISPLAY_FREQ == 0:
                 print_string = 'class_error: {class_error:.3f}, loss: {loss:.3f}, loss_bbox: {loss_bbox:.3f}, loss_giou: {loss_giou:.3f}, loss_ce: {loss_ce:.3f}'.format(
@@ -467,7 +470,7 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
                     # loss_ce_b=losses_ce_b.avg,
                     # cardinality_error=loss_dict_reduced['cardinality_error']
                 )
-                print(print_string)
+                print_log(save_path, print_string)
             # print("len(buff_id): ", len(buff_id))
             # print("len(buff_binary): ", len(np.concatenate(buff_binary, axis=0)))
             # print("len(buff_anno): ", len(np.concatenate(buff_anno, axis=0)))
@@ -507,7 +510,7 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
         for x in range(len(buff_GT_id)):
             data = np.concatenate([buff_GT_anno[x], buff_GT_label[x]])
             f.write("{} {}\n".format(buff_GT_id[x], data.tolist()))
-    print("tmp files are all loaded")
+    print_log(save_path, "tmp files are all loaded")
 
     # write files and align all workers
     torch.distributed.barrier()
@@ -525,10 +528,10 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
         file_path_lst = [tmp_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, x) for x in range(cfg.DDP_CONFIG.GPU_WORLD_SIZE)]
         evaluater.load_detection_from_path(file_path_lst)
         mAP, metrics = evaluater.evaluate()
-        print(metrics)
+        print_log(save_path, metrics)
         print_string = 'mAP: {mAP:.5f}'.format(mAP=mAP[0])
-        print(print_string)
-        print(mAP)
+        print_log(save_path, print_string)
+        print_log(save_path, mAP)
         # writer.add_scalar('val/val_mAP_epoch', mAP[0], epoch)
         Map_ = mAP[0]
 
@@ -578,15 +581,17 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
     buff_GT_anno = []
     buff_GT_id = []
 
+    save_path = cfg.CONFIG.LOG.EXP_DIR
+    
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
         tmp_path = "{}/{}".format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR)
         if not os.path.exists(tmp_path): os.makedirs(tmp_path)
         tmp_dirs_ = glob.glob("{}/{}/*.txt".format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR))
         for tmp_dir in tmp_dirs_:
             os.remove(tmp_dir)
-            print("remove {}".format(tmp_dir))
-        print("all tmp files removed")
-    
+            print_log(save_path, "remove {}".format(tmp_dir))
+        print_log(save_path, "all tmp files removed")
+
     for idx, data in enumerate(data_loader):
         data_time.update(time.time() - end)
 
@@ -659,7 +664,7 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
         T = scores.shape[1]
         scores = scores.reshape(-1, *scores.shape[-2:])
         boxes = boxes.reshape(-1, *boxes.shape[-2:])
-        
+
         for bidx in range(B):
 
             if len(targets[bidx]["raw_boxes"]) == 0:
@@ -667,6 +672,7 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
 
             frame_id = batch_id[bidx][0]
             # key_pos = batch_id[bidx][1]
+
             # out_key_pos = key_pos // cfg.CONFIG.MODEL.DS_RATE
             # out_key_pos = key_pos
             # print("key pos: {}, ds_rate: {}".format(key_pos, cfg.CONFIG.MODEL.DS_RATE))
@@ -679,7 +685,7 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
                 buff_binary.append(output_b)
             except:
                 pass
-            
+
             for t in range(T-front_pad-end_pad):
                 buff_GT_id.extend([frame_id + f"_{t:02d}"])
                 for l in range(cfg.CONFIG.MODEL.QUERY_NUM):
@@ -713,11 +719,11 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
         if (cfg.DDP_CONFIG.GPU_WORLD_RANK == 0):
             if idx % cfg.CONFIG.LOG.DISPLAY_FREQ == 0:
                 print_string = '(val) Epoch: [{0}][{1}/{2}]'.format(epoch, idx + 1, len(data_loader))
-                print(print_string)
+                print_log(save_path, print_string)
                 print_string = 'data_time: {data_time:.3f}, batch time: {batch_time:.3f}'.format(
                     data_time=data_time.val,
                     batch_time=batch_time.val)
-                print(print_string)
+                print_log(save_path, print_string)
 
             # reduce losses over all GPUs for logging purposes
             # loss_dict_reduced = utils.reduce_dict(loss_dict)
@@ -737,8 +743,8 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
             class_err.update(loss_dict_reduced['class_error'], len(targets))
 
             if not math.isfinite(loss_value):
-                print("Loss is {}, stopping eval".format(loss_value))
-                print(loss_dict_reduced)
+                print_log(save_path, "Loss is {}, stopping eval".format(loss_value))
+                print_log(save_path, loss_dict_reduced)
                 exit(1)
             if idx % cfg.CONFIG.LOG.DISPLAY_FREQ == 0:
                 print_string = 'class_error: {class_error:.3f}, loss: {loss:.3f}, loss_bbox: {loss_bbox:.3f}, loss_giou: {loss_giou:.3f}, loss_ce: {loss_ce:.3f}'.format(
@@ -748,7 +754,7 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
                     loss_giou=losses_giou.avg,
                     loss_ce=losses_ce.avg
                 )
-                print(print_string)
+                print_log(save_path, print_string)
 
     # if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
     #     writer.add_scalar('val/class_error', class_err.avg, epoch)
@@ -768,19 +774,18 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
     buff_GT_anno = np.concatenate(buff_GT_anno, axis=0)
     # print(buff_output.shape, buff_anno.shape, len(buff_id), buff_GT_anno.shape, buff_GT_label.shape, len(buff_GT_id))
     tmp_path = '{}/{}/{}.txt'
-
     with open(tmp_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, cfg.DDP_CONFIG.GPU_WORLD_RANK), 'w') as f:
         for x in range(len(buff_id)):
             data = np.concatenate([buff_anno[x], buff_output[x]])
             f.write("{} {}\n".format(buff_id[x], data.tolist()))
-    # try:
-    #     tmp_binary_path = '{}/{}/binary_{}.txt'
-    #     with open(tmp_binary_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, cfg.DDP_CONFIG.GPU_WORLD_RANK), 'w') as f:
-    #         for x in range(len(buff_id)):
-    #             data = buff_binary[x]
-    #             f.write("{} {}\n".format(buff_id[x], data.tolist()))
-    # except:
-    #     pass
+    try:
+        tmp_binary_path = '{}/{}/binary_{}.txt'
+        with open(tmp_binary_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, cfg.DDP_CONFIG.GPU_WORLD_RANK), 'w') as f:
+            for x in range(len(buff_id)):
+                data = buff_binary[x]
+                f.write("{} {}\n".format(buff_id[x], data.tolist()))
+    except:
+        pass
 
     tmp_GT_path = '{}/{}/GT_{}.txt'
     with open(tmp_GT_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, cfg.DDP_CONFIG.GPU_WORLD_RANK), 'w') as f:
@@ -805,15 +810,15 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
         file_path_lst = [tmp_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, x) for x in range(cfg.DDP_CONFIG.GPU_WORLD_SIZE)]
         evaluater.load_detection_from_path(file_path_lst)
         mAP, metrics, v_mAP, v_metrics = evaluater.evaluate()
-        # print(metrics)
+        print_log(save_path, metrics)
         print_string = 'mAP: {mAP:.5f}'.format(mAP=mAP[0])
-        print(print_string)
-        print(mAP)
-        print("video-level eval")
-        # print(v_metrics)
+        print_log(save_path, print_string)
+        print_log(save_path, mAP)
+        print_log(save_path, "video-level eval")
+        print_log(save_path, v_metrics)
         print_string = 'mAP: {v_mAP:.5f}'.format(v_mAP=v_mAP[0])
-        print(print_string)
-        print(v_mAP)
+        print_log(save_path, print_string)
+        print_log(save_path, v_mAP)
         # writer.add_scalar('val/val_mAP_epoch', mAP[0], epoch)
         Map_ = mAP[0]
         Map_v = v_mAP[0]

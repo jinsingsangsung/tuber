@@ -3,15 +3,17 @@ import hashlib
 import requests
 from tqdm import tqdm
 import torch.nn as nn
-
+import random
 import torch
+import numpy as np
+from .utils import print_log
 
 __all__ = ['load_detr_weights', 'deploy_model', 'load_model', 'save_model', 'save_checkpoint', 'check_sha1', 'download']
 
 def load_detr_weights(model, pretrain_dir, cfg):
     checkpoint = torch.load(pretrain_dir, map_location='cpu')
     model_dict = model.state_dict()
-
+    log_path = cfg.CONFIG.LOG.EXP_DIR
     pretrained_dict = {}
     if "dab-d-tuber-detr" in cfg.CONFIG.MODEL.PRETRAIN_TRANSFORMER_DIR:
         l = 0
@@ -39,29 +41,33 @@ def load_detr_weights(model, pretrain_dir, cfg):
                 query_size = cfg.CONFIG.MODEL.QUERY_NUM
                 pretrained_dict.update({k:v[:query_size]})
             # print(v.shape) # v의 len이 135임! 따라서 query size > 135면 error남
-            print("query_size:", query_size)
+            if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
+                print_log(log_path, "query_size:", query_size)
             # pretrained_dict.update({k: v[:query_size]})
     pretrained_dict_ = {k: v for k, v in pretrained_dict.items() if k in model_dict} # model_dict에는 "module.query_embed.weight"라는 key가 있음
     unused_dict = {k: v for k, v in pretrained_dict.items() if not k in model_dict}
     # not_found_dict = {k: v for k, v in model_dict.items() if not k in pretrained_dict}
     # print(pretrained_dict_["module.query_embed.weight"].shape)
-    print("number of detr unused model layers:", len(unused_dict.keys()))
-    print("number of detr used model layers:", len(pretrained_dict_.keys()))
+    if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
+        print_log(log_path, "number of detr unused model layers:", len(unused_dict.keys()))
+        print_log(log_path, "number of detr used model layers:", len(pretrained_dict_.keys()))
     # print("model_dict",[i for i in model_dict.keys()][:10])
     # print("not found layers:", not_found_dict.keys())
 
     model_dict.update(pretrained_dict_)
     model.load_state_dict(model_dict)
-    if len(pretrained_dict_.keys())!=0:
-        print("detr load pretrain success")
-    else:
-        print("detr load pretrain failed")
+    if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
+        if len(pretrained_dict_.keys())!=0:
+            print_log(log_path, "detr load pretrain success")
+        else:
+            print_log(log_path, "detr load pretrain failed")
 
 
 def deploy_model(model, cfg, is_tuber=True):
     """
     Deploy model to multiple GPUs for DDP training.
     """
+    log_path = cfg.CONFIG.LOG.EXP_DIR
     if cfg.DDP_CONFIG.DISTRIBUTED:
         if cfg.DDP_CONFIG.GPU is not None:
             torch.cuda.set_device(cfg.DDP_CONFIG.GPU)
@@ -79,10 +85,12 @@ def deploy_model(model, cfg, is_tuber=True):
         # DataParallel will divide and allocate batch_size to all available GPUs
         model = torch.nn.DataParallel(model).cuda()
     if cfg.CONFIG.MODEL.LOAD_DETR: #and is_tuber:  
-        print("loading detr")
-        load_detr_weights(model, cfg.CONFIG.MODEL.PRETRAIN_TRANSFORMER_DIR, cfg)
+        if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
+            print_log(log_path, "loading detr")
+            load_detr_weights(model, cfg.CONFIG.MODEL.PRETRAIN_TRANSFORMER_DIR, cfg)
     else:
-        print("detr is not loaded")
+        if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
+            print_log(log_path, "detr is not loaded")
 
     return model
 
@@ -92,7 +100,8 @@ def load_model(model, cfg, load_fc=True):
     Load pretrained model weights.
     """
     if os.path.isfile(cfg.CONFIG.MODEL.PRETRAINED_PATH):
-        print("=> loading checkpoint '{}'".format(cfg.CONFIG.MODEL.PRETRAINED_PATH))
+        log_path = cfg.CONFIG.LOG.EXP_DIR
+        print_log(log_path, "=> loading checkpoint '{}'".format(cfg.CONFIG.MODEL.PRETRAINED_PATH))
         if cfg.DDP_CONFIG.GPU is None:
             checkpoint = torch.load(cfg.CONFIG.MODEL.PRETRAINED_PATH)
         else:
@@ -110,26 +119,26 @@ def load_model(model, cfg, load_fc=True):
             pretrained_dict = {k: v for k, v in checkpoint['model'].items() if k in model_dict}
             unused_dict = {k: v for k, v in checkpoint['model'].items() if not k in model_dict}
             not_found_dict = {k: v for k, v in model_dict.items() if not k in checkpoint['model']}
-            print("number of unused model layers:", len(unused_dict.keys()))
-            print("number of not found layers:", len(not_found_dict.keys()))
+            print_log(log_path,"number of unused model layers:", len(unused_dict.keys()))
+            print_log(log_path,"number of not found layers:", len(not_found_dict.keys()))
             
         else:
             pretrained_dict = {k: v for k, v in checkpoint["model"].items() if k[7:] in model_dict}
             unused_dict = {k: v for k, v in checkpoint["model"].items() if not k[7:] in model_dict}
             not_found_dict = {k: v for k, v in model_dict.items() if not "module."+k in checkpoint["model"]}
-            print("number of loaded model layers:", len(pretrained_dict.keys()))
-            print("number of unused model layers:", len(unused_dict.keys()))
-            print("number of not found layers:", len(not_found_dict.keys()))
+            print_log(log_path,"number of loaded model layers:", len(pretrained_dict.keys()))
+            print_log(log_path,"number of unused model layers:", len(unused_dict.keys()))
+            print_log(log_path,"number of not found layers:", len(not_found_dict.keys()))
 
         model_dict.update(pretrained_dict)
         model.load_state_dict(model_dict, strict=False)
         try:
-            print("=> loaded checkpoint '{}' (epoch {})"
+            print_log(log_path,"=> loaded checkpoint '{}' (epoch {})"
                   .format(cfg.CONFIG.MODEL.PRETRAINED_PATH, checkpoint['epoch']))
         except:
-             print("=> loaded checkpoint '{}' (epoch 0)".format(cfg.CONFIG.MODEL.PRETRAINED_PATH, 0))
+            print_log(log_path,"=> loaded checkpoint '{}' (epoch 0)".format(cfg.CONFIG.MODEL.PRETRAINED_PATH, 0))
     else:
-        print("=> no checkpoint found at '{}'".format(cfg.CONFIG.MODEL.PRETRAINED_PATH))
+        print_log(log_path,"=> no checkpoint found at '{}'".format(cfg.CONFIG.MODEL.PRETRAINED_PATH))
 
     return model, None
 
@@ -155,19 +164,28 @@ def save_model(model, optimizer, epoch, cfg):
 
 
 def save_checkpoint(cfg, epoch, model, max_accuracy, optimizer, lr_scheduler):
+    cuda_rng_state = 0
+    if model.device == 'cuda':
+        cuda_rng_state = torch.cuda.get_rng_state()
+
     save_state = {'model': model.state_dict(),
                   'optimizer': optimizer.state_dict(),
                   'lr_scheduler': lr_scheduler.state_dict(),
                   'max_accuracy': max_accuracy,
                   'epoch': epoch,
-                  'config': cfg}
+                  'config': cfg,
+                  'random_python': random.getstate(),
+                  'random_numpy': np.random.getstate(),
+                  'random_pytorch': torch.get_rng_state(),
+                  'random_cuda': cuda_rng_state}
 
     model_save_dir = os.path.join(cfg.CONFIG.LOG.BASE_PATH,
                                   cfg.CONFIG.LOG.EXP_NAME,
                                   cfg.CONFIG.LOG.SAVE_DIR)
     if not os.path.exists(model_save_dir):
         os.makedirs(model_save_dir)
-    print('Saving model at epoch %d to %s' % (epoch, model_save_dir))
+    log_path = cfg.CONFIG.LOG.EXP_DIR
+    print_log(log_path, 'Saving model at epoch %d to %s' % (epoch, model_save_dir))
 
     save_path = os.path.join(model_save_dir, f'ckpt_epoch_{epoch}.pth')
     torch.save(save_state, save_path)
