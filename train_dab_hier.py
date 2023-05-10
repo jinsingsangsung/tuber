@@ -6,7 +6,7 @@ import torch
 import torch.optim
 # from tensorboardX import SummaryWriter
 from models.dab_hier import build_model
-from utils.model_utils import deploy_model, load_model, save_checkpoint
+from utils.model_utils import deploy_model, load_model, save_checkpoint, load_model_and_states
 from utils.video_action_recognition import train_tuber_detection, validate_tuber_detection, validate_tuber_ucf_detection, validate_tuber_jhmdb_detection
 from pipelines.video_action_recognition_config import get_cfg_defaults
 from pipelines.launch import spawn_workers
@@ -18,10 +18,21 @@ import numpy as np
 import random
 
 def main_worker(cfg):
+
+    # 실험 재등록 활성화
+    try:
+        api_host = os.environ["NSML_RUN_METADATA_API"]
+        api_secret = os.environ["NSML_RUN_SECRET"]
+        requests.put(f"{api_host}/v1/rescheduled", headers={"X-NSML-Run-Secret": api_secret}, json={"rescheduled": True}).raise_for_status()
+    except:
+        # Sometimes, the HTTP request might fail, but the training process should not be stopped.
+        import traceback
+        traceback.print_exc()
+
     # create tensorboard and logs
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
         # tb_logdir = build_log_dir(cfg)
-        save_path = cfg.CONFIG.LOG.EXP_DIR
+        save_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
         # writer = SummaryWriter(log_dir=tb_logdir)
         writer = None
     else:
@@ -76,7 +87,12 @@ def main_worker(cfg):
         raise AssertionError("optimizer is one of SGD or ADAMW")
     # create lr scheduler
     lr_scheduler = build_scheduler(cfg, optimizer, len(train_loader))
-
+    import pdb; pdb.set_trace()
+    if int(os.getenv('NSML_SESSION', '0')) > 0:
+        # 실험 이어하기의 경우
+        cfg.CONFIG.MODEL.PRETRAINED_PATH = "제일 최근 모델 path 찾기"
+        model, optimizer, lr_scheduler = load_model_and_states(model, optimizer, lr_scheduler, cfg)
+        
     # docs: add resume option
     if cfg.CONFIG.MODEL.LOAD:
         model, _ = load_model(model, cfg, load_fc=cfg.CONFIG.MODEL.LOAD_FC)
@@ -136,7 +152,7 @@ if __name__ == '__main__':
     if args.debug:
         cfg.DDP_CONFIG.DISTRIBUTED = False
         cfg.CONFIG.LOG.RES_DIR = cfg.CONFIG.LOG.RES_DIR.format(study+run)
-        cfg.CONFIG.LOG.EXP_NAME = cfg.CONFIG.LOG.EXP_DIR.format(study+run)
+        cfg.CONFIG.LOG.EXP_NAME = cfg.CONFIG.LOG.EXP_NAME.format(study+run)
     
     import socket 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

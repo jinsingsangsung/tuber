@@ -142,6 +142,51 @@ def load_model(model, cfg, load_fc=True):
 
     return model, None
 
+def load_model_and_states(model, optimizer, scheduler, cfg):
+    """
+    Load pretrained model weights.
+    """
+    if os.path.isfile(cfg.CONFIG.MODEL.PRETRAINED_PATH):
+        log_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
+        print_log(log_path, "=> loading checkpoint '{}'".format(cfg.CONFIG.MODEL.PRETRAINED_PATH))
+        if cfg.DDP_CONFIG.GPU is None:
+            checkpoint = torch.load(cfg.CONFIG.MODEL.PRETRAINED_PATH)
+        else:
+            # Map model to be loaded to specified single gpu.
+            loc = 'cuda:{}'.format(cfg.DDP_CONFIG.GPU)
+            checkpoint = torch.load(cfg.CONFIG.MODEL.PRETRAINED_PATH, map_location=loc)
+        model_dict = model.state_dict()
+
+        if cfg.DDP_CONFIG.DISTRIBUTED:
+            pretrained_dict = {k: v for k, v in checkpoint['model'].items() if k in model_dict}
+            unused_dict = {k: v for k, v in checkpoint['model'].items() if not k in model_dict}
+            not_found_dict = {k: v for k, v in model_dict.items() if not k in checkpoint['model']}
+            print_log(log_path,"number of unused model layers:", len(unused_dict.keys()))
+            print_log(log_path,"number of not found layers:", len(not_found_dict.keys()))
+            
+        else:
+            pretrained_dict = {k: v for k, v in checkpoint["model"].items() if k[7:] in model_dict}
+            unused_dict = {k: v for k, v in checkpoint["model"].items() if not k[7:] in model_dict}
+            not_found_dict = {k: v for k, v in model_dict.items() if not "module."+k in checkpoint["model"]}
+            print_log(log_path,"number of loaded model layers:", len(pretrained_dict.keys()))
+            print_log(log_path,"number of unused model layers:", len(unused_dict.keys()))
+            print_log(log_path,"number of not found layers:", len(not_found_dict.keys()))
+
+        model_dict.update(pretrained_dict)
+        model.load_state_dict(model_dict, strict=False)
+        print_log(log_path,"=> loaded checkpoint '{}' (epoch {})".format(cfg.CONFIG.MODEL.PRETRAINED_PATH, checkpoint['epoch']))
+    else:
+        print_log(log_path,"=> no checkpoint found at '{}'".format(cfg.CONFIG.MODEL.PRETRAINED_PATH))
+    
+    optimizer.load_state_dict(checkpoint['optimizer'])
+    scheduler.load_state_dict(checkpoint['scheduler'])
+    random.setstate(checkpoint["random_python"])
+    np.random.set_state(checkpoint["random_numpy"])
+    torch.set_rng_state(checkpoint['random_pytorch'])
+    if model.device == 'cuda':
+        torch.cuda.set_rng_state(checkpoint['random_cuda'])
+    return model, optimizer, scheduler
+
 
 def save_model(model, optimizer, epoch, cfg):
     # pylint: disable=line-too-long
@@ -187,7 +232,7 @@ def save_checkpoint(cfg, epoch, model, max_accuracy, optimizer, lr_scheduler):
     log_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
     print_log(log_path, 'Saving model at epoch %d to %s' % (epoch, model_save_dir))
 
-    save_path = os.path.join(model_save_dir, f'ckpt_epoch_{epoch}.pth')
+    save_path = os.path.join(model_save_dir, f'ckpt_epoch_{epoch:02d}.pth')
     torch.save(save_state, save_path)
 
 
