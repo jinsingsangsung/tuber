@@ -13,7 +13,7 @@ __all__ = ['load_detr_weights', 'deploy_model', 'load_model', 'save_model', 'sav
 def load_detr_weights(model, pretrain_dir, cfg):
     checkpoint = torch.load(pretrain_dir, map_location='cpu')
     model_dict = model.state_dict()
-    log_path = cfg.CONFIG.LOG.EXP_DIR
+    log_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
     pretrained_dict = {}
     if "dab-d-tuber-detr" in cfg.CONFIG.MODEL.PRETRAIN_TRANSFORMER_DIR:
         l = 0
@@ -67,7 +67,7 @@ def deploy_model(model, cfg, is_tuber=True):
     """
     Deploy model to multiple GPUs for DDP training.
     """
-    log_path = cfg.CONFIG.LOG.EXP_DIR
+    log_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
     if cfg.DDP_CONFIG.DISTRIBUTED:
         if cfg.DDP_CONFIG.GPU is not None:
             torch.cuda.set_device(cfg.DDP_CONFIG.GPU)
@@ -100,7 +100,7 @@ def load_model(model, cfg, load_fc=True):
     Load pretrained model weights.
     """
     if os.path.isfile(cfg.CONFIG.MODEL.PRETRAINED_PATH):
-        log_path = cfg.CONFIG.LOG.EXP_DIR
+        log_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
         print_log(log_path, "=> loading checkpoint '{}'".format(cfg.CONFIG.MODEL.PRETRAINED_PATH))
         if cfg.DDP_CONFIG.GPU is None:
             checkpoint = torch.load(cfg.CONFIG.MODEL.PRETRAINED_PATH)
@@ -184,7 +184,7 @@ def save_checkpoint(cfg, epoch, model, max_accuracy, optimizer, lr_scheduler):
                                   cfg.CONFIG.LOG.SAVE_DIR)
     if not os.path.exists(model_save_dir):
         os.makedirs(model_save_dir)
-    log_path = cfg.CONFIG.LOG.EXP_DIR
+    log_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
     print_log(log_path, 'Saving model at epoch %d to %s' % (epoch, model_save_dir))
 
     save_path = os.path.join(model_save_dir, f'ckpt_epoch_{epoch}.pth')

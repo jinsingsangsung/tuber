@@ -11,6 +11,8 @@ from models.transformer.util import box_ops
 from utils.misc import (NestedTensor, nested_tensor_from_tensor_list,
                        accuracy, accuracy_sigmoid, get_world_size, interpolate,
                        is_dist_avail_and_initialized, inverse_sigmoid)
+from utils.utils import print_log
+import os
 
 from models.backbone_builder2 import build_backbone
 from models.detr.segmentation import (dice_loss, sigmoid_focal_loss)
@@ -32,7 +34,8 @@ class DETR(nn.Module):
     """ This is the DETR module that performs object detection """
     def __init__(self, backbone, transformer, num_classes, num_queries, num_frames,
                  hidden_dim, temporal_length, aux_loss=False, generate_lfb=False, two_stage=False, random_refpoints_xy=False, query_dim=4,
-                 backbone_name='CSN-152', ds_rate=1, last_stride=True, dataset_mode='ava', bbox_embed_diff_each_layer=False, training=True, iter_update=True):
+                 backbone_name='CSN-152', ds_rate=1, last_stride=True, dataset_mode='ava', bbox_embed_diff_each_layer=False, training=True, iter_update=True,
+                 gpu_world_rank=0, log_path=None):
         """ Initializes the model.
         Parameters:
             backbone: torch module of the backbone to be used. See backbone.py
@@ -63,7 +66,7 @@ class DETR(nn.Module):
             self.refpoint_embed.weight.data[:, :2].requires_grad = False          
 
         if "SWIN" in backbone_name:
-            print("using swin")
+            if gpu_world_rank == 0: print_log(log_path, "using swin")
             self.input_proj = nn.Conv3d(1024, hidden_dim, kernel_size=1)
             self.class_proj = nn.Conv3d(1024, hidden_dim, kernel_size=1)
         elif "SlowFast" in backbone_name:
@@ -214,7 +217,9 @@ def build_model(cfg):
     else:
         from models.dab_hier_detr.matcher_ucf_ import build_matcher
     num_classes = cfg.CONFIG.DATA.NUM_CLASSES
-    print('num_classes', num_classes)
+    log_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
+    if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
+        print_log(log_path, 'num_classes', num_classes)
 
     backbone = build_backbone(cfg)
     transformer = build_transformer(cfg)

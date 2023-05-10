@@ -10,12 +10,14 @@ from PIL import Image
 import torch.nn.functional as F
 import datasets.video_transforms as T
 import json
+from utils.utils import print_log
+import os
 
 
 class VideoDataset(data.Dataset):
 
     def __init__(self, frame_path, video_frame_bbox, frame_keys_list, clip_len, frame_sample_rate,
-                 transforms, crop_size=224, resize_size=256, mode="train", class_num=80):
+                 transforms, crop_size=224, resize_size=256, mode="train", class_num=80, gpu_world_rank=0, log_path=None):
         self.video_frame_bbox = video_frame_bbox
         self.video_frame_list = frame_keys_list
         self.frame_path = frame_path
@@ -31,8 +33,8 @@ class VideoDataset(data.Dataset):
         self.index_cnt = 0
         self._transforms = transforms
         self.mode = mode
-
-        print("rescale size: {}, crop size: {}".format(resize_size, crop_size))
+        if gpu_world_rank == 0:
+            print_log(log_path, "rescale size: {}, crop size: {}".format(resize_size, crop_size))
 
     def __getitem__(self, index):
 
@@ -160,7 +162,9 @@ def make_transforms(image_set, cfg):
         T.ToTensor(),
         T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ])
-    print("transform image crop: {}".format(cfg.CONFIG.DATA.IMG_SIZE))
+    log_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
+    if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
+        print_log(log_path, "transform image crop: {}".format(cfg.CONFIG.DATA.IMG_SIZE))
     if image_set == 'train':
         return T.Compose([
             T.RandomHorizontalFlip(),
@@ -242,7 +246,7 @@ def make_image_key(video_id, timestamp):
 def build_dataloader(cfg):
     train_bbox_json = json.load(open(cfg.CONFIG.DATA.ANNO_PATH.format("train")))
     train_video_frame_bbox, train_frame_keys_list = train_bbox_json["video_frame_bbox"], train_bbox_json["frame_keys_list"]
-
+    log_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
     train_dataset = VideoDataset(cfg.CONFIG.DATA.DATA_PATH,
                                  train_video_frame_bbox,
                                  train_frame_keys_list,
@@ -251,7 +255,9 @@ def build_dataloader(cfg):
                                  clip_len=cfg.CONFIG.DATA.TEMP_LEN,
                                  resize_size=cfg.CONFIG.DATA.IMG_RESHAPE_SIZE,
                                  crop_size=cfg.CONFIG.DATA.IMG_SIZE,
-                                 mode="train")
+                                 mode="train",
+                                 gpu_world_rank=cfg.DDP_CONFIG.GPU_WORLD_RANK,
+                                 log_path=log_path,)
 
     val_bbox_json = json.load(open(cfg.CONFIG.DATA.ANNO_PATH.format("val")))
     val_video_frame_bbox, val_frame_keys_list = val_bbox_json["video_frame_bbox"], val_bbox_json["frame_keys_list"]
@@ -264,7 +270,9 @@ def build_dataloader(cfg):
                                clip_len=cfg.CONFIG.DATA.TEMP_LEN,
                                resize_size=cfg.CONFIG.DATA.IMG_SIZE,
                                crop_size=cfg.CONFIG.DATA.IMG_SIZE,
-                               mode="val")
+                               mode="val",
+                               gpu_world_rank=cfg.DDP_CONFIG.GPU_WORLD_RANK,
+                               log_path=log_path,)
 
     if cfg.DDP_CONFIG.DISTRIBUTED:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
@@ -281,8 +289,8 @@ def build_dataloader(cfg):
     val_loader = torch.utils.data.DataLoader(
         val_dataset, batch_size=cfg.CONFIG.VAL.BATCH_SIZE, shuffle=(val_sampler is None),
         num_workers=9, sampler=val_sampler, pin_memory=True, collate_fn=collate_fn)
-
-    print(cfg.CONFIG.DATA.ANNO_PATH.format("train"), cfg.CONFIG.DATA.ANNO_PATH.format("val"))
+    if cfg.DDP_CONFIG.GPU_WORLD_RANK==0:
+        print_log(log_path, "train and val anno are from:", cfg.CONFIG.DATA.ANNO_PATH.format("train"), ", ", cfg.CONFIG.DATA.ANNO_PATH.format("val"))
 
     return train_loader, val_loader, train_sampler, val_sampler, None
 

@@ -41,8 +41,8 @@ class RSA(nn.Module):
         assert self.kernel_type in ['V', 'R', 'VplusR'], "Not implemented involution type: {}".format(self.kernel_type)
         assert self.feat_type in ['V', 'R', 'VplusR'], "Not implemented feature type: {}".format(self.feat_type)
         
-        print("d_in: {}, d_out: {}, nh: {}, dk: {}, dv: {}, dd:{}, kernel_size: {}, kernel_type: {}, feat_type: {}"
-              .format(d_in, d_out, nh, dk, dv,self.dd, kernel_size, kernel_type, feat_type))
+        # print("d_in: {}, d_out: {}, nh: {}, dk: {}, dv: {}, dd:{}, kernel_size: {}, kernel_type: {}, feat_type: {}"
+        #       .format(d_in, d_out, nh, dk, dv,self.dd, kernel_size, kernel_type, feat_type))
 
         self.ksize = ksize = kernel_size[0] * kernel_size[1] * kernel_size[2]
         self.pad = pad = tuple(k//2 for k in kernel_size)               
@@ -122,7 +122,7 @@ class RSA(nn.Module):
         
         #Intervolution generation
         # Basic kernel
-        if self.kernel_type is 'V':
+        if self.kernel_type == 'V':
             kernel = q
         # Relational kernel
         else:

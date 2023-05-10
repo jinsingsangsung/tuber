@@ -115,6 +115,7 @@ if __name__ == '__main__':
                         help='path to config file.')
     parser.add_argument('--exp_name', default="dab_hier_{}-{}_{}", type=str)
     parser.add_argument('--random_seed', default=1, help='random_seed')
+    parser.add_argument('--debug', action='store_true', help="debug, and ddp is disabled")
     args = parser.parse_args()
     random.seed(args.random_seed)
     np.random.seed(args.random_seed)
@@ -128,10 +129,13 @@ if __name__ == '__main__':
     cfg.merge_from_file(args.config_file)
     study = os.environ["NSML_STUDY"]
     run = os.environ["NSML_RUN_NAME"].split("/")[-1]
-
     cfg.CONFIG.LOG.RES_DIR = args.exp_name.format(study, run, date.today())
-    cfg.CONFIG.LOG.EXP_DIR = args.exp_name.format(study, run, date.today())
-
+    cfg.CONFIG.LOG.EXP_NAME = args.exp_name.format(study, run, date.today())
+    if args.debug:
+        cfg.DDP_CONFIG.DISTRIBUTED = False
+        cfg.CONFIG.LOG.RES_DIR = cfg.CONFIG.LOG.RES_DIR.format(study+run)
+        cfg.CONFIG.LOG.EXP_NAME = cfg.CONFIG.LOG.EXP_DIR.format(study+run)
+    
     import socket 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.connect(("8.8.8.8", 80))

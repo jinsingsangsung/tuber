@@ -8,7 +8,7 @@ DDP_CONFIG:
   AUTO_RANK_MATCH: True
   DIST_BACKEND: 'nccl'
   GPU: 0
-  DISTRIBUTED: False
+  DISTRIBUTED: True
 
 CONFIG:
   EVAL_ONLY: False
@@ -60,7 +60,7 @@ CONFIG:
     LAST_STRIDE: False
     GENERATE_LFB: False
     NAME: 'ava_detr_9_224'
-    ENC_LAYERS: 12
+    ENC_LAYERS: 6
     DEC_LAYERS: 6
     D_MODEL: 256
     NHEAD: 8

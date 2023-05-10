@@ -21,18 +21,22 @@ from models.transformer.position_encoding import build_position_encoding
 from models.backbones.ir_CSN_50_variant import build_CSN
 from models.backbones.ir_CSN_152_variant import build_CSN as build_CSN_152
 from models.transformer.transformer_layers import layer_norm #, LSTRTransformerDecoder, LSTRTransformerDecoderLayer, 
-
+import os
+from utils.utils import print_log
 
 class Backbone(nn.Module):
 
     def __init__(self, train_backbone: bool, num_channels: int, position_embedding, cfg):
         super().__init__()
 
+        log_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
         if cfg.CONFIG.MODEL.BACKBONE_NAME == 'CSN-152':
-            print("CSN-152 backbone")
+            if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
+                print_log(log_path, "CSN-152 backbone")
             self.body = build_CSN_152(cfg)
         else:
-            print("CSN-50 backbone")
+            if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
+                print_log(log_path, "CSN-50 backbone")
             self.body = build_CSN(cfg)
         self.position_embedding = position_embedding
         for name, parameter in self.body.named_parameters():

@@ -5,7 +5,7 @@ import time
 import torch
 import torch.optim
 # from tensorboardX import SummaryWriter
-from models.dab_hier import build_model
+from models.dab_rsa import build_model
 from utils.model_utils import deploy_model, load_model, save_checkpoint
 from utils.video_action_recognition import train_tuber_detection, validate_tuber_detection, validate_tuber_ucf_detection
 from pipelines.video_action_recognition_config import get_cfg_defaults
@@ -21,7 +21,7 @@ def main_worker(cfg):
     # create tensorboard and logs
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
         # tb_logdir = build_log_dir(cfg)
-        save_path = cfg.CONFIG.LOG.EXP_DIR
+        save_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
         # writer = SummaryWriter(log_dir=tb_logdir)
         writer = None
     else:
@@ -113,8 +113,9 @@ if __name__ == '__main__':
     parser.add_argument('--config-file',
                         default='./configuration/Dab_rsa_CSN50_AVA22.yaml',
                         help='path to config file.')
-    parser.add_argument('--exp_name', default="dab_rsa_{}-{}_{}", type=str)
+    parser.add_argument('--exp_name', default="Dab_rsa_{}-{}_{}", type=str)
     parser.add_argument('--random_seed', default=1, help='random_seed')
+    parser.add_argument('--debug', action='store_true', help="debug, and ddp is disabled")
     args = parser.parse_args()
     random.seed(args.random_seed)
     np.random.seed(args.random_seed)
@@ -128,9 +129,12 @@ if __name__ == '__main__':
     cfg.merge_from_file(args.config_file)
     study = os.environ["NSML_STUDY"]
     run = os.environ["NSML_RUN_NAME"].split("/")[-1]
-
     cfg.CONFIG.LOG.RES_DIR = args.exp_name.format(study, run, date.today())
-    cfg.CONFIG.LOG.EXP_DIR = args.exp_name.format(study, run, date.today())
+    cfg.CONFIG.LOG.EXP_NAME = args.exp_name.format(study, run, date.today())
+    if args.debug:
+        cfg.DDP_CONFIG.DISTRIBUTED = False
+        cfg.CONFIG.LOG.RES_DIR = cfg.CONFIG.LOG.RES_DIR.format(study+run)
+        cfg.CONFIG.LOG.EXP_NAME = cfg.CONFIG.LOG.EXP_DIR.format(study+run)
 
     import socket 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

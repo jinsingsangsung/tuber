@@ -100,7 +100,7 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
     end = time.time()
     model.train()
     criterion.train()
-    save_path = cfg.CONFIG.LOG.EXP_DIR
+    save_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
     # header = 'Epoch: [{}]'.format(epoch)
     # print_freq = 10
     # batch_bar = tqdm(total=len(data_loader), dynamic_ncols=True, leave=False, position=0, desc='train_detection')
@@ -283,7 +283,7 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
     buff_GT_anno = []
     buff_GT_id = []
 
-    save_path = cfg.CONFIG.LOG.EXP_DIR
+    save_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
 
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
         tmp_path = "{}/{}".format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR)
@@ -581,7 +581,7 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
     buff_GT_anno = []
     buff_GT_id = []
 
-    save_path = cfg.CONFIG.LOG.EXP_DIR
+    save_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
     
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
         tmp_path = "{}/{}".format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR)
