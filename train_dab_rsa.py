@@ -5,41 +5,42 @@ import time
 import torch
 import torch.optim
 # from tensorboardX import SummaryWriter
-from models.dab_rsa import build_model
+from models.dab_hier import build_model
 from utils.model_utils import deploy_model, load_model, save_checkpoint
 from utils.video_action_recognition import train_tuber_detection, validate_tuber_detection, validate_tuber_ucf_detection
 from pipelines.video_action_recognition_config import get_cfg_defaults
 from pipelines.launch import spawn_workers
-from utils.utils import build_log_dir
+from utils.utils import build_log_dir, print_log
 from utils.lr_scheduler import build_scheduler
-
-import random
+import os, requests
+from datetime import date
 import numpy as np
+import random
 
 def main_worker(cfg):
     # create tensorboard and logs
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
-        tb_logdir = build_log_dir(cfg)
+        # tb_logdir = build_log_dir(cfg)
+        save_path = cfg.CONFIG.LOG.EXP_DIR
         # writer = SummaryWriter(log_dir=tb_logdir)
         writer = None
     else:
         writer = None
-    # cfg.freeze()
 
     # create model
-    print('Creating TubeR model: %s' % cfg.CONFIG.MODEL.NAME)
-    print("use sinlge frame:", cfg.CONFIG.MODEL.SINGLE_FRAME)
+    if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:    
+        print_log(save_path, 'Creating TubeR model: %s' % cfg.CONFIG.MODEL.NAME)
+        print_log(save_path, "use single frame:", cfg.CONFIG.MODEL.SINGLE_FRAME)
     model, criterion, postprocessors = build_model(cfg)
     model = deploy_model(model, cfg, is_tuber=True)
     num_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print('Number of parameters in the model: %6.2fM' % (num_parameters / 1000000))
+    if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:    
+        print_log(save_path, 'Number of parameters in the model: %6.2fM' % (num_parameters / 1000000))
 
     if cfg.CONFIG.DATA.DATASET_NAME == 'ava':
         from datasets.ava_frame import build_dataloader
     elif cfg.CONFIG.DATA.DATASET_NAME == 'jhmdb':
         from datasets.jhmdb_frame_ import build_dataloader
-    elif cfg.CONFIG.DATA.DATASET_NAME == 'ucf':
-        from datasets.ucf_frame import build_dataloader
     else:
         build_dataloader = None
         print("invalid dataset name")
@@ -79,8 +80,8 @@ def main_worker(cfg):
     # docs: add resume option
     if cfg.CONFIG.MODEL.LOAD:
         model, _ = load_model(model, cfg, load_fc=cfg.CONFIG.MODEL.LOAD_FC)
-
-    print('Start training...')
+    if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0: 
+        print_log(save_path, 'Start training...')
     start_time = time.time()
     max_accuracy = 0.0
     for epoch in range(cfg.CONFIG.TRAIN.START_EPOCH, cfg.CONFIG.TRAIN.EPOCH_NUM):
@@ -96,14 +97,15 @@ def main_worker(cfg):
             if cfg.CONFIG.DATA.DATASET_NAME == 'ava':
                 validate_tuber_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)
             else:
-                validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)
+                validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)    
         
     if writer is not None:
         writer.close()
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
-    print('Training time {}'.format(total_time_str))
+    if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0: 
+        print_log(save_path, 'Training time {}'.format(total_time_str))
 
 
 if __name__ == '__main__':
@@ -111,7 +113,7 @@ if __name__ == '__main__':
     parser.add_argument('--config-file',
                         default='./configuration/Dab_rsa_CSN50_AVA22.yaml',
                         help='path to config file.')
-    args = parser.parse_args()
+    parser.add_argument('--exp_name', default="dab_rsa_{}-{}_{}", type=str)
     parser.add_argument('--random_seed', default=1, help='random_seed')
     args = parser.parse_args()
     random.seed(args.random_seed)
@@ -119,14 +121,22 @@ if __name__ == '__main__':
     torch.manual_seed(args.random_seed)
     torch.cuda.manual_seed(args.random_seed)
     torch.cuda.manual_seed_all(args.random_seed)
+
     args = parser.parse_args()
+
     cfg = get_cfg_defaults()
     cfg.merge_from_file(args.config_file)
+    study = os.environ["NSML_STUDY"]
+    run = os.environ["NSML_RUN_NAME"].split("/")[-1]
+
+    cfg.CONFIG.LOG.RES_DIR = args.exp_name.format(study, run, date.today())
+    cfg.CONFIG.LOG.EXP_DIR = args.exp_name.format(study, run, date.today())
+
     import socket 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.connect(("8.8.8.8", 80))
     this_ip = s.getsockname()[0] # put this to world_url
     cfg.DDP_CONFIG.DIST_URL = cfg.DDP_CONFIG.DIST_URL.format(this_ip)
     cfg.DDP_CONFIG.WOLRD_URLS[0] = cfg.DDP_CONFIG.WOLRD_URLS[0].format(this_ip)
-    s.close() 
+    s.close()
     spawn_workers(main_worker, cfg)
