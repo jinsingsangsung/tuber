@@ -16,6 +16,7 @@ from utils.nsml_utils import *
 from datetime import date
 import numpy as np
 import random
+import os
 
 def main_worker(cfg):
 
@@ -42,6 +43,8 @@ def main_worker(cfg):
         from datasets.ava_frame import build_dataloader
     elif cfg.CONFIG.DATA.DATASET_NAME == 'jhmdb':
         from datasets.jhmdb_frame_ import build_dataloader
+    elif cfg.CONFIG.DATA.DATASET_NAME == 'ucf':
+        from datasets.ucf_frame import build_dataloader        
     else:
         build_dataloader = None
         print("invalid dataset name")
