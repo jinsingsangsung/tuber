@@ -31,31 +31,66 @@ sh nsml_setup_{gpu type} # brings AVA dataset to scratchpad
 # now run the running command following the descriptions in the following sections.
 ```
 # Experiments on TubeR variants
+There have been many expriments before this, you can check these below:
+<details>
+  <summary> unsuccessful attempts </summary>
+    
+  ### mostly based on TubeR original architecture
+    
+  Model | Dataset | Backbone | Backbone pretrained on | DETR pretrained on | Original mAP | Reproduced mAP | config |
+  :-----: | :---: | :---: | :-----: | :-----: | :----: | :---: | :---: |
+  | TubeR | AVA 2.1 | CSN-50 | Kinetics-400 | *COCO*, AVA | 27.2 |  **27.1** | [config](configuration/TubeR_CSN50_AVA21.yaml) |
+  | TubeR | AVA 2.1 | CSN-50 | Kinetics-400 | *COCO*, AVA | - | 24.98 | use focal loss |
+  | TubeR | AVA 2.1 | CSN-50 | Kinetics-400 | *COCO* | - | 0.0013 | original DETR weight |
+  | TubeR | AVA 2.1 | CSN-50 | Kinetics-400 | - | - | 25.03 | 30 epochs, lr: 2e-5|
+  | Deformable TubeR (vanilla) | AVA 2.1 | CSN-50 | Kinetics-400 | - | - | 20.39 | [config](configuration/D2_TubeR_CSN50_AVA21.yaml) |
+  | DETR + DeformableDETR | AVA 2.1 | CSN-50 | Kinetics-400 | - | - | 21.99 | [config](configuration/D3_TubeR_CSN50_AVA21.yaml) |
+  | DeformableDETR + transformer| AVA 2.1 | CSN-50 | Kinetics-400 | - | - | 20.48 | [config](configuration/D4_TubeR_CSN50_AVA21.yaml) |
+  | DN-DAB-Deformable TubeR | AVA 2.1 | CSN-50 | Kinetics-400 | - | - | 18.13 | [config](configuration/Dab_DN_D_TubeR_CSN50_AVA21.yaml) |
+  | DETR + DN-DAB-Deformable transformer | AVA 2.1 | CSN-50 | Kinetics-400 | - | - | TBD | [config](configuration/Dab2_DN_D_TubeR_CSN50_AVA21.yaml) |
+  | TubeR + CSCE | AVA 2.1 | CSN-50 | Kinetics-400 | *COCO*, AVA | - | 26.82 | [config](configuration/new_TubeR_CSN50_AVA21.yaml) |
+  | TubeR + CSCE | AVA 2.1 | CSN-50 | Kinetics-400 | - | - | 22.78 | - |
+  | TubeR + FCWG | AVA 2.1 | CSN-50 | Kinetics-400 | - | - | 20.56 | - |
+  | TubeR + ZT | AVA 2.1 | CSN-50 | Kinetics-400 | - | - | TBD | - |
+  | Cloca TubeR | AVA 2.1 | CSN-50 | Kinetics-400 | *COCO*, AVA | - | 21.57 | [config](configuration/cloca_TubeR_CSN50_AVA21.yaml) |
+  | Cloca TubeR | AVA 2.1 | CSN-50 | Kinetics-400 | - | - | 17.24 | - |
+  
+  ~~Still have no idea where the 1% drop comes from.~~ fixed with 8gpu (23.2.20)    
+</details>
 
-Model | Dataset | Backbone | Backbone pretrained on | DETR pretrained on | Original mAP | Reproduced mAP | config |
+Currently doing experiments on AVA22, and trying on the new baseline
+
+Model | Dataset | Backbone | Backbone pretrained on | DETR pretrained on | f-mAP | V-mAP | config |
 :-----: | :---: | :---: | :-----: | :-----: | :----: | :---: | :---: |
-| TubeR | AVA 2.1 | CSN-50 | Kinetics-400 | *COCO*, AVA | 27.2 |  **27.1** | [config](configuration/TubeR_CSN50_AVA21.yaml) |
-| TubeR | AVA 2.1 | CSN-50 | Kinetics-400 | *COCO*, AVA | - | 24.98 | use focal loss |
-| TubeR | AVA 2.1 | CSN-50 | Kinetics-400 | *COCO* | - | 0.0013 | original DETR weight |
-| TubeR | AVA 2.1 | CSN-50 | Kinetics-400 | - | - | 25.03 | 30 epochs, lr: 2e-5|
-| Deformable TubeR (vanilla) | AVA 2.1 | CSN-50 | Kinetics-400 | - | - | 20.39 | [config](configuration/D2_TubeR_CSN50_AVA21.yaml) |
-| DETR + DeformableDETR | AVA 2.1 | CSN-50 | Kinetics-400 | - | - | 21.99 | [config](configuration/D3_TubeR_CSN50_AVA21.yaml) |
-| DeformableDETR + transformer| AVA 2.1 | CSN-50 | Kinetics-400 | - | - | 20.48 | [config](configuration/D4_TubeR_CSN50_AVA21.yaml) |
-| DN-DAB-Deformable TubeR | AVA 2.1 | CSN-50 | Kinetics-400 | - | - | 18.13 | [config](configuration/Dab_DN_D_TubeR_CSN50_AVA21.yaml) |
-| DETR + DN-DAB-Deformable transformer | AVA 2.1 | CSN-50 | Kinetics-400 | - | - | TBD | [config](configuration/Dab2_DN_D_TubeR_CSN50_AVA21.yaml) |
-| TubeR + CSCE | AVA 2.1 | CSN-50 | Kinetics-400 | *COCO*, AVA | - | 26.82 | [config](configuration/new_TubeR_CSN50_AVA21.yaml) |
-| TubeR + CSCE | AVA 2.1 | CSN-50 | Kinetics-400 | - | - | 22.78 | - |
-| TubeR + FCWG | AVA 2.1 | CSN-50 | Kinetics-400 | - | - | 20.56 | - |
-| TubeR + ZT | AVA 2.1 | CSN-50 | Kinetics-400 | - | - | TBD | - |
-| Cloca TubeR | AVA 2.1 | CSN-50 | Kinetics-400 | *COCO*, AVA | - | 21.57 | [config](configuration/cloca_TubeR_CSN50_AVA21.yaml) |
-| Cloca TubeR | AVA 2.1 | CSN-50 | Kinetics-400 | - | - | 17.24 | - |
-
-
-
-
-~~Still have no idea where the 1% drop comes from.~~ fixed with 8gpu (23.2.20)
+| TubeR | AVA 2.2 | CSN-50 | Kinetics-400 | *COCO*, AVA | 29.2 | - | - |
+| TubeR w/o LTC | AVA 2.2 | CSN-50 | Kinetics-400 | *COCO*, AVA | 27.7 <br> 27.6(rep) | - | - |
+| Baseline | AVA 2.2 | CSN-50 | Kinetics-400 | *COCO*, AVA | 23.37 | - | - |
+| Baseline + CE | AVA 2.2 | CSN-50 | Kinetics-400 | *COCO*, AVA | 27.43 | - | [config](configuration/Dab_hier_CSN50_AVA21.yaml) |
+| Baseline + CE <br> (IC ver.)| AVA 2.2 | CSN-50 | Kinetics-400 | *COCO*, AVA | 27.11 | - | - |
+| TubeR | JHMDB | CSN-152 | Kinetics-400 | *COCO*, AVA | N/A | 82.3 | - |
+| Baseline + CE | JHMDB | CSN-152 | Kinetics-400 | *COCO*, AVA | 77.27 | 84.59 | [config](configuration/Dab_hier_CSN152_JHMDB.yaml)  |
 
 # Model explanation
+
+  ### New Baseline and Classification Embedding(CE) (5/5)
+  1. Baseline
+  2. Baseline + Classification Embedding
+
+  #### Baseline
+  Baseline now gets rid of TubeR ornaments, and use more basic architecture. 
+  It uses alternative spatio-temporal encoding, and use basic Dab-DETR structure in the decoder; both loc and cls come out from the same feature.
+  ![Screen Shot 2023-05-11 at 3 03 12 PM](https://media.oss.navercorp.com/user/36297/files/3aca1284-41c5-4a71-a038-f64b3166f1b1)
+  Baseline code is not available here currently, but will be uploaded soon.
+  
+  #### Baseline + Classification Embedding (CE)
+  CE is a embedding that holds the information for classification. It computes the offsets from the decoder cls embedding output, and re-compute the correlation between the global context and queries based on the offset-shifted positional prior.
+  ![Screen Shot 2023-05-11 at 3 07 25 PM](https://media.oss.navercorp.com/user/36297/files/997f2975-f1dc-45bd-b5db-c798d1452757)
+
+  ```
+  python3 train_dab_hier.py
+  ```
+
+
   ### Deformable TubeR family
   1. Deformable TubeR (vanilla)
   2. Deformable TubeR: DETR + Deformable DETR
