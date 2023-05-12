@@ -225,7 +225,7 @@ def save_checkpoint(cfg, epoch, model, max_accuracy, optimizer, lr_scheduler):
                   'epoch': epoch,
                   'config': cfg,
                   'random_python': random.getstate(),
-                  'random_numpy': np.random.getstate(),
+                  'random_numpy': np.random.get_state(),
                   'random_pytorch': torch.get_rng_state(),
                   'random_cuda': cuda_rng_state,
                   }
