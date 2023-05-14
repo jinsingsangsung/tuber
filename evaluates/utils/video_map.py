@@ -16,7 +16,7 @@ class VideoMAPEvaluator(object):
     def add_pred(self, all_boxes):
         self.all_boxes = all_boxes
 
-    def evaluate_videoAP(self, bTemporal = False, prior_length = None):
+    def evaluate_videoAP(self, bTemporal = True, prior_length = None):
         '''
         gt_videos: {vname:{tubes: [[frame_index, x1,y1,x2,y2]], gt_classes: vlabel}} 
         all_boxes: {imgname:{cls_ind:array[x1,y1,x2,y2, cls_score]}}
@@ -34,24 +34,25 @@ class VideoMAPEvaluator(object):
             return metrics
         def imagebox_to_videts(img_boxes, CLASSES):
             # image names
-            keys = list(all_boxes.keys())
+            keys = list(img_boxes.keys())
             keys.sort()
             res = []
             # without 'background'
             for cls_ind, cls in enumerate(CLASSES[0:]):
                 v_cnt = 1
-                frame_index = 1
+                # frame_index = 1
                 v_dets = []
                 cls_ind += 1
                 preVideo = "_".join(keys[0].split('_')[:-1])
                 for i in range(len(keys)): #iterate through all frames
                     curVideo = "_".join(keys[i].split('_')[:-1])
+                    frame_index = int(keys[i].split('_')[-1])
                     img_cls_dets = img_boxes[keys[i]][cls_ind]
                     v_dets.append([frame_index, img_cls_dets])
-                    frame_index += 1
+                    # frame_index += 1
                     if preVideo!=curVideo:
                         preVideo = curVideo
-                        frame_index = 1
+                        # frame_index = 1
                         # tmp_dets = v_dets[-1]
                         del v_dets[-1]
                         res.append([cls_ind, v_cnt, v_dets])
@@ -59,7 +60,7 @@ class VideoMAPEvaluator(object):
                         v_dets = []
                         # v_dets.append(tmp_dets)
                         v_dets.append([frame_index, img_cls_dets])
-                        frame_index += 1
+                        # frame_index += 1
                 # the last video
                 # print('num of videos:{}'.format(v_cnt))
                 res.append([cls_ind, v_cnt, v_dets])
@@ -83,6 +84,7 @@ class VideoMAPEvaluator(object):
             ap = video_ap_one_class(gt, pred_cls, iou_thresh, bTemporal, cls_len)
             ap_all.append(ap)
             metrics[cls] = ap
+            print(cls, metrics[cls])
         metrics["video-mAP@{}IOU".format(self.iou)] = np.mean(ap_all)
         return metrics
 

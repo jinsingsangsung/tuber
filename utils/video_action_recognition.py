@@ -131,7 +131,6 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
 
         samples = samples.to(device)
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
-
         if cfg.CONFIG.TWO_STREAM:
             if cfg.CONFIG.USE_LFB:
                 if cfg.CONFIG.USE_LOCATION:
@@ -871,221 +870,213 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
 
     save_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
 
-    # if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
-    #     tmp_path = "{}/{}".format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR)
-    #     if not os.path.exists(tmp_path): os.makedirs(tmp_path)
-    #     tmp_dirs_ = glob.glob("{}/{}/*.txt".format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR))
-    #     for tmp_dir in tmp_dirs_:
-    #         os.remove(tmp_dir)
-    #         print_log(save_path, "remove {}".format(tmp_dir))
-    #     print_log(save_path, "all tmp files removed")
+    if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
+        tmp_path = "{}/{}".format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR)
+        if not os.path.exists(tmp_path): os.makedirs(tmp_path)
+        tmp_dirs_ = glob.glob("{}/{}/*.txt".format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR))
+        for tmp_dir in tmp_dirs_:
+            os.remove(tmp_dir)
+            print_log(save_path, "remove {}".format(tmp_dir))
+        print_log(save_path, "all tmp files removed")
     
-    # for idx, data in enumerate(data_loader):
-    #     data_time.update(time.time() - end)
+    for idx, data in enumerate(data_loader):
+        data_time.update(time.time() - end)
 
-    #     # for samples, targets in metric_logger.log_every(data_loader, print_freq, epoch, ddp_params, writer, header):
-    #     device = "cuda:" + str(cfg.DDP_CONFIG.GPU)
-    #     samples = data[0]
-    #     if cfg.CONFIG.TWO_STREAM:
-    #         samples2 = data[1]
-    #         targets = data[2]
-    #         samples2 = samples2.to(device)
-    #     else:
-    #         targets = data[1]
+        # for samples, targets in metric_logger.log_every(data_loader, print_freq, epoch, ddp_params, writer, header):
+        device = "cuda:" + str(cfg.DDP_CONFIG.GPU)
+        samples = data[0]
+        if cfg.CONFIG.TWO_STREAM:
+            samples2 = data[1]
+            targets = data[2]
+            samples2 = samples2.to(device)
+        else:
+            targets = data[1]
 
-    #     if cfg.CONFIG.USE_LFB:
-    #         if cfg.CONFIG.USE_LOCATION:
-    #             lfb_features = data[-2]
-    #             lfb_features = lfb_features.to(device)
+        if cfg.CONFIG.USE_LFB:
+            if cfg.CONFIG.USE_LOCATION:
+                lfb_features = data[-2]
+                lfb_features = lfb_features.to(device)
 
-    #             lfb_location_features = data[-1]
-    #             lfb_location_features = lfb_location_features.to(device)
-    #         else:
-    #             lfb_features = data[-1]
-    #             lfb_features = lfb_features.to(device)
+                lfb_location_features = data[-1]
+                lfb_location_features = lfb_location_features.to(device)
+            else:
+                lfb_features = data[-1]
+                lfb_features = lfb_features.to(device)
 
-    #     samples = samples.to(device)
+        samples = samples.to(device)
 
-    #     batch_id = [t["image_id"] for t in targets]
+        batch_id = [t["image_id"] for t in targets]
 
-    #     for t in targets:
-    #         del t["image_id"]
+        for t in targets:
+            del t["image_id"]
 
-    #     targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
-    #     if cfg.CONFIG.TWO_STREAM:
-    #         if cfg.CONFIG.USE_LFB:
-    #             if cfg.CONFIG.USE_LOCATION:
-    #                 outputs = model(samples, samples2, lfb_features, lfb_location_features)
-    #             else:
-    #                 outputs = model(samples, samples2, lfb_features)
-    #         else:
-    #             outputs = model(samples, samples2)
-    #     else:
-    #         if cfg.CONFIG.USE_LFB:
-    #             if cfg.CONFIG.USE_LOCATION:
-    #                 outputs = model(samples, lfb_features, lfb_location_features)
-    #             else:
-    #                 outputs = model(samples, lfb_features)
-    #         else:
-    #             try:
-    #                 model.training=False
-    #             except:
-    #                 pass
-    #             if not "DN" in cfg.CONFIG.LOG.EXP_NAME:
-    #                 outputs = model(samples)
-    #             else:
-    #                 dn_args = targets, cfg.CONFIG.MODEL.NUM_PATTERNS
-    #                 outputs, mask_dict = model(samples, dn_args)
-    #                 loss_dict = criterion(outputs, targets, mask_dict)
+        targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+        if cfg.CONFIG.TWO_STREAM:
+            if cfg.CONFIG.USE_LFB:
+                if cfg.CONFIG.USE_LOCATION:
+                    outputs = model(samples, samples2, lfb_features, lfb_location_features)
+                else:
+                    outputs = model(samples, samples2, lfb_features)
+            else:
+                outputs = model(samples, samples2)
+        else:
+            if cfg.CONFIG.USE_LFB:
+                if cfg.CONFIG.USE_LOCATION:
+                    outputs = model(samples, lfb_features, lfb_location_features)
+                else:
+                    outputs = model(samples, lfb_features)
+            else:
+                try:
+                    model.training=False
+                except:
+                    pass
+                if not "DN" in cfg.CONFIG.LOG.EXP_NAME:
+                    outputs = model(samples)
+                else:
+                    dn_args = targets, cfg.CONFIG.MODEL.NUM_PATTERNS
+                    outputs, mask_dict = model(samples, dn_args)
+                    loss_dict = criterion(outputs, targets, mask_dict)
 
-    #     loss_dict = criterion(outputs, targets)
+        loss_dict = criterion(outputs, targets)
 
-    #     weight_dict = criterion.weight_dict
+        weight_dict = criterion.weight_dict
 
-    #     orig_target_sizes = torch.stack([t["size"] for t in targets], dim=0)
-    #     try:
-    #         scores, boxes, output_b = postprocessors['bbox'](outputs, orig_target_sizes)
-    #     except:
-    #         scores, boxes = postprocessors['bbox'](outputs, orig_target_sizes)
+        orig_target_sizes = torch.stack([t["size"] for t in targets], dim=0)
+        try:
+            scores, boxes, output_b = postprocessors['bbox'](outputs, orig_target_sizes)
+        except:
+            scores, boxes = postprocessors['bbox'](outputs, orig_target_sizes)
 
-    #     B = scores.shape[0]
-    #     T = scores.shape[1]
-    #     scores = scores.reshape(-1, *scores.shape[-2:])
-    #     boxes = boxes.reshape(-1, *boxes.shape[-2:])
+        B = scores.shape[0]
+        T = scores.shape[1]
+        scores = scores.reshape(-1, *scores.shape[-2:])
+        boxes = boxes.reshape(-1, *boxes.shape[-2:])
         
-    #     for bidx in range(B):
+        for bidx in range(B):
 
-    #         if len(targets[bidx]["raw_boxes"]) == 0:
-    #             continue
+            if len(targets[bidx]["raw_boxes"]) == 0:
+                continue
 
-    #         frame_id = batch_id[bidx][0]
-    #         # key_pos = batch_id[bidx][1]
-    #         # out_key_pos = key_pos // cfg.CONFIG.MODEL.DS_RATE
-    #         # out_key_pos = key_pos
-    #         # print("key pos: {}, ds_rate: {}".format(key_pos, cfg.CONFIG.MODEL.DS_RATE))
-    #         # scores: BT x num_q x num_c
-    #         front_pad = targets[bidx]["front_pad"]
-    #         end_pad = targets[bidx]["end_pad"]
+            frame_id = batch_id[bidx][0]
+            # key_pos = batch_id[bidx][1]
+            # out_key_pos = key_pos // cfg.CONFIG.MODEL.DS_RATE
+            # out_key_pos = key_pos
+            # print("key pos: {}, ds_rate: {}".format(key_pos, cfg.CONFIG.MODEL.DS_RATE))
+            # scores: BT x num_q x num_c
+            front_pad = targets[bidx]["front_pad"]
+            end_pad = targets[bidx]["end_pad"]
 
-    #         buff_output.append(scores[bidx*T+front_pad:(bidx+1)*T-end_pad, :, :].reshape(-1, scores.shape[-1]))
-    #         buff_anno.append(boxes[bidx*T+front_pad:(bidx+1)*T-end_pad, :, :].reshape(-1, boxes.shape[-1]))
-    #         # try:
-    #         #     buff_binary.append(output_b)
-    #         # except:
-    #         #     pass
+            buff_output.append(scores[bidx*T+front_pad:(bidx+1)*T-end_pad, :, :].reshape(-1, scores.shape[-1]))
+            buff_anno.append(boxes[bidx*T+front_pad:(bidx+1)*T-end_pad, :, :].reshape(-1, boxes.shape[-1]))
             
-    #         # TODO :need to add number of instances as well
-    #         num_boxes = targets[bidx]["boxes"].size(0) // cfg.CONFIG.MODEL.TEMP_LEN
-    #         for t in range(T-front_pad-end_pad):
-    #             buff_GT_id.extend([frame_id + f"_{t:02d}"] * num_boxes)
-    #             for l in range(cfg.CONFIG.MODEL.QUERY_NUM):
-    #                 buff_id.extend([frame_id + f"_{t:02d}"])
-    #                 # try:
-    #                 #     buff_binary.append(output_b[..., 0])
-    #                 # except:
-    #                 #     pass
+            val_label = targets[bidx]["labels"] # num_actors, length T
+            # make one-hot vector
             
-    #         val_label = targets[bidx]["labels"] # num_actors, length T
-    #         # make one-hot vector
-            
-    #         val_category = torch.full((*val_label.shape[:2], cfg.CONFIG.DATA.NUM_CLASSES+1), 0)
-    #         for i, vl in enumerate(val_label):
-    #             for t in range(len(vl)):
-    #                 label = int(vl[t])
-    #                 val_category[i, t, label] = 1
-    #         val_label = val_category[:, front_pad:T-end_pad, :]
+            val_category = torch.full((*val_label.shape[:2], cfg.CONFIG.DATA.NUM_CLASSES+1), 0)
+            for i, vl in enumerate(val_label):
+                for t in range(len(vl)):
+                    label = int(vl[t])
+                    val_category[i, t, label] = 1
+            val_label = val_category[:, front_pad:T-end_pad, :]
 
-    #         raw_boxes = targets[bidx]["raw_boxes"].reshape(-1, cfg.CONFIG.MODEL.TEMP_LEN, 6)
-    #         raw_boxes = raw_boxes[:, front_pad:T-end_pad, :]
+            raw_boxes = targets[bidx]["raw_boxes"].reshape(-1, cfg.CONFIG.MODEL.TEMP_LEN, 6)
+            raw_boxes = raw_boxes[:, front_pad:T-end_pad, :]
 
-    #         buff_GT_label.append(val_label.transpose(0,1).flatten(0,1).detach().cpu().numpy())
-    #         buff_GT_anno.append(raw_boxes.transpose(0,1).flatten(0,1).detach().cpu().numpy())
-    #         # img_id_item = [batch_id[int(raw_boxes[x, 0] - targets[0]["raw_boxes"][0, 0])][0] for x in range(len(raw_boxes))]
-    #         # buff_GT_id.extend(img_id_item)
+            buff_GT_label.append(val_label.transpose(0,1).flatten(0,1).detach().cpu().numpy())
+            buff_GT_anno.append(raw_boxes.transpose(0,1).flatten(0,1).detach().cpu().numpy())
+            # img_id_item = [batch_id[int(raw_boxes[x, 0] - targets[0]["raw_boxes"][0, 0])][0] for x in range(len(raw_boxes))]
+            # buff_GT_id.extend(img_id_item)
+            # TODO :need to add number of instances as well
+            num_boxes = targets[bidx]["boxes"].size(0) // cfg.CONFIG.MODEL.TEMP_LEN
+            for t in range(T-front_pad-end_pad):
+                frame_idx = int(buff_GT_anno[B*idx+bidx][num_boxes*t][1])
+                buff_GT_id.extend([frame_id + f"_{frame_idx:03d}"] * num_boxes)
+                for l in range(cfg.CONFIG.MODEL.QUERY_NUM):
+                    buff_id.extend([frame_id + f"_{frame_idx:03d}"])
 
-    #     batch_time.update(time.time() - end)
-    #     end = time.time()
+        batch_time.update(time.time() - end)
+        end = time.time()
 
-    #     if (cfg.DDP_CONFIG.GPU_WORLD_RANK == 0):
-    #         if idx % cfg.CONFIG.LOG.DISPLAY_FREQ == 0:
-    #             print_string = '(val) Epoch: [{0}][{1}/{2}]'.format(epoch, idx + 1, len(data_loader))
-    #             print_log(save_path, print_string)
-    #             print_string = 'data_time: {data_time:.3f}, batch time: {batch_time:.3f}'.format(
-    #                 data_time=data_time.val,
-    #                 batch_time=batch_time.val)
-    #             print_log(save_path, print_string)
+        if (cfg.DDP_CONFIG.GPU_WORLD_RANK == 0):
+            if idx % cfg.CONFIG.LOG.DISPLAY_FREQ == 0:
+                print_string = '(val) Epoch: [{0}][{1}/{2}]'.format(epoch, idx + 1, len(data_loader))
+                print_log(save_path, print_string)
+                print_string = 'data_time: {data_time:.3f}, batch time: {batch_time:.3f}'.format(
+                    data_time=data_time.val,
+                    batch_time=batch_time.val)
+                print_log(save_path, print_string)
 
-    #         # reduce losses over all GPUs for logging purposes
-    #         # loss_dict_reduced = utils.reduce_dict(loss_dict)
+            # reduce losses over all GPUs for logging purposes
+            # loss_dict_reduced = utils.reduce_dict(loss_dict)
 
-    #         # reduce on single GPU
-    #         loss_dict_reduced = loss_dict
-    #         loss_dict_reduced_scaled = {k: v * weight_dict[k]
-    #                                     for k, v in loss_dict_reduced.items() if k in weight_dict}
-    #         losses_reduced_scaled = sum(loss_dict_reduced_scaled.values())
+            # reduce on single GPU
+            loss_dict_reduced = loss_dict
+            loss_dict_reduced_scaled = {k: v * weight_dict[k]
+                                        for k, v in loss_dict_reduced.items() if k in weight_dict}
+            losses_reduced_scaled = sum(loss_dict_reduced_scaled.values())
 
-    #         loss_value = losses_reduced_scaled.item()
+            loss_value = losses_reduced_scaled.item()
 
-    #         losses_avg.update(loss_value, len(targets))
-    #         losses_box.update(loss_dict_reduced['loss_bbox'].item(), len(targets))
-    #         losses_giou.update(loss_dict_reduced['loss_giou'].item(), len(targets))
-    #         losses_ce.update(loss_dict_reduced['loss_ce'].item(), len(targets))
-    #         class_err.update(loss_dict_reduced['class_error'], len(targets))
+            losses_avg.update(loss_value, len(targets))
+            losses_box.update(loss_dict_reduced['loss_bbox'].item(), len(targets))
+            losses_giou.update(loss_dict_reduced['loss_giou'].item(), len(targets))
+            losses_ce.update(loss_dict_reduced['loss_ce'].item(), len(targets))
+            class_err.update(loss_dict_reduced['class_error'], len(targets))
 
-    #         if not math.isfinite(loss_value):
-    #             print_log(save_path, "Loss is {}, stopping eval".format(loss_value))
-    #             print_log(save_path, loss_dict_reduced)
-    #             exit(1)
-    #         if idx % cfg.CONFIG.LOG.DISPLAY_FREQ == 0:
-    #             print_string = 'class_error: {class_error:.3f}, loss: {loss:.3f}, loss_bbox: {loss_bbox:.3f}, loss_giou: {loss_giou:.3f}, loss_ce: {loss_ce:.3f}'.format(
-    #                 class_error=class_err.avg,
-    #                 loss=losses_avg.avg,
-    #                 loss_bbox=losses_box.avg,
-    #                 loss_giou=losses_giou.avg,
-    #                 loss_ce=losses_ce.avg
-    #             )
-    #             print_log(save_path, print_string)
+            if not math.isfinite(loss_value):
+                print_log(save_path, "Loss is {}, stopping eval".format(loss_value))
+                print_log(save_path, loss_dict_reduced)
+                exit(1)
+            if idx % cfg.CONFIG.LOG.DISPLAY_FREQ == 0:
+                print_string = 'class_error: {class_error:.3f}, loss: {loss:.3f}, loss_bbox: {loss_bbox:.3f}, loss_giou: {loss_giou:.3f}, loss_ce: {loss_ce:.3f}'.format(
+                    class_error=class_err.avg,
+                    loss=losses_avg.avg,
+                    loss_bbox=losses_box.avg,
+                    loss_giou=losses_giou.avg,
+                    loss_ce=losses_ce.avg
+                )
+                print_log(save_path, print_string)
 
-    # # if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
-    # #     writer.add_scalar('val/class_error', class_err.avg, epoch)
-    # #     writer.add_scalar('val/totall_loss', losses_avg.avg, epoch)
-    # #     writer.add_scalar('val/loss_bbox', losses_box.avg, epoch)
-    # #     writer.add_scalar('val/loss_giou', losses_giou.avg, epoch)
-    # #     writer.add_scalar('val/loss_ce', losses_ce.avg, epoch)
+    # if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
+    #     writer.add_scalar('val/class_error', class_err.avg, epoch)
+    #     writer.add_scalar('val/totall_loss', losses_avg.avg, epoch)
+    #     writer.add_scalar('val/loss_bbox', losses_box.avg, epoch)
+    #     writer.add_scalar('val/loss_giou', losses_giou.avg, epoch)
+    #     writer.add_scalar('val/loss_ce', losses_ce.avg, epoch)
 
-    # buff_output = np.concatenate(buff_output, axis=0)
-    # buff_anno = np.concatenate(buff_anno, axis=0)
-    # # try:
-    # #     buff_binary = np.concatenate(buff_binary, axis=0)
-    # # except:
-    # #     pass
+    buff_output = np.concatenate(buff_output, axis=0)
+    buff_anno = np.concatenate(buff_anno, axis=0)
+    # try:
+    #     buff_binary = np.concatenate(buff_binary, axis=0)
+    # except:
+    #     pass
 
-    # buff_GT_label = np.concatenate(buff_GT_label, axis=0)
-    # buff_GT_anno = np.concatenate(buff_GT_anno, axis=0)
-    # # print_log(save_path, buff_output.shape, buff_anno.shape, len(buff_id), buff_GT_anno.shape, buff_GT_label.shape, len(buff_GT_id))
+    buff_GT_label = np.concatenate(buff_GT_label, axis=0)
+    buff_GT_anno = np.concatenate(buff_GT_anno, axis=0)
+    # print_log(save_path, buff_output.shape, buff_anno.shape, len(buff_id), buff_GT_anno.shape, buff_GT_label.shape, len(buff_GT_id))
     tmp_path = '{}/{}/{}.txt'
 
-    # with open(tmp_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, cfg.DDP_CONFIG.GPU_WORLD_RANK), 'w') as f:
-    #     for x in range(len(buff_id)):
-    #         data = np.concatenate([buff_anno[x], buff_output[x]])
-    #         f.write("{} {}\n".format(buff_id[x], data.tolist()))
-    # # try:
-    # #     tmp_binary_path = '{}/{}/binary_{}.txt'
-    # #     with open(tmp_binary_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, cfg.DDP_CONFIG.GPU_WORLD_RANK), 'w') as f:
-    # #         for x in range(len(buff_id)):
-    # #             data = buff_binary[x]
-    # #             f.write("{} {}\n".format(buff_id[x], data.tolist()))
-    # # except:
-    # #     pass
+    with open(tmp_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, cfg.DDP_CONFIG.GPU_WORLD_RANK), 'w') as f:
+        for x in range(len(buff_id)):
+            data = np.concatenate([buff_anno[x], buff_output[x]])
+            f.write("{} {}\n".format(buff_id[x], data.tolist()))
+    # try:
+    #     tmp_binary_path = '{}/{}/binary_{}.txt'
+    #     with open(tmp_binary_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, cfg.DDP_CONFIG.GPU_WORLD_RANK), 'w') as f:
+    #         for x in range(len(buff_id)):
+    #             data = buff_binary[x]
+    #             f.write("{} {}\n".format(buff_id[x], data.tolist()))
+    # except:
+    #     pass
 
     tmp_GT_path = '{}/{}/GT_{}.txt'
-    # with open(tmp_GT_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, cfg.DDP_CONFIG.GPU_WORLD_RANK), 'w') as f:
-    #     for x in range(len(buff_GT_id)):
-    #         data = np.concatenate([buff_GT_anno[x], buff_GT_label[x]])
-    #         f.write("{} {}\n".format(buff_GT_id[x], data.tolist()))
+    with open(tmp_GT_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, cfg.DDP_CONFIG.GPU_WORLD_RANK), 'w') as f:
+        for x in range(len(buff_GT_id)):
+            data = np.concatenate([buff_GT_anno[x], buff_GT_label[x]])
+            f.write("{} {}\n".format(buff_GT_id[x], data.tolist()))
 
     # write files and align all workers
-    # torch.distributed.barrier()
+    torch.distributed.barrier()
     # aggregate files
     Map_ = 0
     Map_v = 0

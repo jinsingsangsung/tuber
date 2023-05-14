@@ -203,7 +203,9 @@ def iou3dt(b1, b2):
     if tmax <= tmin: return 0.0    
     temporal_inter = tmax-tmin+1
     temporal_union = max(b1[-1,0], b2[-1,0]) - min(b1[0,0], b2[0,0]) + 1 
-    return iou3d( b1[np.where(b1[:,0]==tmin)[0][0]:np.where(b1[:,0]==tmax)[0][0]+1,:] , b2[np.where(b2[:,0]==tmin)[0][0]:np.where(b2[:,0]==tmax)[0][0]+1,:]  ) * temporal_inter / temporal_union
+    trimmed_b1 = b1[np.where(b1[:,0]==tmin)[0][0]:np.where(b1[:,0]==tmax)[0][0]+1,:]
+    trimmed_b2 = b2[np.where(b2[:,0]==tmin)[0][0]:np.where(b2[:,0]==tmax)[0][0]+1,:]
+    return iou3d(trimmed_b1, trimmed_b2) * temporal_inter / temporal_union
 
 def nms_3d(detections, overlap=0.5):
     # detections: [(tube1, score1), (tube2, score2)]

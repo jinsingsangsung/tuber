@@ -59,47 +59,55 @@ class STDetectionEvaluaterJHMDB(object):
         t_end = time.time()
         sample_dict_per_image = {}
         gt_videos = {} # for video-map
-        appeared_image_keys = []
+        frame_counter = {}
         for path in file_lst:
-            data = open(path).readlines()
-            for line in data:
+            data_ = open(path).readlines()
+            for i, line in enumerate(data_):
                 image_key = line.split(' [')[0]
                 vname = "_".join(image_key.split('_')[:-1])
                 # frame_idx = image_key.split('_')[-1]
-                if not image_key in appeared_image_keys:
-                    appeared_image_keys.append(image_key)
+                if not image_key in frame_counter:
+                    frame_counter[image_key] = 0
+                if frame_counter[image_key] == 1:
+                    continue
 
-                    data = line.split(' [')[1].split(']')[0].split(',')
-                    if not vname in gt_videos:
-                        gt_videos[vname] = {
-                            "tubes": [],
-                            "gt_classes": 0
-                        }
-                    data = [float(x) for x in data]
-                    scores = np.array(data[6:])
-                    gt_videos[vname]["tubes"].append([data[1], data[2], data[3], data[4], data[5]])
-                    if gt_videos[vname]["gt_classes"] == 0:
-                        gt_videos[vname]["gt_classes"] = int(scores.nonzero()[0])+1
+                if i < len(data_)-1:
+                    if image_key != data_[i+1].split(' [')[0]:
+                        frame_counter[image_key] = 1
+                else:
+                    frame_counter[image_key] = 1
 
-                    if (data[4] - data[2]) * (data[5] - data[3]) < 10:
-                        self.exclude_key.append(image_key)
-                        continue
+                data = line.split(' [')[1].split(']')[0].split(',')
+                if not vname in gt_videos:
+                    gt_videos[vname] = {
+                        "tubes": [],
+                        "gt_classes": 0
+                    }
+                data = [float(x) for x in data]
+                scores = np.array(data[6:])
+                gt_videos[vname]["tubes"].append([data[1], data[2], data[3], data[4], data[5]])
+                if gt_videos[vname]["gt_classes"] == 0:
+                    gt_videos[vname]["gt_classes"] = int(scores.nonzero()[0])+1
 
-                    if not image_key in sample_dict_per_image:
-                        sample_dict_per_image[image_key] = {
-                            'bbox': [],
-                            'labels': [],
-                            'scores': [],
-                        }
-                    # scores = np.max(scores, axis=-1, keepdims=True)
+                if (data[4] - data[2]) * (data[5] - data[3]) < 10:
+                    self.exclude_key.append(image_key)
+                    continue
 
-                    for x in range(len(scores)):
-                        if scores[x] <= 1e-2: continue
-                        sample_dict_per_image[image_key]['bbox'].append(
-                            np.asarray([data[2], data[3], data[4], data[5]], dtype=float)
-                        )
-                        sample_dict_per_image[image_key]['labels'].append(x + 1)
-                        sample_dict_per_image[image_key]['scores'].append(scores[x])
+                if not image_key in sample_dict_per_image:
+                    sample_dict_per_image[image_key] = {
+                        'bbox': [],
+                        'labels': [],
+                        'scores': [],
+                    }
+                # scores = np.max(scores, axis=-1, keepdims=True)
+
+                for x in range(len(scores)):
+                    if scores[x] <= 1e-2: continue
+                    sample_dict_per_image[image_key]['bbox'].append(
+                        np.asarray([data[2], data[3], data[4], data[5]], dtype=float)
+                    )
+                    sample_dict_per_image[image_key]['labels'].append(x + 1)
+                    sample_dict_per_image[image_key]['scores'].append(scores[x])
 
         for k in list(gt_videos.keys()):
             gt_videos[k]["tubes"] = np.expand_dims(np.asarray(gt_videos[k]["tubes"]), axis=0)

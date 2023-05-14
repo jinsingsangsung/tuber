@@ -77,7 +77,7 @@ def make_transforms(image_set, cfg):
 
 cfg = get_cfg_defaults()
 cfg.merge_from_file("./configuration/Dab_hier_CSN50_AVA22.yaml")
-model, _, _ = build_model(cfg)
+model, _, postprocessors = build_model(cfg)
 
 checkpoint = torch.load("../pretrained_models/main/dab_hier.pth")
 model_dict = model.state_dict()
@@ -89,7 +89,7 @@ print("# unused model layers:", len(unused_dict.keys()))
 print("# not found layers:", len(not_found_dict.keys()))
 model_dict.update(pretrained_dict)
 model.load_state_dict(model_dict)
-model = torch.nn.DataParallel(model, device_ids=[0, 1, 2, 3, 4, 5, 6, 7])
+model = torch.nn.DataParallel(model, device_ids=[0, 1])
 
 transforms=make_transforms("val", cfg)
 
@@ -196,17 +196,19 @@ for gpu_num in range(8):
             img_id = line.split(' ')[0]
             annotation = [int(float(n)) for n in line.split('[')[1].split(']')[0].split(',')]
             multi_hot_obj_label = annotation[6:]
+            box_coord = annotation[2:6]
             key_frame_candidates.append(img_id)
             if not img_id in GT:
-                GT[img_id] = []
-            GT[img_id].append(multi_hot_obj_label)
+                GT[img_id] = {}
+            GT[img_id]["label"] = multi_hot_obj_label
+            GT[img_id]["box_size"] = (box_coord[2] - box_coord[0]) * (box_coord[3] - box_coord[1])
 
 
 class_dict_of_offset_size = {}
-sim_thres = 0.4
+sim_thres = 0.5
 # ind = random.randint(0, len(key_frame_candidates)-1)
-display_freq = 200
-sampled_key_frames = random.sample(key_frame_candidates, 5000)
+display_freq = 2000
+sampled_key_frames = random.sample(key_frame_candidates, len(key_frame_candidates))
 
 for ind, key_frame in enumerate(sampled_key_frames):
     if ind%display_freq == 0:
@@ -256,20 +258,23 @@ for ind, key_frame in enumerate(sampled_key_frames):
     ]
 
     outputs = model(imgs.unsqueeze(0))
-
+    orig_target_sizes = torch.stack([target["size"]], dim=0).cuda()
+    _, boxes, _ = postprocessors['bbox'](outputs, orig_target_sizes)
     for hook in hooks:
         hook.remove()
 
     offsets = offsets[0][:, 16, :]
     cls_outputs = cls_outputs[0][-1].transpose(0,1).contiguous()[:, 16, :].sigmoid()
-    gt_query_sim = torch.matmul(torch.as_tensor(GT[key_frame], device=cls_outputs.device, dtype=torch.double), cls_outputs.T.double()) # N x 15
+    gt_query_sim = torch.matmul(torch.as_tensor(GT[key_frame]["label"], device=cls_outputs.device, dtype=torch.double), cls_outputs.T.double()) # N x 15
     query_id = torch.zeros(15, device=gt_query_sim.device, dtype=torch.bool)
     for sim in gt_query_sim:
         query_id = query_id + (sim > sim_thres)
     
     query_id = query_id.nonzero()
-
-    offset_size = offsets[:, 0:2].norm(dim=1).detach().cpu()
+    boxes = boxes.squeeze()
+    box_size = ((boxes[:, 2]-boxes[:, 0])*(boxes[:, 3]-boxes[:, 1])).clip(20,1e+5)
+    box_size = torch.Tensor(box_size).cuda().unsqueeze(1)
+    offset_size = (offsets[:, 0:2]/box_size*100000).norm(dim=1).detach().cpu()
     for n in range(15):
         if not n in query_id:
             continue
