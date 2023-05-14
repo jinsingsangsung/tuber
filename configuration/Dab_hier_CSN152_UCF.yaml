@@ -75,9 +75,9 @@ CONFIG:
     PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_152_ft_kinetics_from_ig65m_f126851907.mat"
     PRETRAIN_TRANSFORMER_DIR: "../pretrained_models/transformer/dab-hier-detr.pth"
     PRETRAINED_PATH: "/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/UCF/Dab_hier_270-40_0507-3/checkpoints/ckpt_epoch_19.pth"
-    LOAD: True
-    LOAD_FC: True
-    LOAD_DETR: False
+    LOAD: False
+    LOAD_FC: False
+    LOAD_DETR: True
     POSITION_EMBEDDING: "sine"
     NUM_FEATURE_LEVELS: 4
     NUM_DEC_N_POINTS: 4
@@ -114,4 +114,4 @@ CONFIG:
     SAVE_FREQ: 5
     RES_DIR: Dab_hier_{}-{}/res/
     EXP_NAME: Dab_hier_{}-{}
-    DISPLAY_FREQ: 1000
+    DISPLAY_FREQ: 200
