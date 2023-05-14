@@ -84,7 +84,7 @@ class VideoMAPEvaluator(object):
             ap = video_ap_one_class(gt, pred_cls, iou_thresh, bTemporal, cls_len)
             ap_all.append(ap)
             metrics[cls] = ap
-            print(cls, metrics[cls])
+            # print(cls, metrics[cls])
         metrics["video-mAP@{}IOU".format(self.iou)] = np.mean(ap_all)
         return metrics
 
