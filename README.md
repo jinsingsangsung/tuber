@@ -63,12 +63,12 @@ Currently doing experiments on AVA22, and trying on the new baseline
 Model | Dataset | Backbone | Backbone pretrained on | DETR pretrained on | f-mAP | V-mAP | config |
 :-----: | :---: | :---: | :-----: | :-----: | :----: | :---: | :---: |
 | TubeR | AVA 2.2 | CSN-50 | Kinetics-400 | *COCO*, AVA | 29.2 | - | - |
-| TubeR w/o LTC | AVA 2.2 | CSN-50 | Kinetics-400 | *COCO*, AVA | 27.7 <br> 27.6(rep) | - | - |
-| Baseline | AVA 2.2 | CSN-50 | Kinetics-400 | *COCO*, AVA | 23.37 | - | - |
-| Baseline + CE | AVA 2.2 | CSN-50 | Kinetics-400 | *COCO*, AVA | 27.43 | - | [config](configuration/Dab_hier_CSN50_AVA21.yaml) |
-| Baseline + CE <br> (IC ver.)| AVA 2.2 | CSN-50 | Kinetics-400 | *COCO*, AVA | 27.11 | - | - |
-| TubeR | JHMDB | CSN-152 | Kinetics-400 | *COCO*, AVA | N/A | 82.3 | - |
-| Baseline + CE | JHMDB | CSN-152 | Kinetics-400 | *COCO*, AVA | 77.27 | 84.59 | [config](configuration/Dab_hier_CSN152_JHMDB.yaml)  |
+| TubeR w/o LTC | AVA 2.2 | CSN-50 | K400+IG65M | *COCO*, AVA | 27.7 <br> 27.6(rep) | - | - |
+| Baseline | AVA 2.2 | CSN-50 | K400+IG65M | *COCO*, AVA | 23.37 | - | - |
+| Baseline + CE | AVA 2.2 | CSN-50 | K400+IG65M | *COCO*, AVA | 27.43 | - | [config](configuration/Dab_hier_CSN50_AVA21.yaml) |
+| Baseline + CE <br> (IC ver.)| AVA 2.2 | CSN-50 | K400+IG65M | *COCO*, AVA | 27.11 | - | - |
+| TubeR | JHMDB | CSN-152 | K400+IG65M | *COCO*, AVA | N/A | 82.3 | - |
+| Baseline + CE | JHMDB | CSN-152 | K400+IG65M | *COCO*, AVA | 77.27 | 84.59 | [config](configuration/Dab_hier_CSN152_JHMDB.yaml)  |
 
 # Model explanation
 
