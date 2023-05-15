@@ -28,7 +28,7 @@ def main_worker(cfg):
     else:
         writer = None
 
-    if int(os.getenv('NSML_SESSION', '0')) > 0 or True:
+    if int(os.getenv('NSML_SESSION', '0')) > 0:
         cfg.CONFIG.MODEL.LOAD = True
         cfg.CONFIG.MODEL.LOAD_FC = True
         cfg.CONFIG.MODEL.LOAD_DETR = False
