@@ -178,8 +178,8 @@ def load_model_and_states(model, optimizer, scheduler, cfg):
     else:
         print_log(log_path,"=> no checkpoint found at '{}'".format(cfg.CONFIG.MODEL.PRETRAINED_PATH))
     
+    scheduler.load_state_dict(checkpoint['lr_scheduler'])
     optimizer.load_state_dict(checkpoint['optimizer'])
-    scheduler.load_state_dict(checkpoint['scheduler'])
     start_epoch = checkpoint['epoch']+1
     random.setstate(checkpoint["random_python"])
     np.random.set_state(checkpoint["random_numpy"])
