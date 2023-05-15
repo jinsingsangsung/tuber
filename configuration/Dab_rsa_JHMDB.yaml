@@ -73,7 +73,7 @@ CONFIG:
     SAMPLE_RATE: 2
     PRETRAINED: True
     PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_152_ft_kinetics_from_ig65m_f126851907.mat"
-    PRETRAIN_TRANSFORMER_DIR: "../pretrained_models/transformer/dab-hier-detr.pth"
+    PRETRAIN_TRANSFORMER_DIR: "../pretrained_models/transformer/dab-hier-detr-jhmdb.pth"
     PRETRAINED_PATH: "/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/JHMDB_Tuber/Dab_hier_270-91_0504/checkpoints/ckpt_epoch_15.pth"
     LOAD: False
     LOAD_FC: False
@@ -110,8 +110,8 @@ CONFIG:
     BASE_PATH: '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/JHMDB_Tuber'
     LOG_DIR: 'tb_log'
     SAVE_DIR: 'checkpoints'
-    EVAL_DIR: '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/JHBDM_Tuber/eval'
+    EVAL_DIR: '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/JHMDB_Tuber/eval'
     SAVE_FREQ: 5
-    RES_DIR: Dab_rsa_{}-{}
+    RES_DIR: Dab_rsa_{}-{}/res/
     EXP_NAME: Dab_rsa_{}-{}
     DISPLAY_FREQ: 20
