@@ -19,7 +19,7 @@ from models.detr.segmentation import (dice_loss, sigmoid_focal_loss)
 from models.dab_rsa_detr.dab_transformer import build_transformer
 # from models.transformer.transformer_layers import TransformerEncoderLayer, TransformerEncoder
 from models.dab_rsa_detr.criterion import PostProcess, PostProcessAVA, MLP
-from models.dab_rsa_detr.criterion import SetCriterion, SetCriterionAVA
+from models.dab_rsa_detr.criterion import SetCriterion, SetCriterionAVA, SetCriterionUCF
 from models.dab_rsa_detr.transformer_layers import TransformerEncoderLayer, TransformerEncoder
 from models.dab_rsa_detr.dab_transformer import TransformerDecoderLayer, TransformerDecoder
 # from models.dn_dab_deformable_detr.dn_components import prepare_for_dn, dn_post_process, compute_dn_loss
@@ -266,8 +266,17 @@ def build_model(cfg):
                                     losses=losses,
                                     data_file=cfg.CONFIG.DATA.DATASET_NAME,
                                     evaluation=cfg.CONFIG.EVAL_ONLY)
-    else:
+    elif cfg.CONFIG.DATA.DATASET_NAME == 'jhmdb':
         criterion = SetCriterion(cfg.CONFIG.LOSS_COFS.WEIGHT,
+                                    num_classes,
+                                    num_queries=cfg.CONFIG.MODEL.QUERY_NUM,
+                                    matcher=matcher, weight_dict=weight_dict,
+                                    eos_coef=cfg.CONFIG.LOSS_COFS.EOS_COF,                                    
+                                    losses=losses,
+                                    data_file=cfg.CONFIG.DATA.DATASET_NAME,
+                                    evaluation=cfg.CONFIG.EVAL_ONLY)
+    else:
+        criterion = SetCriterionUCF(cfg.CONFIG.LOSS_COFS.WEIGHT,
                                     num_classes,
                                     num_queries=cfg.CONFIG.MODEL.QUERY_NUM,
                                     matcher=matcher, weight_dict=weight_dict,
