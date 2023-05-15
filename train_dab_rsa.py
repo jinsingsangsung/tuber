@@ -156,7 +156,7 @@ if __name__ == '__main__':
     cfg.CONFIG.LOG.EXP_NAME = cfg.CONFIG.LOG.EXP_NAME.format(study, run)
     if args.debug:
         cfg.DDP_CONFIG.DISTRIBUTED = False
-        cfg.CONFIG.LOG.RES_DIR = "debug_{}-{}".format(study,run)
+        cfg.CONFIG.LOG.RES_DIR = "debug_{}-{}/res/".format(study,run)
         cfg.CONFIG.LOG.EXP_NAME = "debug_{}-{}".format(study,run)
 
     import socket 
