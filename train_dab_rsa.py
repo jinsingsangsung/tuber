@@ -6,14 +6,13 @@ import torch
 import torch.optim
 # from tensorboardX import SummaryWriter
 from models.dab_rsa import build_model
-from utils.model_utils import deploy_model, load_model, save_checkpoint
+from utils.model_utils import deploy_model, load_model, save_checkpoint, load_model_and_states
 from utils.video_action_recognition import train_tuber_detection, validate_tuber_detection, validate_tuber_ucf_detection, validate_tuber_jhmdb_detection
 from pipelines.video_action_recognition_config import get_cfg_defaults
 from pipelines.launch import spawn_workers
 from utils.utils import build_log_dir, print_log
 from utils.lr_scheduler import build_scheduler
 from utils.nsml_utils import *
-from datetime import date
 import numpy as np
 import random
 import os
@@ -28,6 +27,11 @@ def main_worker(cfg):
         writer = None
     else:
         writer = None
+
+    if int(os.getenv('NSML_SESSION', '0')) > 0 or True:
+        cfg.CONFIG.MODEL.LOAD = True
+        cfg.CONFIG.MODEL.LOAD_FC = True
+        cfg.CONFIG.MODEL.LOAD_DETR = False
 
     # create model
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:    
@@ -93,13 +97,10 @@ def main_worker(cfg):
         cfg.CONFIG.MODEL.PRETRAINED_PATH = os.path.join(cfg.CONFIG.LOG.BASE_PATH, exp_name, cfg.CONFIG.LOG.SAVE_DIR, latest_epoch) # find the pretrained_path
         model, optimizer, lr_scheduler, start_epoch = load_model_and_states(model, optimizer, lr_scheduler, cfg)
         cfg.CONFIG.TRAIN.START_EPOCH = start_epoch
-        cfg.CONFIG.MODEL.LOAD = True
-        cfg.CONFIG.MODEL.LOAD_FC = True
-        cfg.CONFIG.MODEL.LOAD_DETR = False
-
-    # docs: add resume option
-    if cfg.CONFIG.MODEL.LOAD:
-        model, _ = load_model(model, cfg, load_fc=cfg.CONFIG.MODEL.LOAD_FC)
+    
+    else:
+        if cfg.CONFIG.MODEL.LOAD:
+            model, _ = load_model(model, cfg, load_fc=cfg.CONFIG.MODEL.LOAD_FC)
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0: 
         print_log(save_path, 'Start training...')
     start_time = time.time()

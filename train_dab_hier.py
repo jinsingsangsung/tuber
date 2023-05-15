@@ -28,6 +28,11 @@ def main_worker(cfg):
     else:
         writer = None
 
+    if int(os.getenv('NSML_SESSION', '0')) > 0:
+        cfg.CONFIG.MODEL.LOAD = True
+        cfg.CONFIG.MODEL.LOAD_FC = True
+        cfg.CONFIG.MODEL.LOAD_DETR = False
+
     # create model
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:    
         print_log(save_path, datetime.datetime.today())
@@ -92,9 +97,6 @@ def main_worker(cfg):
         cfg.CONFIG.MODEL.PRETRAINED_PATH = os.path.join(cfg.CONFIG.LOG.BASE_PATH, exp_name, cfg.CONFIG.LOG.SAVE_DIR, latest_epoch) # find the pretrained_path
         model, optimizer, lr_scheduler, start_epoch = load_model_and_states(model, optimizer, lr_scheduler, cfg)
         cfg.CONFIG.TRAIN.START_EPOCH = start_epoch
-        cfg.CONFIG.MODEL.LOAD = True
-        cfg.CONFIG.MODEL.LOAD_FC = True
-        cfg.CONFIG.MODEL.LOAD_DETR = False
 
     else:
         if cfg.CONFIG.MODEL.LOAD:
@@ -135,7 +137,7 @@ def main_worker(cfg):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train video action recognition transformer models.')
     parser.add_argument('--config-file',
-                        default='./configuration/Dab_hier_CSN50_AVA22.yaml',
+                        default='./configuration/Dab_hier_CSN152_AVA22.yaml',
                         help='path to config file.')
     parser.add_argument('--random_seed', default=1, help='random_seed')
     parser.add_argument('--debug', action='store_true', help="debug, and ddp is disabled")
@@ -148,8 +150,8 @@ if __name__ == '__main__':
 
     cfg = get_cfg_defaults()
     cfg.merge_from_file(args.config_file)
-    study = os.environ["NSML_STUDY"]
-    run = os.environ["NSML_RUN_NAME"].split("/")[-1]
+    study = 270 #os.environ["NSML_STUDY"]
+    run = 118 #os.environ["NSML_RUN_NAME"].split("/")[-1]
     cfg.CONFIG.LOG.RES_DIR = cfg.CONFIG.LOG.RES_DIR.format(study, run)
     cfg.CONFIG.LOG.EXP_NAME = cfg.CONFIG.LOG.EXP_NAME.format(study, run)
     if args.debug:
