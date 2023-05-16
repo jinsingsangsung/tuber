@@ -139,7 +139,7 @@ if __name__ == '__main__':
     parser.add_argument('--config-file',
                         default='./configuration/Dab_hier_CSN152_AVA22.yaml',
                         help='path to config file.')
-    parser.add_argument('--random_seed', default=1, help='random_seed')
+    parser.add_argument('--random_seed', default=1, type=int, help='random_seed')
     parser.add_argument('--debug', action='store_true', help="debug, and ddp is disabled")
     args = parser.parse_args()
     random.seed(args.random_seed)
