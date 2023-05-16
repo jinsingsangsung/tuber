@@ -150,8 +150,8 @@ if __name__ == '__main__':
 
     cfg = get_cfg_defaults()
     cfg.merge_from_file(args.config_file)
-    study = 270 #os.environ["NSML_STUDY"]
-    run = 118 #os.environ["NSML_RUN_NAME"].split("/")[-1]
+    study = os.environ["NSML_STUDY"]
+    run = os.environ["NSML_RUN_NAME"].split("/")[-1]
     cfg.CONFIG.LOG.RES_DIR = cfg.CONFIG.LOG.RES_DIR.format(study, run)
     cfg.CONFIG.LOG.EXP_NAME = cfg.CONFIG.LOG.EXP_NAME.format(study, run)
     if args.debug:
