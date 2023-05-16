@@ -60,7 +60,7 @@ CONFIG:
     LAST_STRIDE: False
     GENERATE_LFB: False
     NAME: 'ava_detr_9_224'
-    ENC_LAYERS: 3
+    ENC_LAYERS: 4
     DEC_LAYERS: 6
     D_MODEL: 256
     NHEAD: 8
