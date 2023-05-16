@@ -22,6 +22,9 @@ def load_detr_weights(model, pretrain_dir, cfg):
                 pretrained_dict.update({k.replace("ref_point_head", "cls_ref_point_head"): v})
             if "decoder.layers" in k:
                 pretrained_dict.update({k.replace("decoder.layers", "decoder.cls_layers"): v})
+                if "norm1" in k:
+                    pretrained_dict.update({k.replace("norm1", "norm2"): v})
+                    pretrained_dict.update({k.replace("norm1", "norm3"): v})
             if "encoder.layers" in k:
                 mod_name = k.split(".")[4]
                 pretrained_dict.update({k.replace(mod_name, mod_name+"_s"): v})
@@ -46,7 +49,6 @@ def load_detr_weights(model, pretrain_dir, cfg):
         print_log(log_path, "number of detr unused model layers:", len(unused_dict.keys()))
         print_log(log_path, "number of detr used model layers:", len(pretrained_dict_.keys()))
         print_log(log_path, "number of detr not found model layers:", len(not_found_dict.keys()))
-
     model_dict.update(pretrained_dict_)
     model.load_state_dict(model_dict)
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
