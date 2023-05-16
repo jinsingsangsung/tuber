@@ -113,6 +113,6 @@ CONFIG:
     SAVE_DIR: 'checkpoints'
     EVAL_DIR: '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/AVA_Tuber/eval'
     SAVE_FREQ: 1
-    RES_DIR: Dab_hier_{}-{}_CSN152/res/
+    RES_DIR: Dab_hier_{}-{}_CSN152/res
     EXP_NAME: Dab_hier_{}-{}_CSN152
     DISPLAY_FREQ: 1000
