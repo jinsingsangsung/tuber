@@ -10,6 +10,22 @@ from torch import nn
 from utils.box_ops import box_cxcywh_to_xyxy, batched_generalized_box_iou
 from evaluates.utils import compute_video_map
 
+def batched_index(input_tensor, index):
+    """
+    input_tensor: bs, nq, num_classes
+    index: bs, num_boxes (each element is nonnegative integer < num_classes)
+
+    output_tensor: bs, nq, num_boxes
+    """
+    B = input_tensor.shape[0]
+    assert index.shape[0] == B
+    num_boxes = index.shape[1]
+    output_tensor = torch.zeros(input_tensor.shape[:2] + (num_boxes,), device=input_tensor.device)
+    for b in range(B):
+        output_tensor[b] = input_tensor[b][:, index[b]]
+    return output_tensor
+
+
 class HungarianMatcher(nn.Module):
     """This class computes an assignment between the targets and the predictions of the network
 
@@ -35,6 +51,7 @@ class HungarianMatcher(nn.Module):
         self.before = before
         self.clip_len = clip_len
         assert cost_class != 0 or cost_bbox != 0 or cost_giou != 0, "all costs cant be 0"
+        self.focal_alpha = 0.25
 
     @torch.no_grad()
     def forward(self, outputs, targets):
@@ -95,9 +112,17 @@ class HungarianMatcher(nn.Module):
         cost_giou = -batched_generalized_box_iou(box_cxcywh_to_xyxy(tgt_bbox), box_cxcywh_to_xyxy(out_bbox))
         cost_giou[invalid_ids] = torch.zeros(out_bbox.shape[1], device=cost_bbox.device)
         cost_giou = cost_giou.permute(0,2,1).contiguous()
-        out_prob = outputs["pred_logits_b"].permute(1,0,2,3).flatten(1, 2).softmax(-1)
-        cost_class = -out_prob[..., 1:2].repeat(1,1,sum(sizes))
-        # t, bs*n_q, bs~#
+
+        # out_prob = outputs["pred_logits_b"].permute(1,0,2,3).flatten(1, 2).softmax(-1)
+        # cost_class = -out_prob[..., 1:2].repeat(1,1,sum(sizes))
+        out_prob = outputs["pred_logits"].transpose(0,1).flatten(1, 2).sigmoid() # t, bs*nq, 25
+        alpha = self.focal_alpha
+        gamma = 2.0
+        neg_cost_class = (1 - alpha) * (out_prob ** gamma) * (-(1 - out_prob + 1e-8).log())
+        pos_cost_class = alpha * ((1 - out_prob) ** gamma) * (-(out_prob + 1e-8).log())
+        cost_class = batched_index(pos_cost_class, tgt_ids) - batched_index(neg_cost_class, tgt_ids)
+        # t, bs*n_q, 1
+
 
         # Final cost matrix
         C = self.cost_bbox * cost_bbox + self.cost_giou * cost_giou + self.cost_class * cost_class

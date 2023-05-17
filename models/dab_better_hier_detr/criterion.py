@@ -264,13 +264,15 @@ class SetCriterion(nn.Module):
         src_logits = outputs['pred_logits'].flatten(0,1) #bs*t, n_q, n_c
         T = outputs['pred_logits'].size(1)
         idx = self._get_src_permutation_idx(indices)
+        try:
+            src_logits_b = outputs['pred_logits_b'].flatten(0,1)
+            target_classes_b = torch.full(src_logits_b.shape[:2], 2,
+                                dtype=torch.int64, device=src_logits_b.device)      
+            target_classes_b[idx] = 1
 
-        src_logits_b = outputs['pred_logits_b'].flatten(0,1)
-        target_classes_b = torch.full(src_logits_b.shape[:2], 2,
-                            dtype=torch.int64, device=src_logits_b.device)      
-        target_classes_b[idx] = 1
-
-        loss_ce_b = F.cross_entropy(src_logits_b.flatten(0,1), target_classes_b.flatten(0,1))
+            loss_ce_b = F.cross_entropy(src_logits_b.flatten(0,1), target_classes_b.flatten(0,1))
+        except:
+            pass
 
         target_classes_o = torch.cat([t["labels"] for t in targets])
         # bs*t
@@ -282,9 +284,17 @@ class SetCriterion(nn.Module):
         # bs*t, n_q 
         target_classes[idx] = target_classes_o
         # TODO: fix it here
+        # target_classes_onehot = torch.zeros([src_logits.shape[0], src_logits.shape[1], src_logits.shape[2]+1],
+        #                                     dtype=src_logits.dtype, layout=src_logits.layout, device=src_logits.device)
+        # target_classes_onehot.scatter_(2, target_classes.unsqueeze(-1), 1)
+
+        # target_classes_onehot = target_classes_onehot[:,:,:-1]
         loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
         losses = {'loss_ce': loss_ce}
-        losses['loss_ce_b'] = loss_ce_b
+        try:
+            losses['loss_ce_b'] = loss_ce_b
+        except:
+            pass
 
         if log:
             # TODO this should probably be a separate loss, not hacked in this one here
@@ -483,13 +493,15 @@ class SetCriterionUCF(nn.Module):
         src_logits = outputs['pred_logits'].transpose(1,2) # bs, n, t, 24
         T = outputs['pred_logits'].size(1)
         idx = self._get_src_permutation_idx(indices)
+        try:
+            src_logits_b = outputs['pred_logits_b'].transpose(1,2) # bs, n, t, 3
+            target_classes_b = torch.full(src_logits_b.shape[:3], 2,
+                                dtype=torch.int64, device=src_logits_b.device)      
+            target_classes_b[idx] = torch.ones(T, device=target_classes_b.device, dtype=target_classes_b.dtype)
 
-        src_logits_b = outputs['pred_logits_b'].transpose(1,2) # bs, n, t, 3
-        target_classes_b = torch.full(src_logits_b.shape[:3], 2,
-                            dtype=torch.int64, device=src_logits_b.device)      
-        target_classes_b[idx] = torch.ones(T, device=target_classes_b.device, dtype=target_classes_b.dtype)
-
-        loss_ce_b = F.cross_entropy(src_logits_b.flatten(1,2).transpose(1,2), target_classes_b.flatten(1,2))
+            loss_ce_b = F.cross_entropy(src_logits_b.flatten(1,2).transpose(1,2), target_classes_b.flatten(1,2))
+        except:
+            pass
 
         target_classes_o = torch.cat([t["labels"] for t in targets])
         # bs*t
@@ -500,9 +512,18 @@ class SetCriterionUCF(nn.Module):
                                     dtype=torch.int64, device=src_logits.device)
         # bs*t, n_q 
         target_classes[idx] = target_classes_o
-        loss_ce = F.cross_entropy(src_logits.flatten(1,2).transpose(1, 2), target_classes.flatten(1,2), self.empty_weight)
+        target_classes_onehot = F.one_hot(target_classes, 25).float()
+
+        # target_classes: bs, nq, t
+        # src_logits: bs, nq, t, nc
+        # loss_ce = F.cross_entropy(src_logits.flatten(1,2).transpose(1, 2), target_classes.flatten(1,2), self.empty_weight)
+        loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot)
+
         losses = {'loss_ce': loss_ce}
-        losses['loss_ce_b'] = loss_ce_b
+        try:
+            losses['loss_ce_b'] = loss_ce_b
+        except:
+            pass
 
         if log:
             # TODO this should probably be a separate loss, not hacked in this one here
