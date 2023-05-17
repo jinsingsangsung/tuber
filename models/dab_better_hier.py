@@ -16,12 +16,12 @@ import os
 
 from models.backbone_builder2 import build_backbone
 from models.detr.segmentation import (dice_loss, sigmoid_focal_loss)
-from models.dab_hier_detr.dab_transformer import build_transformer
+from models.dab_better_hier_detr.dab_transformer import build_transformer
 # from models.transformer.transformer_layers import TransformerEncoderLayer, TransformerEncoder
-from models.dab_hier_detr.criterion import PostProcess, PostProcessAVA, MLP
-from models.dab_hier_detr.criterion import SetCriterion, SetCriterionAVA, SetCriterionUCF
-from models.dab_hier_detr.transformer_layers import TransformerEncoderLayer, TransformerEncoder
-from models.dab_hier_detr.dab_transformer import TransformerDecoderLayer, TransformerDecoder
+from models.dab_better_hier_detr.criterion import PostProcess, PostProcessAVA, MLP
+from models.dab_better_hier_detr.criterion import SetCriterion, SetCriterionAVA, SetCriterionUCF
+from models.dab_better_hier_detr.transformer_layers import TransformerEncoderLayer, TransformerEncoder
+from models.dab_better_hier_detr.dab_transformer import TransformerDecoderLayer, TransformerDecoder
 # from models.dn_dab_deformable_detr.dn_components import prepare_for_dn, dn_post_process, compute_dn_loss
 
 import copy
@@ -91,11 +91,11 @@ class DETR(nn.Module):
         bias_value = -math.log((1 - prior_prob) / prior_prob)
         if self.dataset_mode == 'ava':
             self.class_embed = nn.Linear(hidden_dim, num_classes)
-            self.class_embed_b = nn.Linear(hidden_dim, 3)
+            # self.class_embed_b = nn.Linear(hidden_dim, 3)
             self.class_embed.bias.data = torch.ones(num_classes) * bias_value
         else:
             self.class_embed = nn.Linear(hidden_dim, num_classes+1)
-            self.class_embed_b = nn.Linear(hidden_dim, 3)
+            # self.class_embed_b = nn.Linear(hidden_dim, 3)
             self.class_embed.bias.data = torch.ones(num_classes+1) * bias_value
         
 
@@ -163,7 +163,7 @@ class DETR(nn.Module):
         # bs = samples.tensors.shape[0]
         embedweight = self.refpoint_embed.weight.view(self.num_queries, self.temporal_length, 4)      # nq, t, 4
         hs, reference, cls_hs = self.transformer(self.input_proj(src), mask, embedweight, pos[-1])
-        outputs_class_b = self.class_embed_b(hs)
+        # outputs_class_b = self.class_embed_b(hs)
         ######## localization head
         if not self.bbox_embed_diff_each_layer:
             reference_before_sigmoid = inverse_sigmoid(reference)
@@ -188,34 +188,39 @@ class DETR(nn.Module):
         if self.dataset_mode == "ava":
             outputs_class = outputs_class.reshape(-1, bs, t, self.num_queries, self.num_classes)[:,:,self.temporal_length//2,:,:]
             outputs_coord = outputs_coord.reshape(-1, bs, t, self.num_queries, 4)[:,:,self.temporal_length//2,:,:]
-            outputs_class_b = outputs_class_b.reshape(-1, bs, t, self.num_queries, 3)[:,:,self.temporal_length//2,:,:]
+            # outputs_class_b = outputs_class_b.reshape(-1, bs, t, self.num_queries, 3)[:,:,self.temporal_length//2,:,:]
         else:
             outputs_class = outputs_class.reshape(-1, bs, t, self.num_queries, self.num_classes+1)
             outputs_coord = outputs_coord.reshape(-1, bs, t, self.num_queries, 4)
-            outputs_class_b = outputs_class_b.reshape(-1, bs, t, self.num_queries, 3)
-        out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1], 'pred_logits_b': outputs_class_b[-1],}
+            # outputs_class_b = outputs_class_b.reshape(-1, bs, t, self.num_queries, 3)
+        # out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1], 'pred_logits_b': outputs_class_b[-1],}
+        out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1],}
         if self.aux_loss:
-            out['aux_outputs'] = self._set_aux_loss(outputs_class, outputs_coord, outputs_class_b)
+            # out['aux_outputs'] = self._set_aux_loss(outputs_class, outputs_coord, outputs_class_b)
+            out['aux_outputs'] = self._set_aux_loss(outputs_class, outputs_coord)
 
         return out
 
     @torch.jit.unused
-    def _set_aux_loss(self, outputs_class, outputs_coord, outputs_class_b):
+    # def _set_aux_loss(self, outputs_class, outputs_coord, outputs_class_b):
+    def _set_aux_loss(self, outputs_class, outputs_coord):
         # this is a workaround to make torchscript happy, as torchscript
         # doesn't support dictionary with non-homogeneous values, such
         # as a dict having both a Tensor and a list.
 
-        return [{'pred_logits': a, 'pred_boxes': b, 'pred_logits_b': c}
-                for a, b, c in zip(outputs_class[:-1], outputs_coord[:-1], outputs_class_b[:-1])]
+        # return [{'pred_logits': a, 'pred_boxes': b, 'pred_logits_b': c}
+        #         for a, b, c in zip(outputs_class[:-1], outputs_coord[:-1], outputs_class_b[:-1])]
+        return [{'pred_logits': a, 'pred_boxes': b}
+                for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
 
 
 def build_model(cfg):
     if cfg.CONFIG.DATA.DATASET_NAME == 'ava':
-        from models.dab_hier_detr.matcher import build_matcher
+        from models.dab_better_hier_detr.matcher import build_matcher
     elif cfg.CONFIG.DATA.DATASET_NAME == 'jhmdb':
-        from models.dab_hier_detr.matcher_ucf import build_matcher
+        from models.dab_better_hier_detr.matcher_jhmdb import build_matcher
     else:
-        from models.dab_hier_detr.matcher_ucf_ import build_matcher
+        from models.dab_better_hier_detr.matcher_ucf_ import build_matcher
     num_classes = cfg.CONFIG.DATA.NUM_CLASSES
     log_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:

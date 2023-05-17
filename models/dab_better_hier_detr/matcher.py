@@ -9,6 +9,32 @@ from torch import nn
 
 from utils.box_ops import box_cxcywh_to_xyxy, generalized_box_iou
 
+def sigmoid_focal_loss(out_prob, tgt_classes, reduction="none", alpha=0.25, gamma=2.0):
+    """
+    out_prob: bs*n_q, num_classes (after sigmoid)
+    tgt_classes: bs~num_boxes, num_classes
+    
+    output: bs*n_q, 1
+    """
+    # tgt_classes = target_classes[:, None, :].repeat(1,N,1).flatten(0,1)
+    focal_loss = -torch.matmul((1-out_prob)**gamma*out_prob.log(), tgt_classes.T) + torch.matmul(out_prob**gamma*(1-out_prob).log(), (1-tgt_classes).T)
+
+    # ce_loss = F.binary_cross_entropy_with_logits(out_prob, tgt_classes, reduction="none")
+    if alpha >= 0:
+        output = alpha * focal_loss
+    if reduction == "none":
+        pass
+    elif reduction == "sum":
+        output = output.sum(dim=-1, keepdim=True)
+    elif reduction == "mean":
+        output = output.mean(dim=-1, keepdim=True)
+    else:
+        raise ValueError(
+            f"Invalid Value for arg 'reduction': '{reduction} \n Supported reduction modes: 'none', 'mean', 'sum'"
+        )
+
+    return output
+
 
 class HungarianMatcher(nn.Module):
     """This class computes an assignment between the targets and the predictions of the network
@@ -73,8 +99,13 @@ class HungarianMatcher(nn.Module):
         # cost_class = -(torch.mm(out_classes, tgt_classes.T) + torch.mm(1 - out_classes, 1 - tgt_classes.T))/out_classes.shape[-1]
 
         # cost_class = torch.cdist(out_classes, tgt_classes, p=1)
-        out_prob = outputs["pred_logits_b"].flatten(0, 1).softmax(-1)
-        cost_class = -out_prob[:, 1:2].repeat(1, len(tgt_bbox))
+        # out_prob = outputs["pred_logits_b"].flatten(0, 1).softmax(-1)
+        # cost_class = -out_prob[:, 1:2].repeat(1, len(tgt_bbox))
+
+        tgt_classes = torch.cat([v["labels"] for v in targets])
+        out_prob = outputs["pred_logits"].flatten(0,1).sigmoid()
+        cost_class = sigmoid_focal_loss(out_prob, tgt_classes)
+
         # Final cost matrix
         C = self.cost_bbox * cost_bbox+ self.cost_giou * cost_giou + self.cost_class * cost_class 
         C = C.view(bs, num_queries, -1).cpu()

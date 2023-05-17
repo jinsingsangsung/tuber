@@ -73,7 +73,6 @@ class SetCriterionAVA(nn.Module):
         if self.evaluation:
             loss_ce = F.binary_cross_entropy(src_logits_sig, target_classes)
         else:
-            
             # loss_ce = F.binary_cross_entropy(src_logits_sig, target_classes, weight=weights)
             # eps = 1e-8
             loss_ce = sigmoid_focal_loss(src_logits, target_classes, weights)
@@ -282,7 +281,7 @@ class SetCriterion(nn.Module):
                                     dtype=torch.int64, device=src_logits.device)
         # bs*t, n_q 
         target_classes[idx] = target_classes_o
-
+        # TODO: fix it here
         loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
         losses = {'loss_ce': loss_ce}
         losses['loss_ce_b'] = loss_ce_b
