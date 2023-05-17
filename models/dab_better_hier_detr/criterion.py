@@ -289,7 +289,10 @@ class SetCriterion(nn.Module):
         # target_classes_onehot.scatter_(2, target_classes.unsqueeze(-1), 1)
 
         # target_classes_onehot = target_classes_onehot[:,:,:-1]
-        loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
+        target_classes_onehot = F.one_hot(target_classes, 22).float()
+        loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot)        
+        
+        # loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
         losses = {'loss_ce': loss_ce}
         try:
             losses['loss_ce_b'] = loss_ce_b
