@@ -341,6 +341,6 @@ def build_CSN(cfg):
                         gpu_world_rank=cfg.DDP_CONFIG.GPU_WORLD_RANK,
                         log_path=log_path)
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
-        print_log(log_path, "build CSN-152, tune point: {}".format(tune_point))
+        print_log(log_path, "build CSN-50, tune point: {}".format(tune_point))
     return model
 
