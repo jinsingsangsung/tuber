@@ -216,7 +216,10 @@ def sigmoid_focal_loss(inputs, targets, weights=None, alpha: float = 0.25, gamma
     prob = inputs.sigmoid()
     ce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
     if weights is not None:
-        ce_loss *= weights
+        try:
+            ce_loss *= weights
+        except:
+            ce_loss *= weights[..., None]
     p_t = prob * targets + (1 - prob) * (1 - targets)
     loss = ce_loss * ((1 - p_t) ** gamma)
 
