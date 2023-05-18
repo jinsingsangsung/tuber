@@ -281,8 +281,13 @@ class SetCriterion(nn.Module):
                                     dtype=torch.int64, device=src_logits.device)
         # bs*t, n_q 
         target_classes[idx] = target_classes_o
-
-        loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
+        target_classes_onehot = F.one_hot(target_classes, 22).float()
+        # loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
+        weights = torch.full(src_logits.shape[:2], 1,
+                             dtype=torch.float32, device=src_logits.device)
+        weights[idx] = self.weight
+        loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot, weights) / 10     
+        # loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
         losses = {'loss_ce': loss_ce}
         losses['loss_ce_b'] = loss_ce_b
 
@@ -500,7 +505,14 @@ class SetCriterionUCF(nn.Module):
                                     dtype=torch.int64, device=src_logits.device)
         # bs*t, n_q 
         target_classes[idx] = target_classes_o
-        loss_ce = F.cross_entropy(src_logits.flatten(1,2).transpose(1, 2), target_classes.flatten(1,2), self.empty_weight)
+
+        target_classes_onehot = F.one_hot(target_classes, 22).float()
+        # loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
+        weights = torch.full(src_logits.shape[:2], 1,
+                             dtype=torch.float32, device=src_logits.device)
+        weights[idx] = self.weight
+        loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot, weights) / 10        
+        # loss_ce = F.cross_entropy(src_logits.flatten(1,2).transpose(1, 2), target_classes.flatten(1,2), self.empty_weight)
         losses = {'loss_ce': loss_ce}
         losses['loss_ce_b'] = loss_ce_b
 
