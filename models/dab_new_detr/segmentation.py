@@ -219,7 +219,7 @@ def sigmoid_focal_loss(inputs, targets, weights=None, alpha: float = 0.25, gamma
         try:
             ce_loss *= weights
         except:
-            ce_loss *= weights[..., None, None]
+            ce_loss *= weights[..., None]
     p_t = prob * targets + (1 - prob) * (1 - targets)
     loss = ce_loss * ((1 - p_t) ** gamma)
 
