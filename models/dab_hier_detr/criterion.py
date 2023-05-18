@@ -506,7 +506,7 @@ class SetCriterionUCF(nn.Module):
         # bs*t, n_q 
         target_classes[idx] = target_classes_o
 
-        target_classes_onehot = F.one_hot(target_classes, 22).float()
+        target_classes_onehot = F.one_hot(target_classes, 25).float()
         # loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
         weights = torch.full(src_logits.shape[:2], 1,
                              dtype=torch.float32, device=src_logits.device)
