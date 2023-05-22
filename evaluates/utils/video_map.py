@@ -81,7 +81,10 @@ class VideoMAPEvaluator(object):
             #     list of n frames that has bounding boxes, confidence scores
             pred_cls = [p[1:] for p in pred_videos_format if p[0]==cls_ind]
             cls_len = None
-            ap = video_ap_one_class(gt, pred_cls, iou_thresh, bTemporal, cls_len)
+            try:
+                ap = video_ap_one_class(gt, pred_cls, iou_thresh, False, cls_len)
+            except:
+                ap = video_ap_one_class(gt, pred_cls, iou_thresh, bTemporal, cls_len)
             ap_all.append(ap)
             print(cls, ap)
             metrics[cls] = ap
