@@ -65,6 +65,8 @@ class STDetectionEvaluaterUCF(object):
                 data = line.split(' [')[1].split(']')[0].split(',')
                 data = [float(x) for x in data]
                 scores = np.array(data[6:])
+
+                # To avoid same sample from the dataloader which messes everything up
                 if not image_key in frame_counter:
                     frame_counter[image_key] = 0
                 if frame_counter[image_key] == 1:
@@ -76,25 +78,25 @@ class STDetectionEvaluaterUCF(object):
                 else:
                     frame_counter[image_key] = 1
 
-                # if (data[4] - data[2]) * (data[5] - data[3]) < 10:
-                #     self.exclude_key.append(image_key)
-                #     continue
+                if (data[4] - data[2]) * (data[5] - data[3]) >= 10:
+                    if not image_key in sample_dict_per_image:
+                        sample_dict_per_image[image_key] = {
+                            'bbox': [],
+                            'labels': [],
+                            'scores': [],
+                        }
+                    # scores = np.max(scores, axis=-1, keepdims=True)
 
-                if not image_key in sample_dict_per_image:
-                    sample_dict_per_image[image_key] = {
-                        'bbox': [],
-                        'labels': [],
-                        'scores': [],
-                    }
-                # scores = np.max(scores, axis=-1, keepdims=True)
+                    for x in range(len(scores)):
+                        if scores[x] <= 1e-2: continue
+                        sample_dict_per_image[image_key]['bbox'].append(
+                            np.asarray([data[2], data[3], data[4], data[5]], dtype=float)
+                        )
+                        sample_dict_per_image[image_key]['labels'].append(x + 1)
+                        sample_dict_per_image[image_key]['scores'].append(scores[x])
+                else:
+                    self.exclude_key.append(image_key)
 
-                for x in range(len(scores)):
-                    if scores[x] <= 1e-2: continue
-                    sample_dict_per_image[image_key]['bbox'].append(
-                        np.asarray([data[2], data[3], data[4], data[5]], dtype=float)
-                    )
-                    sample_dict_per_image[image_key]['labels'].append(x + 1)
-                    sample_dict_per_image[image_key]['scores'].append(scores[x])
                 all_annots.append(line)
 
         gt_videos = {} # for video-map
@@ -155,15 +157,13 @@ class STDetectionEvaluaterUCF(object):
         t_end = time.time()
         sample_dict_per_image = {}
         all_boxes = {} # for video-map
-        n = 0
         image_key_dict = {}        
         for path in file_lst:
             print("loading ", path)
             data = open(path).readlines()
             for line in data:
                 image_key = line.split(' [')[0]
-                # if image_key in self.exclude_key:
-                #     continue
+
                 if not image_key in image_key_dict:
                     image_key_dict[image_key] = 0
                 image_key_dict[image_key] += 1
@@ -172,7 +172,7 @@ class STDetectionEvaluaterUCF(object):
                 data = line.split(' [')[1].split(']')[0].split(',')
                 data = [float(x) for x in data]
 
-                scores = np.array(data[4:self.class_num + 4])
+                scores = np.array(data[4:self.class_num + 5])
 
                 x = np.argmax(scores)
 
@@ -180,7 +180,7 @@ class STDetectionEvaluaterUCF(object):
                 if not image_key in all_boxes:
                     all_boxes[image_key] = {}
 
-                for s in range(len(scores)):
+                for s in range(len(scores)-1):
                     if not (s+1) in all_boxes[image_key]:
                         all_boxes[image_key][s+1] = []
 
@@ -195,18 +195,19 @@ class STDetectionEvaluaterUCF(object):
                 if np.argmax(np.array(data[4:])) == len(np.array(data[4:])) - 1:
                     continue
 
-                if not image_key in sample_dict_per_image:
-                    sample_dict_per_image[image_key] = {
-                        'bbox': [],
-                        'labels': [],
-                        'scores': [],
-                    }
+                if not image_key in self.exclude_key:
+                    if not image_key in sample_dict_per_image:
+                        sample_dict_per_image[image_key] = {
+                            'bbox': [],
+                            'labels': [],
+                            'scores': [],
+                        }
 
-                sample_dict_per_image[image_key]['bbox'].append(
-                    np.asarray([data[0], data[1], data[2], data[3]], dtype=float)
-                )
-                sample_dict_per_image[image_key]['labels'].append(x+1)
-                sample_dict_per_image[image_key]['scores'].append(scores[x])
+                    sample_dict_per_image[image_key]['bbox'].append(
+                        np.asarray([data[0], data[1], data[2], data[3]], dtype=float)
+                    )
+                    sample_dict_per_image[image_key]['labels'].append(x+1)
+                    sample_dict_per_image[image_key]['scores'].append(scores[x])
 
                 # for x in range(len(scores)):
                 #     sample_dict_per_image[image_key]['bbox'].append(
@@ -217,7 +218,10 @@ class STDetectionEvaluaterUCF(object):
 
         for k in list(all_boxes.keys()):
             for s in range(len(scores)):
-                all_boxes[k][s+1] = np.asarray(all_boxes[k][s+1], dtype=float)
+                try:
+                    all_boxes[k][s+1] = np.asarray(all_boxes[k][s+1], dtype=float)
+                except:
+                    pass
 
         print("start adding into evaluator")
         for v_evaluator in self.video_map_evaluator:
