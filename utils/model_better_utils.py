@@ -31,7 +31,10 @@ def load_detr_weights(model, pretrain_dir, cfg):
         elif k.split('.')[0] == 'bbox_embed':
             pretrained_dict.update({k: v})
         elif k.split('.')[0] == 'refpoint_embed':
-            query_size = cfg.CONFIG.MODEL.QUERY_NUM * cfg.CONFIG.MODEL.TEMP_LEN # 480
+            if not cfg.CONFIG.EFFICIENT:
+                query_size = cfg.CONFIG.MODEL.QUERY_NUM * cfg.CONFIG.MODEL.TEMP_LEN # 480
+            else:
+                query_size = cfg.CONFIG.MODEL.QUERY_NUM # 15
             v = v.repeat(5,1) # to make sure checkpoint query size gets larger than current model query size
             pretrained_dict.update({k:v[:query_size]})
             if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:

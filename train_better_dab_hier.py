@@ -141,6 +141,7 @@ if __name__ == '__main__':
                         help='path to config file.')
     parser.add_argument('--random_seed', default=1, type=int, help='random_seed')
     parser.add_argument('--debug', action='store_true', help="debug, and ddp is disabled")
+    parser.add_argument('--eff', action='store_true', help="only for AVA, efficiently output only keyframe")
     args = parser.parse_args()
     random.seed(args.random_seed)
     np.random.seed(args.random_seed)
@@ -158,6 +159,10 @@ if __name__ == '__main__':
         cfg.DDP_CONFIG.DISTRIBUTED = False
         cfg.CONFIG.LOG.RES_DIR = "debug_{}-{}/res/".format(study,run)
         cfg.CONFIG.LOG.EXP_NAME = "debug_{}-{}".format(study,run)
+    if args.eff:
+        cfg.CONFIG.EFFICIENT = True
+    else:
+        cfg.CONFIG.EFFICIENT = False
     
     import socket 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
