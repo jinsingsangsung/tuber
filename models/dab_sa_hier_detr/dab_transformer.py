@@ -530,12 +530,12 @@ class TransformerClsDecoderLayer(nn.Module):
         super().__init__()
         # Decoder Self-Attention
         if temp_sa:
-            self.sa_qcontent_proj_t = nn.Linear(d_model, d_model)
-            self.sa_qpos_proj_t = nn.Linear(d_model, d_model)
-            self.sa_kcontent_proj_t = nn.Linear(d_model, d_model)
-            self.sa_kpos_proj_t = nn.Linear(d_model, d_model)
-            self.sa_v_proj_t = nn.Linear(d_model, d_model)
-            self.self_attn_t = MultiheadAttention(d_model, nhead, dropout=dropout, vdim=d_model)
+            self.sa_qcontent_proj = nn.Linear(d_model, d_model)
+            self.sa_qpos_proj = nn.Linear(d_model, d_model)
+            self.sa_kcontent_proj = nn.Linear(d_model, d_model)
+            self.sa_kpos_proj = nn.Linear(d_model, d_model)
+            self.sa_v_proj = nn.Linear(d_model, d_model)
+            self.self_attn = MultiheadAttention(d_model, nhead, dropout=dropout, vdim=d_model)
 
             self.norm1 = nn.LayerNorm(d_model)
             self.dropout1 = nn.Dropout(dropout)        
@@ -586,11 +586,11 @@ class TransformerClsDecoderLayer(nn.Module):
 
         # ========== Begin of Self-Attention =============
         if self.temp_sa:
-            q_content = self.sa_qcontent_proj_t(tgt)      # target is the input of the first decoder layer. zero by default.
-            q_pos = self.sa_qpos_proj_t(cls_query_pos)
-            k_content = self.sa_kcontent_proj_t(tgt)
-            k_pos = self.sa_kpos_proj_t(cls_query_pos)
-            v = self.sa_v_proj_t(tgt)
+            q_content = self.sa_qcontent_proj(tgt)      # target is the input of the first decoder layer. zero by default.
+            q_pos = self.sa_qpos_proj(cls_query_pos)
+            k_content = self.sa_kcontent_proj(tgt)
+            k_pos = self.sa_kpos_proj(cls_query_pos)
+            v = self.sa_v_proj(tgt)
 
             num_queries, bst, n_model = q_content.shape
             hw, _, _ = k_content.shape
@@ -602,7 +602,7 @@ class TransformerClsDecoderLayer(nn.Module):
             v = v.reshape(num_queries, bs, -1, n_model).transpose(0,2).flatten(1,2)
             # to temporally SA across temporal dimension
 
-            tgt2 = self.self_attn_t(q, k, value=v, attn_mask=tgt_mask,
+            tgt2 = self.self_attn(q, k, value=v, attn_mask=tgt_mask,
                                 key_padding_mask=tgt_key_padding_mask)[0]
 
             tgt2 = tgt2.reshape(-1, bs, num_queries, n_model).transpose(0,2).flatten(1,2)
