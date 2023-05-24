@@ -60,11 +60,10 @@ class DETR(nn.Module):
         self.efficient = efficient
         if not efficient:
             self.refpoint_embed = nn.Embedding(num_queries*temporal_length, 4)
-            self.transformer.eff = not efficient
         else:
             assert dataset_mode == "ava", "efficient mode is only for AVA"
             self.refpoint_embed = nn.Embedding(num_queries, 4)
-            self.transformer.eff = efficient
+        self.transformer.eff = efficient
         self.random_refpoints_xy = random_refpoints_xy
         if random_refpoints_xy:
             # import ipdb; ipdb.set_trace()
