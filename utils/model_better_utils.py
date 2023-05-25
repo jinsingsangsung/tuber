@@ -181,7 +181,7 @@ def load_model_and_states(model, optimizer, scheduler, cfg):
     start_epoch = checkpoint['epoch']+1
     random.setstate(checkpoint["random_python"])
     np.random.set_state(checkpoint["random_numpy"])
-    torch.set_rng_state(checkpoint['random_pytorch'])
+    torch.set_rng_state(checkpoint['random_pytorch'].cpu())
     if model.device == 'cuda':
         torch.cuda.set_rng_state(checkpoint['random_cuda'])
     return model, optimizer, scheduler, start_epoch
