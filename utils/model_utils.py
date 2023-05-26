@@ -22,15 +22,6 @@ def load_detr_weights(model, pretrain_dir, cfg):
     for k, v in checkpoint['model'].items():
         if k.split('.')[l] == 'transformer':
             pretrained_dict.update({k: v})
-            if 'united' in cfg.CONFIG.LOG.EXP_NAME and 'linear1.weight' in k and 'encoder' in k:
-                pretrained_dict.update({k:v[:1024]})
-            elif 'encoder' in k and "sampling_offsets" in k:
-                pretrained_dict.update({k:torch.cat((v, v[:128]))})
-            elif 'united' in cfg.CONFIG.LOG.EXP_NAME and 'linear2.weight' in k and 'encoder' in k:
-                pretrained_dict.update({k:v[:1024]})
-            elif 'cloca' in cfg.CONFIG.LOG.EXP_NAME:
-                new_k = 'module.transformer2.' + ".".join(k.split('.')[2:])
-                pretrained_dict.update({new_k: v})
         elif k.split('.')[l] == 'bbox_embed':
             pretrained_dict.update({k: v})
         elif k.split('.')[l] == 'query_embed':
@@ -44,6 +35,13 @@ def load_detr_weights(model, pretrain_dir, cfg):
             if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
                 print_log(log_path, "query_size:", query_size)
             # pretrained_dict.update({k: v[:query_size]})
+        elif cfg.CONFIG.EFFICIENT and "refpoint_embed" in k:
+            t = cfg.CONFIG.MODEL.TEMP_LEN
+            nq = cfg.CONFIG.MODEL.QUERY_NUM
+            v = v.reshape(t, nq, 4)[t//2]
+            pretrained_dict.update({k: v})
+        elif "refpoint_embed" in k:
+            pretrained_dict.update({k: v})
     pretrained_dict_ = {k: v for k, v in pretrained_dict.items() if k in model_dict} # model_dict에는 "module.query_embed.weight"라는 key가 있음
     unused_dict = {k: v for k, v in pretrained_dict.items() if not k in model_dict}
     # not_found_dict = {k: v for k, v in model_dict.items() if not k in pretrained_dict}
