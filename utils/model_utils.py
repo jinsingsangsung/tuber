@@ -38,7 +38,10 @@ def load_detr_weights(model, pretrain_dir, cfg):
         elif cfg.CONFIG.EFFICIENT and "refpoint_embed" in k:
             t = cfg.CONFIG.MODEL.TEMP_LEN
             nq = cfg.CONFIG.MODEL.QUERY_NUM
-            v = v.reshape(t, nq, 4)[t//2]
+            try:
+                v = v.reshape(t, nq, 4)[t//2]
+            except:
+                v = v[:nq].repeat(t, 1)
             pretrained_dict.update({k: v})
         elif "refpoint_embed" in k:
             pretrained_dict.update({k: v})
