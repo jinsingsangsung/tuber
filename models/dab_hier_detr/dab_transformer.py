@@ -131,8 +131,15 @@ class Transformer(nn.Module):
         # temporal dimension is alive
         # query_embed = gen_sineembed_for_position(refpoint_embed)
         num_queries = refpoint_embed.shape[0]
-        loc_tgt = torch.zeros(num_queries, bs*t, self.d_model, device=refpoint_embed.device)
-        cls_tgt = torch.zeros(num_queries, bs*t, self.d_model, device=refpoint_embed.device)
+        if self.eff:
+            memory = memory.reshape(-1, bs, t, c)[:,:,t//2:t//2+1,:].flatten(1,2)
+            pos_embed = pos_embed.reshape(-1, bs, t, c)[:,:,t//2:t//2+1,:].flatten(1,2)
+            mask = mask.reshape(bs, t, -1)[:,t//2:t//2+1,:].flatten(0,1)
+            loc_tgt = torch.zeros(num_queries, bs, self.d_model, device=refpoint_embed.device)
+            cls_tgt = torch.zeros(num_queries, bs, self.d_model, device=refpoint_embed.device)
+        else:
+            loc_tgt = torch.zeros(num_queries, bs*t, self.d_model, device=refpoint_embed.device)
+            cls_tgt = torch.zeros(num_queries, bs*t, self.d_model, device=refpoint_embed.device)
         # tgt = self.patterns.weight[:, None, None, :].repeat(1, self.num_queries, bs*t, 1).flatten(0, 1) # n_q*n_pat, bs, d_model
         # refpoint_embed = refpoint_embed.repeat(self.num_patterns, 1, 1) # n_pat*n_q, bs*t, d_model
             # import ipdb; ipdb.set_trace()

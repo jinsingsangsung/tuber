@@ -35,7 +35,7 @@ class DETR(nn.Module):
     def __init__(self, backbone, transformer, num_classes, num_queries, num_frames,
                  hidden_dim, temporal_length, aux_loss=False, generate_lfb=False, two_stage=False, random_refpoints_xy=False, query_dim=4,
                  backbone_name='CSN-152', ds_rate=1, last_stride=True, dataset_mode='ava', bbox_embed_diff_each_layer=False, training=True, iter_update=True,
-                 gpu_world_rank=0, log_path=None):
+                 gpu_world_rank=0, log_path=None, efficient=True):
         """ Initializes the model.
         Parameters:
             backbone: torch module of the backbone to be used. See backbone.py
@@ -57,7 +57,13 @@ class DETR(nn.Module):
         
         self.query_dim = query_dim
         assert query_dim in [2, 4]
-        self.refpoint_embed = nn.Embedding(num_queries*temporal_length, 4)
+        self.efficient = efficient
+        if not efficient:
+            self.refpoint_embed = nn.Embedding(num_queries*temporal_length, 4)
+        else:
+            assert dataset_mode == "ava", "efficient mode is only for AVA"        
+            self.refpoint_embed = nn.Embedding(num_queries, 4)
+        self.transformer.eff = efficient
         self.random_refpoints_xy = random_refpoints_xy
         if random_refpoints_xy:
             # import ipdb; ipdb.set_trace()
@@ -161,7 +167,11 @@ class DETR(nn.Module):
         src, mask = features[-1].decompose()
         assert mask is not None
         # bs = samples.tensors.shape[0]
-        embedweight = self.refpoint_embed.weight.view(self.num_queries, self.temporal_length, 4)      # nq, t, 4
+        if not self.efficient:
+            embedweight = self.refpoint_embed.weight.view(self.num_queries, self.temporal_length, 4)      # nq, t, 4
+        else:
+            embedweight = self.refpoint_embed.weight.view(self.num_queries, 1, 4)      # nq, 1, 4        
+
         hs, reference, cls_hs = self.transformer(self.input_proj(src), mask, embedweight, pos[-1])
         outputs_class_b = self.class_embed_b(hs)
         ######## localization head
@@ -183,12 +193,19 @@ class DETR(nn.Module):
 
         bs, _, t, h, w = src.shape
         lay_n = self.transformer.decoder.num_layers
-        outputs_class = self.class_embed(self.dropout(cls_hs)).reshape(lay_n, bs*t, self.num_queries, -1)
-        
+        if not self.efficient:
+            outputs_class = self.class_embed(self.dropout(cls_hs)).reshape(lay_n, bs*t, self.num_queries, -1)
+        else:
+            outputs_class = self.class_embed(self.dropout(cls_hs)).reshape(lay_n, bs, self.num_queries, -1)        
         if self.dataset_mode == "ava":
-            outputs_class = outputs_class.reshape(-1, bs, t, self.num_queries, self.num_classes)[:,:,self.temporal_length//2,:,:]
-            outputs_coord = outputs_coord.reshape(-1, bs, t, self.num_queries, 4)[:,:,self.temporal_length//2,:,:]
-            outputs_class_b = outputs_class_b.reshape(-1, bs, t, self.num_queries, 3)[:,:,self.temporal_length//2,:,:]
+            if not self.efficient:
+                outputs_class = outputs_class.reshape(-1, bs, t, self.num_queries, self.num_classes)[:,:,self.temporal_length//2,:,:]
+                outputs_coord = outputs_coord.reshape(-1, bs, t, self.num_queries, 4)[:,:,self.temporal_length//2,:,:]
+                outputs_class_b = outputs_class_b.reshape(-1, bs, t, self.num_queries, 3)[:,:,self.temporal_length//2,:,:]
+            else:
+                outputs_class = outputs_class.reshape(-1, bs, self.num_queries, self.num_classes)
+                outputs_coord = outputs_coord.reshape(-1, bs, self.num_queries, 4)
+                outputs_class_b = outputs_class_b.reshape(-1, bs, self.num_queries, 3)
         else:
             outputs_class = outputs_class.reshape(-1, bs, t, self.num_queries, self.num_classes+1)
             outputs_coord = outputs_coord.reshape(-1, bs, t, self.num_queries, 4)
@@ -238,7 +255,7 @@ def build_model(cfg):
                  last_stride=cfg.CONFIG.MODEL.LAST_STRIDE,
                  dataset_mode=cfg.CONFIG.DATA.DATASET_NAME,
                  bbox_embed_diff_each_layer=cfg.CONFIG.MODEL.BBOX_EMBED_DIFF_EACH_LAYER,
-                 )
+                 efficient=cfg.CONFIG.EFFICIENT,)
 
     matcher = build_matcher(cfg)
     weight_dict = {'loss_ce': cfg.CONFIG.LOSS_COFS.DICE_COF, 'loss_bbox': cfg.CONFIG.LOSS_COFS.BBOX_COF}
