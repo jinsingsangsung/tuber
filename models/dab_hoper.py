@@ -96,7 +96,7 @@ class DETR(nn.Module):
         prior_prob = 0.01
         bias_value = -math.log((1 - prior_prob) / prior_prob)
         if self.dataset_mode == 'ava':
-            self.class_embed = nn.Linear(hidden_dim*2, num_classes)
+            self.class_embed = nn.Linear(hidden_dim, num_classes)
             self.class_embed_b = nn.Linear(hidden_dim, 3)
             self.class_embed.bias.data = torch.ones(num_classes) * bias_value
         else:
@@ -193,7 +193,7 @@ class DETR(nn.Module):
 
         bs, _, t, h, w = src.shape
         lay_n = self.transformer.decoder.num_layers
-        cls_hs = torch.cat([hs, cls_hs], -1)
+        
         if not self.efficient:
             outputs_class = self.class_embed(self.dropout(cls_hs)).reshape(lay_n, bs*t, self.num_queries, -1)
         else:
