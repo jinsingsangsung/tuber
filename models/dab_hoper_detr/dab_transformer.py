@@ -75,6 +75,7 @@ class Transformer(nn.Module):
                  num_patterns=0,
                  modulate_hw_attn=True,
                  bbox_embed_diff_each_layer=False,
+                 use_cls_sa=False,
                  ):
 
         super().__init__()
@@ -87,7 +88,7 @@ class Transformer(nn.Module):
         decoder_layer = TransformerDecoderLayer(d_model, nhead, dim_feedforward,
                                                 dropout, activation, normalize_before, keep_query_pos=keep_query_pos)
         cls_decoder_layer = TransformerClsDecoderLayer(d_model, nhead, dim_feedforward,
-                                                dropout, activation, normalize_before, keep_query_pos=keep_query_pos)
+                                                dropout, activation, normalize_before, keep_query_pos=keep_query_pos, rm_self_attn_decoder= not use_cls_sa)
         decoder_norm = nn.LayerNorm(d_model)
         cls_decoder_norm = nn.LayerNorm(d_model)
         self.decoder = TransformerDecoder(decoder_layer, cls_decoder_layer, num_decoder_layers, decoder_norm, cls_decoder_norm,
@@ -293,7 +294,9 @@ class TransformerDecoder(nn.Module):
             cls_query_sine_embed = gen_sineembed_for_position(inter_center)
             cls_query_pos = self.cls_ref_point_head(cls_query_sine_embed) 
             cls_query_sine_embed = cls_query_sine_embed[..., :self.d_model]
-            cls_output, cls_dec_attn = cls_layer(cls_output, memory, memory_mask=memory_mask,
+            cls_output, cls_dec_attn = cls_layer(cls_output, memory, tgt_mask=tgt_mask,
+                                   memory_mask=memory_mask,
+                                   tgt_key_padding_mask=tgt_key_padding_mask,
                                    memory_key_padding_mask=memory_key_padding_mask,
                                    pos=pos, cls_query_pos=cls_query_pos, cls_query_sine_embed=cls_query_sine_embed,
                                    is_first=(layer_id == 0))
@@ -541,8 +544,20 @@ class TransformerClsDecoderLayer(nn.Module):
 
     def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1,
                  activation="relu", normalize_before=False, keep_query_pos=False,
-                 rm_self_attn_decoder=False):
+                 rm_self_attn_decoder=True):
         super().__init__()
+
+        # Decoder Cross-Attention
+        if not rm_self_attn_decoder:
+            self.sa_qcontent_proj = nn.Linear(d_model, d_model)
+            self.sa_qpos_proj = nn.Linear(d_model, d_model)
+            self.sa_kcontent_proj = nn.Linear(d_model, d_model)
+            self.sa_kpos_proj = nn.Linear(d_model, d_model)
+            self.sa_v_proj = nn.Linear(d_model, d_model)
+            self.self_attn = MultiheadAttention(d_model, nhead, dropout=dropout, vdim=d_model)
+
+            self.norm1 = nn.LayerNorm(d_model)
+            self.dropout1 = nn.Dropout(dropout)    
 
         # Decoder Cross-Attention
         self.ca_qcontent_proj = nn.Linear(d_model, d_model)
@@ -577,12 +592,34 @@ class TransformerClsDecoderLayer(nn.Module):
         return tensor if pos is None else tensor + pos
 
     def forward(self, tgt, memory,
+                     tgt_mask: Optional[Tensor] = None,
                      memory_mask: Optional[Tensor] = None,
+                     tgt_key_padding_mask: Optional[Tensor] = None,
                      memory_key_padding_mask: Optional[Tensor] = None,
                      pos: Optional[Tensor] = None,
                      cls_query_pos = None,
                      cls_query_sine_embed = None,
-                     is_first = False):
+                     is_first = False,
+                     ):
+
+        # ========== Begin of Self-Attention =============        
+        if not self.rm_self_attn_decoder:
+            q_content = self.sa_qcontent_proj(tgt)      # target is the input of the first decoder layer. zero by default.
+            q_pos = self.sa_qpos_proj(cls_query_pos)
+            k_content = self.sa_kcontent_proj(tgt)
+            k_pos = self.sa_kpos_proj(cls_query_pos)
+            v = self.sa_v_proj(tgt)
+
+            q = q_content + q_pos # n, bs*t, d
+            k = k_content + k_pos # n, bs*t, d
+
+            tgt2 = self.self_attn(q, k, value=v, attn_mask=tgt_mask,
+                                key_padding_mask=tgt_key_padding_mask)[0]
+
+            # ========== End of Self-Attention =============
+
+            tgt = tgt + self.dropout1(tgt2)
+            tgt = self.norm1(tgt)
 
         # ========== Begin of Cross-Attention =============
         # Apply projections here
@@ -649,6 +686,7 @@ def build_transformer(cfg):
         activation="relu",
         num_patterns=cfg.CONFIG.MODEL.NUM_PATTERNS,
         bbox_embed_diff_each_layer=cfg.CONFIG.MODEL.BBOX_EMBED_DIFF_EACH_LAYER,
+        use_cls_sa=cfg.CONFIG.MODEL.USE_CLS_SA,
     )
 
 

@@ -73,8 +73,8 @@ class SetCriterionAVA(nn.Module):
         if self.evaluation:
             loss_ce = F.binary_cross_entropy(src_logits_sig, target_classes)
         else:
-            loss_ce = F.binary_cross_entropy(src_logits_sig, target_classes, weight=weights)
-            # loss_ce = sigmoid_focal_loss(src_logits, target_classes, weights)
+            # loss_ce = F.binary_cross_entropy(src_logits_sig, target_classes, weight=weights)
+            loss_ce = sigmoid_focal_loss(src_logits, target_classes, weights)
             # eps = 1e-8
             # loss_ce = -(((1 - src_logits_sig)**self.focal_loss_gamma * target_classes * torch.log(src_logits_sig + eps) + src_logits_sig**self.focal_loss_gamma * (1-target_classes) * torch.log(1-src_logits_sig+eps))*weights).sum()
 

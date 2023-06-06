@@ -35,7 +35,7 @@ class DETR(nn.Module):
     def __init__(self, backbone, transformer, num_classes, num_queries, num_frames,
                  hidden_dim, temporal_length, aux_loss=False, generate_lfb=False, two_stage=False, random_refpoints_xy=False, query_dim=4,
                  backbone_name='CSN-152', ds_rate=1, last_stride=True, dataset_mode='ava', bbox_embed_diff_each_layer=False, training=True, iter_update=True,
-                 gpu_world_rank=0, log_path=None, efficient=True):
+                 gpu_world_rank=0, log_path=None, efficient=True, rm_binary=False):
         """ Initializes the model.
         Parameters:
             backbone: torch module of the backbone to be used. See backbone.py
@@ -83,26 +83,20 @@ class DETR(nn.Module):
             self.class_proj = nn.Conv3d(backbone.num_channels, hidden_dim, kernel_size=1)
         nn.init.xavier_uniform_(self.input_proj.weight, gain=1)
         nn.init.constant_(self.input_proj.bias, 0)    
-        # self.class_proj = nn.Conv3d(backbone.num_channels[-1], hidden_dim, kernel_size=(4,1,1))
 
-        # encoder_layer = TransformerEncoderLayer(hidden_dim, 8, 2048, 0.1, "relu", normalize_before=False)
-        # self.encoder = TransformerEncoder(encoder_layer=encoder_layer, num_layers=2)
-        # decoder_layer = TransformerDecoderLayer(hidden_dim, 8, 2048, 0.1, "relu", normalize_before=False)        
-        # decoder_norm = nn.LayerNorm(hidden_dim)
-        # self.decoder = TransformerDecoder(decoder_layer=decoder_layer, num_layers=3, norm=decoder_norm, return_intermediate=True, query_dim=4, modulate_hw_attn=True, bbox_embed_diff_each_layer=True)
-        # self.num_patterns = 3
-        # self.num_pattern_level = 4
-        # self.patterns = nn.Embedding(self.num_patterns*self.num_pattern_level, hidden_dim)
         prior_prob = 0.01
         bias_value = -math.log((1 - prior_prob) / prior_prob)
         if self.dataset_mode == 'ava':
             self.class_embed = nn.Linear(hidden_dim, num_classes)
-            self.class_embed_b = nn.Linear(hidden_dim, 3)
             self.class_embed.bias.data = torch.ones(num_classes) * bias_value
+            if rm_binary:
+                self.class_embed_b = nn.Linear(hidden_dim, 3)
         else:
             self.class_embed = nn.Linear(hidden_dim, num_classes+1)
-            self.class_embed_b = nn.Linear(hidden_dim, 3)
             self.class_embed.bias.data = torch.ones(num_classes+1) * bias_value
+            if rm_binary:
+                self.class_embed_b = nn.Linear(hidden_dim, 3)
+            
         
 
         if bbox_embed_diff_each_layer:
@@ -115,11 +109,9 @@ class DETR(nn.Module):
             nn.init.constant_(self.bbox_embed.layers[-1].weight.data, 0)
             nn.init.constant_(self.bbox_embed.layers[-1].bias.data, 0)
 
-
         self.iter_update = iter_update
         if self.iter_update:
             self.transformer.decoder.bbox_embed = self.bbox_embed
-
 
         self.dropout = nn.Dropout(0.5)
 
@@ -132,6 +124,7 @@ class DETR(nn.Module):
         self.generate_lfb = generate_lfb
         self.last_stride = last_stride
         self.training = training
+        self.rm_binary = rm_binary
 
 
     def freeze_params(self):
@@ -174,6 +167,7 @@ class DETR(nn.Module):
 
         hs, reference, cls_hs = self.transformer(self.input_proj(src), mask, embedweight, pos[-1])
         outputs_class_b = self.class_embed_b(hs)
+
         ######## localization head
         if not self.bbox_embed_diff_each_layer:
             reference_before_sigmoid = inverse_sigmoid(reference)
@@ -202,23 +196,36 @@ class DETR(nn.Module):
             if not self.efficient:
                 outputs_class = outputs_class.reshape(-1, bs, t, self.num_queries, self.num_classes)[:,:,self.temporal_length//2,:,:]
                 outputs_coord = outputs_coord.reshape(-1, bs, t, self.num_queries, 4)[:,:,self.temporal_length//2,:,:]
-                outputs_class_b = outputs_class_b.reshape(-1, bs, t, self.num_queries, 3)[:,:,self.temporal_length//2,:,:]
+                if not self.rm_binary:
+                    outputs_class_b = outputs_class_b.reshape(-1, bs, t, self.num_queries, 3)[:,:,self.temporal_length//2,:,:]
             else:
                 outputs_class = outputs_class.reshape(-1, bs, self.num_queries, self.num_classes)
                 outputs_coord = outputs_coord.reshape(-1, bs, self.num_queries, 4)
-                outputs_class_b = outputs_class_b.reshape(-1, bs, self.num_queries, 3)
+                if not self.rm_binary:
+                    outputs_class_b = outputs_class_b.reshape(-1, bs, self.num_queries, 3)
         else:
             outputs_class = outputs_class.reshape(-1, bs, t, self.num_queries, self.num_classes+1)
             outputs_coord = outputs_coord.reshape(-1, bs, t, self.num_queries, 4)
-            outputs_class_b = outputs_class_b.reshape(-1, bs, t, self.num_queries, 3)
-        out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1], 'pred_logits_b': outputs_class_b[-1],}
-        if self.aux_loss:
-            out['aux_outputs'] = self._set_aux_loss(outputs_class, outputs_coord, outputs_class_b)
+            if not self.rm_binary:
+                outputs_class_b = outputs_class_b.reshape(-1, bs, t, self.num_queries, 3)
+        if self.rm_binary:
+            out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1],}
+            if self.aux_loss:
+                out['aux_outputs'] = self._set_aux_loss(outputs_class, outputs_coord)
+        else:
+            out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1], 'pred_logits_b': outputs_class_b[-1],}
+            if self.aux_loss:
+                out['aux_outputs'] = self._set_aux_loss_b(outputs_class, outputs_coord, outputs_class_b)
 
         return out
 
     @torch.jit.unused
-    def _set_aux_loss(self, outputs_class, outputs_coord, outputs_class_b):
+    def _set_aux_loss(self, outputs_class, outputs_coord):
+        return [{'pred_logits': a, 'pred_boxes': b}
+                for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
+
+    @torch.jit.unused
+    def _set_aux_loss_b(self, outputs_class, outputs_coord, outputs_class_b):
         # this is a workaround to make torchscript happy, as torchscript
         # doesn't support dictionary with non-homogeneous values, such
         # as a dict having both a Tensor and a list.
@@ -256,7 +263,9 @@ def build_model(cfg):
                  last_stride=cfg.CONFIG.MODEL.LAST_STRIDE,
                  dataset_mode=cfg.CONFIG.DATA.DATASET_NAME,
                  bbox_embed_diff_each_layer=cfg.CONFIG.MODEL.BBOX_EMBED_DIFF_EACH_LAYER,
-                 efficient=cfg.CONFIG.EFFICIENT,)
+                 efficient=cfg.CONFIG.EFFICIENT,
+                 rm_binary=cfg.CONFIG.MODEL.RM_BINARY,
+                 )
 
     matcher = build_matcher(cfg)
     weight_dict = {'loss_ce': cfg.CONFIG.LOSS_COFS.DICE_COF, 'loss_bbox': cfg.CONFIG.LOSS_COFS.BBOX_COF}

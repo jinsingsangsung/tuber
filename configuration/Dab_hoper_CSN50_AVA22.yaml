@@ -15,6 +15,7 @@ CONFIG:
   TWO_STREAM: False
   USE_LFB: False
   USE_LOCATION: False
+  EFFICIENT: False
   TRAIN:
     EPOCH_NUM: 20
     BATCH_SIZE: 2
@@ -74,7 +75,7 @@ CONFIG:
     SAMPLE_RATE: 2
     PRETRAINED: True
     PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_50_ft_kinetics_from_ig65m_f233743920.mat"
-    PRETRAIN_TRANSFORMER_DIR: "../pretrained_models/transformer/finetuned-dab-hier-detr.pth"
+    PRETRAIN_TRANSFORMER_DIR: "../pretrained_models/transformer/dab-sa-hier-detr.pth"
     PRETRAINED_PATH: "/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/AVA_Tuber/Dab_DN_D_/checkpoints/ckpt_epoch_0.pth"
     LOAD: False
     LOAD_FC: False
@@ -88,6 +89,8 @@ CONFIG:
     BOX_NOISE_SCALE: 0.4
     NUM_PATTERNS: 0
     BBOX_EMBED_DIFF_EACH_LAYER: False
+    USE_CLS_SA: False
+    RM_BINARY: False
 
   MATCHER:
     COST_CLASS: 12

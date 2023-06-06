@@ -15,6 +15,7 @@ def load_detr_weights(model, pretrain_dir, cfg):
     model_dict = model.state_dict()
     log_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
     pretrained_dict = {}
+    distributed = cfg.DDP_CONFIG.DISTRIBUTED
     if "dab-d-tuber-detr" in cfg.CONFIG.MODEL.PRETRAIN_TRANSFORMER_DIR:
         l = 0
     else:
@@ -39,16 +40,31 @@ def load_detr_weights(model, pretrain_dir, cfg):
             t = cfg.CONFIG.MODEL.TEMP_LEN
             nq = cfg.CONFIG.MODEL.QUERY_NUM
             try:
-                v = v.reshape(t, nq, 4)[t//2]
+                if model_dict[k].shape[0] < checkpoint["model"][k].shape[0]:
+                    v = v.reshape(t, nq, 4)[t//2]
             except:
-                v = v[:nq].repeat(t, 1)
+                if model_dict[k[7:]].shape[0] < checkpoint["model"][k].shape[0]:
+                    v = v.reshape(t, nq, 4)[t//2]
             pretrained_dict.update({k: v})
         elif "refpoint_embed" in k:
+            t = cfg.CONFIG.MODEL.TEMP_LEN
+            nq = cfg.CONFIG.MODEL.QUERY_NUM
+            try:
+                if model_dict[k].shape[0] > checkpoint["model"][k].shape[0]:
+                    v = v[:nq].repeat(t, 1)
+            except:
+                if model_dict[k[7:]].shape[0] > checkpoint["model"][k].shape[0]:
+                    v = v[:nq].repeat(t, 1)                
             pretrained_dict.update({k: v})
-    pretrained_dict_ = {k: v for k, v in pretrained_dict.items() if k in model_dict} # model_dict에는 "module.query_embed.weight"라는 key가 있음
-    unused_dict = {k: v for k, v in pretrained_dict.items() if not k in model_dict}
-    # not_found_dict = {k: v for k, v in model_dict.items() if not k in pretrained_dict}
-    # print(pretrained_dict_["module.query_embed.weight"].shape)
+    if distributed:
+        pretrained_dict_ = {k: v for k, v in pretrained_dict.items() if k in model_dict}
+        unused_dict = {k: v for k, v in pretrained_dict.items() if not k in model_dict}
+        # not_found_dict = {k: v for k, v in model_dict.items() if not k in pretrained_dict}
+    else:
+        pretrained_dict_ = {k[7:]: v for k, v in pretrained_dict.items() if k[7:] in model_dict}
+        unused_dict = {k[7:]: v for k, v in pretrained_dict.items() if not k[7:] in model_dict}
+        # not_found_dict = {k: v for k, v in model_dict.items() if not k in pretrained_dict}
+
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
         print_log(log_path, "number of detr unused model layers:", len(unused_dict.keys()))
         print_log(log_path, "number of detr used model layers:", len(pretrained_dict_.keys()))

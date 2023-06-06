@@ -18,7 +18,14 @@ class HungarianMatcher(nn.Module):
     while the others are un-matched (and thus treated as non-objects).
     """
 
-    def __init__(self, cost_class: float = 1, cost_bbox: float = 1, cost_giou: float = 1, data_file: str = 'ava', binary_loss: bool = False, before: bool = False):
+    def __init__(self,
+                 cost_class: float = 1, 
+                 cost_bbox: float = 1, 
+                 cost_giou: float = 1, 
+                 data_file: str = 'ava', 
+                 binary_loss: bool = False, 
+                 before: bool = False
+                 ):
         """Creates the matcher
 
         Params:
@@ -33,6 +40,7 @@ class HungarianMatcher(nn.Module):
         self.data_file = data_file
         self.binary_loss = binary_loss
         self.before = before
+        self.epsilon = 1e-6
         assert cost_class != 0 or cost_bbox != 0 or cost_giou != 0, "all costs cant be 0"
 
     @torch.no_grad()
@@ -68,13 +76,19 @@ class HungarianMatcher(nn.Module):
         # Compute the giou cost betwen boxes
         cost_giou = -generalized_box_iou(box_cxcywh_to_xyxy(out_bbox), box_cxcywh_to_xyxy(tgt_bbox))
 
-        # out_classes = outputs["pred_logits"].flatten(0,1).sigmoid()
-        # tgt_classes = torch.cat([v["labels"] for v in targets])
-        # cost_class = -(torch.mm(out_classes, tgt_classes.T) + torch.mm(1 - out_classes, 1 - tgt_classes.T))/out_classes.shape[-1]
-
         # cost_class = torch.cdist(out_classes, tgt_classes, p=1)
-        out_prob = outputs["pred_logits_b"].flatten(0, 1).softmax(-1)
-        cost_class = -out_prob[:, 1:2].repeat(1, len(tgt_bbox))
+        if self.binary_loss:
+            out_prob = outputs["pred_logits_b"].flatten(0, 1).softmax(-1)
+            cost_class = -out_prob[:, 1:2].repeat(1, len(tgt_bbox))
+
+        else:
+            out_classes = outputs["pred_logits"].flatten(0,1).sigmoid().clamp(min=self.epsilon, max=1-self.epsilon)
+            tgt_classes = torch.cat([v["labels"] for v in targets])
+            # ce-loss for matching cost
+            cost_class = -(torch.mm(out_classes.log(), tgt_classes.T) + torch.mm((1-out_classes).log(), (1-tgt_classes).T))/tgt_classes.shape[1]
+            # other implementation for the matching cost
+            # cost_class = -(torch.mm(out_classes, tgt_classes.T) + torch.mm(1 - out_classes, 1 - tgt_classes.T))/out_classes.shape[-1]
+
         # Final cost matrix
         C = self.cost_bbox * cost_bbox+ self.cost_giou * cost_giou + self.cost_class * cost_class 
         C = C.view(bs, num_queries, -1).cpu()
@@ -86,4 +100,10 @@ class HungarianMatcher(nn.Module):
 
 
 def build_matcher(cfg):
-    return HungarianMatcher(cost_class=cfg.CONFIG.MATCHER.COST_CLASS, cost_bbox=cfg.CONFIG.MATCHER.COST_BBOX, cost_giou=cfg.CONFIG.MATCHER.COST_GIOU, data_file=cfg.CONFIG.DATA.DATASET_NAME, binary_loss=cfg.CONFIG.MATCHER.BNY_LOSS, before=cfg.CONFIG.MATCHER.BEFORE)
+    return HungarianMatcher(cost_class=cfg.CONFIG.MATCHER.COST_CLASS,
+                            cost_bbox=cfg.CONFIG.MATCHER.COST_BBOX, 
+                            cost_giou=cfg.CONFIG.MATCHER.COST_GIOU, 
+                            data_file=cfg.CONFIG.DATA.DATASET_NAME, 
+                            binary_loss= not cfg.CONFIG.MODEL.RM_BINARY,
+                            before=cfg.CONFIG.MATCHER.BEFORE
+                            )

@@ -142,6 +142,8 @@ if __name__ == '__main__':
     parser.add_argument('--random_seed', default=1, type=int, help='random_seed')
     parser.add_argument('--debug', action='store_true', help="debug, and ddp is disabled")
     parser.add_argument('--eff', action='store_true', help="only for AVA, efficiently output only keyframe")
+    parser.add_argument('--use_cls_sa', action='store_true', help="attach self attention layer to the decoder")
+    parser.add_argument('--rm_binary', action="store_true", help="remove binary branch")
     args = parser.parse_args()
     random.seed(args.random_seed)
     np.random.seed(args.random_seed)
@@ -161,9 +163,11 @@ if __name__ == '__main__':
         cfg.CONFIG.LOG.EXP_NAME = "debug_{}-{}".format(study,run)
     if args.eff:
         cfg.CONFIG.EFFICIENT = True
-    else:
-        cfg.CONFIG.EFFICIENT = False
-    
+    if args.use_cls_sa:
+        cfg.CONFIG.MODEL.USE_CLS_SA = True
+    if args.rm_binary:
+        cfg.CONFIG.MODEL.RM_BINARY = True
+
     import socket 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.connect(("8.8.8.8", 80))
