@@ -144,6 +144,7 @@ if __name__ == '__main__':
     parser.add_argument('--eff', action='store_true', help="only for AVA, efficiently output only keyframe")
     parser.add_argument('--use_cls_sa', action='store_true', help="attach self attention layer to the decoder")
     parser.add_argument('--rm_binary', action="store_true", help="remove binary branch")
+    parser.add_argument('--cut_grad', action="store_true", help="cut cls loss gradient to the anchor box")
     args = parser.parse_args()
     random.seed(args.random_seed)
     np.random.seed(args.random_seed)
@@ -167,6 +168,8 @@ if __name__ == '__main__':
         cfg.CONFIG.MODEL.USE_CLS_SA = True
     if args.rm_binary:
         cfg.CONFIG.MODEL.RM_BINARY = True
+    if args.cut_grad:
+        cfg.CONFIG.TRAIN.CUT_GRADIENT = True
 
     import socket 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

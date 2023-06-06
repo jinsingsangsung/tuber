@@ -76,6 +76,7 @@ class Transformer(nn.Module):
                  modulate_hw_attn=True,
                  bbox_embed_diff_each_layer=False,
                  use_cls_sa=False,
+                 cut_gradient=False,
                  ):
 
         super().__init__()
@@ -95,7 +96,8 @@ class Transformer(nn.Module):
                                           return_intermediate=return_intermediate_dec,
                                           d_model=d_model, query_dim=query_dim, keep_query_pos=keep_query_pos, query_scale_type=query_scale_type,
                                           modulate_hw_attn=modulate_hw_attn,
-                                          bbox_embed_diff_each_layer=bbox_embed_diff_each_layer)
+                                          bbox_embed_diff_each_layer=bbox_embed_diff_each_layer,
+                                          cut_gradient=cut_gradient)
 
         self._reset_parameters()
         assert query_scale_type in ['cond_elewise', 'cond_scalar', 'fix_elewise']
@@ -183,7 +185,8 @@ class TransformerDecoder(nn.Module):
                     d_model=256, query_dim=2, keep_query_pos=False, query_scale_type='cond_elewise',
                     modulate_hw_attn=False,
                     bbox_embed_diff_each_layer=False,
-                    offset_embed_diff_each_layer=True,                              
+                    offset_embed_diff_each_layer=True,
+                    cut_gradient=False,                              
                     ):
         super().__init__()
         self.layers = _get_clones(decoder_layer, num_layers)
@@ -225,6 +228,7 @@ class TransformerDecoder(nn.Module):
         if not keep_query_pos:
             for layer_id in range(num_layers - 1):
                 self.layers[layer_id + 1].ca_qpos_proj = None
+        self.cut_gradient = cut_gradient
 
     def forward(self, loc_tgt, cls_tgt, memory,
                 tgt_mask: Optional[Tensor] = None,
@@ -287,7 +291,10 @@ class TransformerDecoder(nn.Module):
                 else:
                     offset = self.offset_embed(cls_output)
             # if layer_id == 0:
-            cls_reference_points = (offset + inverse_sigmoid(reference_points)).sigmoid()
+            if self.cut_gradient:
+                cls_reference_points = (offset + inverse_sigmoid(reference_points.clone().detach())).sigmoid()
+            else:
+                cls_reference_points = (offset + inverse_sigmoid(reference_points)).sigmoid()
             # else:
                 # cls_reference_points = (offset + inverse_sigmoid(cls_reference_points)).sigmoid()
             inter_center = cls_reference_points[..., :self.query_dim]
@@ -301,7 +308,10 @@ class TransformerDecoder(nn.Module):
                                    pos=pos, cls_query_pos=cls_query_pos, cls_query_sine_embed=cls_query_sine_embed,
                                    is_first=(layer_id == 0))
             
-            cls_output = self.cls_loc_merger(torch.cat([output, cls_output], -1))
+            if self.cut_gradient:
+                cls_output = self.cls_loc_merger(torch.cat([output.clone().detach(), cls_output], -1))
+            else:
+                cls_output = self.cls_loc_merger(torch.cat([output, cls_output], -1))
 
             
             # iter update
@@ -687,6 +697,7 @@ def build_transformer(cfg):
         num_patterns=cfg.CONFIG.MODEL.NUM_PATTERNS,
         bbox_embed_diff_each_layer=cfg.CONFIG.MODEL.BBOX_EMBED_DIFF_EACH_LAYER,
         use_cls_sa=cfg.CONFIG.MODEL.USE_CLS_SA,
+        cut_gradient=cfg.CONFIG.TRAIN.CUT_GRADIENT,
     )
 
 
