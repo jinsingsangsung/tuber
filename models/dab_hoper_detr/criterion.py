@@ -7,7 +7,7 @@ from utils import box_ops
 from utils.misc import (NestedTensor, nested_tensor_from_tensor_list,
                        accuracy, accuracy_sigmoid, get_world_size, interpolate,
                        is_dist_avail_and_initialized)
-from models.dab_new_detr.segmentation import sigmoid_focal_loss, dice_loss
+from .segmentation import sigmoid_focal_loss, dice_loss
 
 
 class SetCriterionAVA(nn.Module):
