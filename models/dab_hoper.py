@@ -89,12 +89,12 @@ class DETR(nn.Module):
         if self.dataset_mode == 'ava':
             self.class_embed = nn.Linear(hidden_dim, num_classes)
             self.class_embed.bias.data = torch.ones(num_classes) * bias_value
-            if rm_binary:
+            if not rm_binary:
                 self.class_embed_b = nn.Linear(hidden_dim, 3)
         else:
             self.class_embed = nn.Linear(hidden_dim, num_classes+1)
             self.class_embed.bias.data = torch.ones(num_classes+1) * bias_value
-            if rm_binary:
+            if not rm_binary:
                 self.class_embed_b = nn.Linear(hidden_dim, 3)
             
         
@@ -166,7 +166,8 @@ class DETR(nn.Module):
             embedweight = self.refpoint_embed.weight.view(self.num_queries, 1, 4)      # nq, 1, 4        
 
         hs, reference, cls_hs = self.transformer(self.input_proj(src), mask, embedweight, pos[-1])
-        outputs_class_b = self.class_embed_b(hs)
+        if not self.rm_binary:
+            outputs_class_b = self.class_embed_b(hs)
 
         ######## localization head
         if not self.bbox_embed_diff_each_layer:
