@@ -24,7 +24,7 @@ CONFIG:
     LR_BACKBONE: 1e-5 # if <=0, freezes the backbone
     MOMENTUM: 0.9
     W_DECAY: 1e-4
-    LR_POLICY: 'step'
+    LR_POLICY: 'cosine'
     USE_WARMUP: True # does nothing
     WARMUP_START_LR: 1e-5
     WARMUP_EPOCHS: 3 # this determines whether to use Warmup unless using "step"
@@ -92,6 +92,7 @@ CONFIG:
     BBOX_EMBED_DIFF_EACH_LAYER: False
     USE_CLS_SA: False
     RM_BINARY: False
+    MORE_OFFSET: False
 
   MATCHER:
     COST_CLASS: 12
