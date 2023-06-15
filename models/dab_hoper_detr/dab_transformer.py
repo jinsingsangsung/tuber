@@ -77,6 +77,7 @@ class Transformer(nn.Module):
                  bbox_embed_diff_each_layer=False,
                  use_cls_sa=False,
                  cut_gradient=False,
+                 more_offset=False,
                  ):
 
         super().__init__()
@@ -97,7 +98,8 @@ class Transformer(nn.Module):
                                           d_model=d_model, query_dim=query_dim, keep_query_pos=keep_query_pos, query_scale_type=query_scale_type,
                                           modulate_hw_attn=modulate_hw_attn,
                                           bbox_embed_diff_each_layer=bbox_embed_diff_each_layer,
-                                          cut_gradient=cut_gradient)
+                                          cut_gradient=cut_gradient,
+                                          more_offset=more_offset,)
 
         self._reset_parameters()
         assert query_scale_type in ['cond_elewise', 'cond_scalar', 'fix_elewise']
@@ -112,6 +114,7 @@ class Transformer(nn.Module):
             self.num_patterns = 0
         if self.num_patterns > 0:
             self.patterns = nn.Embedding(self.num_patterns, d_model)
+        self.more_offset = more_offset
 
     def _reset_parameters(self):
         for p in self.parameters():
@@ -140,9 +143,13 @@ class Transformer(nn.Module):
             mask = mask.reshape(bs, t, -1)[:,t//2:t//2+1,:].flatten(0,1)
             loc_tgt = torch.zeros(num_queries, bs, self.d_model, device=refpoint_embed.device)
             cls_tgt = torch.zeros(num_queries, bs, self.d_model, device=refpoint_embed.device)
+            if self.more_offset:
+                cls_tgt = torch.zeros(num_queries*2, bs, self.d_model, device=refpoint_embed.device)
         else:
             loc_tgt = torch.zeros(num_queries, bs*t, self.d_model, device=refpoint_embed.device)
             cls_tgt = torch.zeros(num_queries, bs*t, self.d_model, device=refpoint_embed.device)
+            if self.more_offset:
+                cls_tgt = torch.zeros(num_queries*2, bs, self.d_model, device=refpoint_embed.device)
         # tgt = self.patterns.weight[:, None, None, :].repeat(1, self.num_queries, bs*t, 1).flatten(0, 1) # n_q*n_pat, bs, d_model
         # refpoint_embed = refpoint_embed.repeat(self.num_patterns, 1, 1) # n_pat*n_q, bs*t, d_model
             # import ipdb; ipdb.set_trace()
@@ -186,7 +193,8 @@ class TransformerDecoder(nn.Module):
                     modulate_hw_attn=False,
                     bbox_embed_diff_each_layer=False,
                     offset_embed_diff_each_layer=True,
-                    cut_gradient=False,                              
+                    cut_gradient=False,
+                    more_offset=False,                              
                     ):
         super().__init__()
         self.layers = _get_clones(decoder_layer, num_layers)
@@ -213,13 +221,18 @@ class TransformerDecoder(nn.Module):
         self.cls_ref_point_head = MLP(query_dim // 2 * d_model, d_model, d_model, 2)
         
         self.bbox_embed = None
+        self.more_offset = more_offset
         self.offset_embed = MLP(d_model, d_model, 4, 3)
+        if self.more_offset:
+            self.offset_embed2 = MLP(d_model, d_model, 4, 3)
         self.d_model = d_model
         self.modulate_hw_attn = modulate_hw_attn
         self.bbox_embed_diff_each_layer = bbox_embed_diff_each_layer
         self.offset_embed_diff_each_layer = offset_embed_diff_each_layer
         if offset_embed_diff_each_layer:
-            self.offset_embed = nn.ModuleList([MLP(d_model, d_model, 4, 3) for i in range(num_layers)])      
+            self.offset_embed = nn.ModuleList([MLP(d_model, d_model, 4, 3) for i in range(num_layers)])
+            if self.more_offset:
+                self.offset_embed2 = nn.ModuleList([MLP(d_model, d_model, 4, 3) for i in range(num_layers)])
         self.cls_loc_merger = MLP(2*d_model, d_model, d_model, 2)
 
         if modulate_hw_attn:
@@ -240,7 +253,9 @@ class TransformerDecoder(nn.Module):
                 ):
         output = loc_tgt
         cls_output = cls_tgt
-
+        if self.more_offset:
+            cls_output, cls_output2 = cls_tgt.split(2, dim=0)
+            cls_intermediate2 = []
         intermediate = []
         cls_intermediate = []
         reference_points = refpoints_unsigmoid.sigmoid()
@@ -283,37 +298,65 @@ class TransformerDecoder(nn.Module):
             if layer_id == 0:
                 if self.offset_embed_diff_each_layer:
                     offset = self.offset_embed[layer_id](output)
+                    if self.more_offset:
+                        offset2 = self.offset_embed2[layer_id](output)
                 else:
                     offset = self.offset_embed(output)         
+                    if self.more_offset:
+                        offset2 = self.offset_embed2(output)
             else:
                 if self.offset_embed_diff_each_layer:
                     offset = self.offset_embed[layer_id](cls_output)
+                    if self.more_offset:
+                        offset2 = self.offset_embed2[layer_id](cls_output)
                 else:
                     offset = self.offset_embed(cls_output)
+                    if self.more_offset:
+                        offset2 = self.offset_embed2(cls_output)
             # if layer_id == 0:
             if self.cut_gradient:
                 cls_reference_points = (offset + inverse_sigmoid(reference_points.clone().detach())).sigmoid()
+                if self.more_offset:
+                    cls_reference_points2 = (offset2 + inverse_sigmoid(reference_points.clone().detach())).sigmoid()
             else:
                 cls_reference_points = (offset + inverse_sigmoid(reference_points)).sigmoid()
+                if self.more_offset:
+                    cls_reference_points2 = (offset2 + inverse_sigmoid(reference_points)).sigmoid()
             # else:
                 # cls_reference_points = (offset + inverse_sigmoid(cls_reference_points)).sigmoid()
             inter_center = cls_reference_points[..., :self.query_dim]
             cls_query_sine_embed = gen_sineembed_for_position(inter_center)
             cls_query_pos = self.cls_ref_point_head(cls_query_sine_embed) 
             cls_query_sine_embed = cls_query_sine_embed[..., :self.d_model]
+            if self.more_offset:
+                inter_center2 = cls_reference_points2[..., :self.query_dim]
+                cls_query_sine_embed2 = gen_sineembed_for_position(inter_center2)
+                cls_query_pos2 = self.cls_ref_point_head(cls_query_sine_embed2) 
+                cls_query_sine_embed2 = cls_query_sine_embed2[..., :self.d_model]
+
             cls_output, cls_dec_attn = cls_layer(cls_output, memory, tgt_mask=tgt_mask,
                                    memory_mask=memory_mask,
                                    tgt_key_padding_mask=tgt_key_padding_mask,
                                    memory_key_padding_mask=memory_key_padding_mask,
                                    pos=pos, cls_query_pos=cls_query_pos, cls_query_sine_embed=cls_query_sine_embed,
                                    is_first=(layer_id == 0))
-            
+            if self.more_offset:
+                cls_output2, cls_dec_attn2 = cls_layer(cls_output2, memory, tgt_mask=tgt_mask,
+                                    memory_mask=memory_mask,
+                                    tgt_key_padding_mask=tgt_key_padding_mask,
+                                    memory_key_padding_mask=memory_key_padding_mask,
+                                    pos=pos, cls_query_pos=cls_query_pos2, cls_query_sine_embed=cls_query_sine_embed2,
+                                    is_first=(layer_id == 0))
+
             if self.cut_gradient:
                 cls_output = self.cls_loc_merger(torch.cat([output.clone().detach(), cls_output], -1))
+                if self.more_offset:
+                    cls_output2 = self.cls_loc_merger(torch.cat([output.clone().detach(), cls_output2], -1))
             else:
                 cls_output = self.cls_loc_merger(torch.cat([output, cls_output], -1))
+                if self.more_offset:
+                    cls_output2 = self.cls_loc_merger(torch.cat([output, cls_output2], -1))
 
-            
             # iter update
             if self.bbox_embed is not None:
                 if self.bbox_embed_diff_each_layer:
@@ -330,6 +373,8 @@ class TransformerDecoder(nn.Module):
             if self.return_intermediate:
                 intermediate.append(self.norm(output))
                 cls_intermediate.append(self.cls_norm(cls_output))
+                if self.more_offset:
+                    cls_intermediate2.append(self.cls_norm(cls_output2))
 
         if self.norm is not None:
             output = self.norm(output)
@@ -339,23 +384,44 @@ class TransformerDecoder(nn.Module):
                 intermediate.append(output)
                 cls_intermediate.pop()
                 cls_intermediate.append(cls_output)
+                if self.more_offset:
+                    cls_intermediate2.pop()
+                    cls_intermediate2.append(cls_output2)
 
 
         if self.return_intermediate:
             if self.bbox_embed is not None:
-                return [
-                    torch.stack(intermediate).transpose(1, 2),
-                    torch.stack(ref_points).transpose(1, 2),
-                    torch.stack(cls_intermediate).transpose(1,2),
-                ]
+                if not self.more_offset:
+                    return [
+                        torch.stack(intermediate).transpose(1, 2),
+                        torch.stack(ref_points).transpose(1, 2),
+                        torch.stack(cls_intermediate).transpose(1,2),
+                    ]
+                else:
+                    return [
+                        torch.stack(intermediate).transpose(1, 2),
+                        torch.stack(ref_points).transpose(1, 2),
+                        torch.stack(cls_intermediate).transpose(1,2),
+                        torch.stack(cls_intermediate2).transpose(1,2),
+                    ]                    
             else:
-                return [
-                    torch.stack(intermediate).transpose(1, 2), 
-                    reference_points.unsqueeze(0).transpose(1, 2),
-                    torch.stack(cls_intermediate).transpose(1, 2), 
-                ]
-
-        return output.unsqueeze(0), cls_output.unsqueeze(0)
+                if not self.more_offset:
+                    return [
+                        torch.stack(intermediate).transpose(1, 2), 
+                        reference_points.unsqueeze(0).transpose(1, 2),
+                        torch.stack(cls_intermediate).transpose(1, 2), 
+                    ]
+                else:
+                    return [
+                        torch.stack(intermediate).transpose(1, 2), 
+                        reference_points.unsqueeze(0).transpose(1, 2),
+                        torch.stack(cls_intermediate).transpose(1, 2),
+                        torch.stack(cls_intermediate2).transpose(1, 2), 
+                    ]
+        if not self.more_offset:
+            return output.unsqueeze(0), cls_output.unsqueeze(0)
+        else:
+            return output.unsqueeze(0), cls_output.unsqueeze(0), cls_output2.unsqueeze(0)
 
 
 class TransformerEncoderLayer(nn.Module): # spatially, temporally
@@ -696,8 +762,10 @@ def build_transformer(cfg):
         activation="relu",
         num_patterns=cfg.CONFIG.MODEL.NUM_PATTERNS,
         bbox_embed_diff_each_layer=cfg.CONFIG.MODEL.BBOX_EMBED_DIFF_EACH_LAYER,
+        offset_embed_diff_each_layer=cfg.CONFIG.MODEL.OFFSET_EMBED_DIFF_EACH_LAYER,
         use_cls_sa=cfg.CONFIG.MODEL.USE_CLS_SA,
         cut_gradient=cfg.CONFIG.TRAIN.CUT_GRADIENT,
+        more_offset=cfg.CONFIG.MODEL.MORE_OFFSET,
     )
 
 

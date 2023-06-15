@@ -35,7 +35,7 @@ class DETR(nn.Module):
     def __init__(self, backbone, transformer, num_classes, num_queries, num_frames,
                  hidden_dim, temporal_length, aux_loss=False, generate_lfb=False, two_stage=False, random_refpoints_xy=False, query_dim=4,
                  backbone_name='CSN-152', ds_rate=1, last_stride=True, dataset_mode='ava', bbox_embed_diff_each_layer=False, training=True, iter_update=True,
-                 gpu_world_rank=0, log_path=None, efficient=True, rm_binary=False):
+                 gpu_world_rank=0, log_path=None, efficient=False, rm_binary=False, more_offset=False):
         """ Initializes the model.
         Parameters:
             backbone: torch module of the backbone to be used. See backbone.py
@@ -125,6 +125,7 @@ class DETR(nn.Module):
         self.last_stride = last_stride
         self.training = training
         self.rm_binary = rm_binary
+        self.more_offset = more_offset
 
 
     def freeze_params(self):
@@ -265,6 +266,7 @@ def build_model(cfg):
                  bbox_embed_diff_each_layer=cfg.CONFIG.MODEL.BBOX_EMBED_DIFF_EACH_LAYER,
                  efficient=cfg.CONFIG.EFFICIENT,
                  rm_binary=cfg.CONFIG.MODEL.RM_BINARY,
+                 more_offset=cfg.CONFIG.MODEL.MORE_OFFSET,
                  )
 
     matcher = build_matcher(cfg)
