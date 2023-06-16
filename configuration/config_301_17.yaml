@@ -34,6 +34,7 @@ CONFIG:
     AUX_LOSS: True
     LR_SCHEDULER:
       NAME: 'multistep'
+    CUT_GRADIENT: FALSE
 
   VAL:
     BATCH_SIZE: 1
@@ -88,7 +89,10 @@ CONFIG:
     BOX_NOISE_SCALE: 0.4
     NUM_PATTERNS: 0
     BBOX_EMBED_DIFF_EACH_LAYER: False
-    START_EPOCH: 7
+    USE_CLS_SA: False
+    RM_BINARY: False
+    MORE_OFFSET: False
+
 
   MATCHER:
     COST_CLASS: 12
