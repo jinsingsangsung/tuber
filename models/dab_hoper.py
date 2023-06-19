@@ -167,7 +167,7 @@ class DETR(nn.Module):
 
         hs, reference, cls_hs = self.transformer(self.input_proj(src), mask, embedweight, pos[-1])
         if not self.rm_binary:
-          outputs_class_b = self.class_embed_b(hs)
+            outputs_class_b = self.class_embed_b(hs)
 
         ######## localization head
         if not self.bbox_embed_diff_each_layer:
