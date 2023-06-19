@@ -100,7 +100,13 @@ class SetCriterionAVA(nn.Module):
             pass
         if log:
             # docs this should probably be a separate loss, not hacked in this one here
-            losses['class_error'] = 100 - accuracy_sigmoid(src_logits[idx], target_classes_o)[0]
+            if not self.more_offset:
+                losses['class_error'] = 100 - accuracy_sigmoid(src_logits[idx], target_classes_o)[0]
+            else:
+                if loss_ce < loss_ce2:
+                    losses['class_error'] = 100 - accuracy_sigmoid(src_logits[idx], target_classes_o)[0]
+                else:
+                    losses['class_error'] = 100 - accuracy_sigmoid(src_logits2[idx], target_classes_o)[0]
 
         return losses
 
@@ -748,11 +754,16 @@ class PostProcessAVA(nn.Module):
             out_logits_b, out_logits, out_bbox = outputs['pred_logits_b'], outputs['pred_logits'], outputs['pred_boxes']
         except:
             out_logits, out_bbox = outputs['pred_logits'], outputs['pred_boxes']
-
+        if out_bbox.size(2) != out_logits.size(2):
+            out_logits, out_logits2 = outputs["pred_logits"].chunk(2, dim=1)
+            uniform_dist = torch.full(out_logits.shape, 1/out_logits.size(-1), device=out_logits.device)
+            loss1 = F.binary_cross_entropy(out_logits.sigmoid(), uniform_dist)
+            loss2 = F.binary_cross_entropy(out_logits2.sigmoid(), uniform_dist)
+            if loss1 > loss2:
+                out_logits2 = out_logits
 
         assert len(out_logits) == len(target_sizes)
         assert target_sizes.shape[1] == 2
-
 
         # prob = out_logits.sigmoid() * out_logits_b.softmax(-1)[:,:,1:2]
 
