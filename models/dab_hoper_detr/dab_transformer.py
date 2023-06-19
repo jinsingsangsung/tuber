@@ -146,7 +146,7 @@ class Transformer(nn.Module):
         # tgt = self.patterns.weight[:, None, None, :].repeat(1, self.num_queries, bs*t, 1).flatten(0, 1) # n_q*n_pat, bs, d_model
         # refpoint_embed = refpoint_embed.repeat(self.num_patterns, 1, 1) # n_pat*n_q, bs*t, d_model
             # import ipdb; ipdb.set_trace()
-        hs, references, cls_hs = self.decoder(cls_tgt, loc_tgt, memory, memory_key_padding_mask=mask,
+        hs, references, cls_hs = self.decoder(loc_tgt, cls_tgt, memory, memory_key_padding_mask=mask,
                           pos=pos_embed, refpoints_unsigmoid=refpoint_embed)
         return hs, references, cls_hs
 
