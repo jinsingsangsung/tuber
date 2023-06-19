@@ -166,7 +166,8 @@ class DETR(nn.Module):
             embedweight = self.refpoint_embed.weight.view(self.num_queries, 1, 4)      # nq, 1, 4        
 
         hs, reference, cls_hs = self.transformer(self.input_proj(src), mask, embedweight, pos[-1])
-        outputs_class_b = self.class_embed_b(hs)
+        if not self.rm_binary:
+          outputs_class_b = self.class_embed_b(hs)
 
         ######## localization head
         if not self.bbox_embed_diff_each_layer:
