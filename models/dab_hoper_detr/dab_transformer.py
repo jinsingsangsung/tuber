@@ -75,6 +75,7 @@ class Transformer(nn.Module):
                  num_patterns=0,
                  modulate_hw_attn=True,
                  bbox_embed_diff_each_layer=False,
+                 offset_embed_diff_each_layer=True,
                  use_cls_sa=False,
                  cut_gradient=False,
                  more_offset=False,
@@ -98,6 +99,7 @@ class Transformer(nn.Module):
                                           d_model=d_model, query_dim=query_dim, keep_query_pos=keep_query_pos, query_scale_type=query_scale_type,
                                           modulate_hw_attn=modulate_hw_attn,
                                           bbox_embed_diff_each_layer=bbox_embed_diff_each_layer,
+                                          offset_embed_diff_each_layer=offset_embed_diff_each_layer,
                                           cut_gradient=cut_gradient,
                                           more_offset=more_offset,)
 
@@ -149,13 +151,19 @@ class Transformer(nn.Module):
             loc_tgt = torch.zeros(num_queries, bs*t, self.d_model, device=refpoint_embed.device)
             cls_tgt = torch.zeros(num_queries, bs*t, self.d_model, device=refpoint_embed.device)
             if self.more_offset:
-                cls_tgt = torch.zeros(num_queries*2, bs, self.d_model, device=refpoint_embed.device)
+                cls_tgt = torch.zeros(num_queries*2, bs*t, self.d_model, device=refpoint_embed.device)
         # tgt = self.patterns.weight[:, None, None, :].repeat(1, self.num_queries, bs*t, 1).flatten(0, 1) # n_q*n_pat, bs, d_model
         # refpoint_embed = refpoint_embed.repeat(self.num_patterns, 1, 1) # n_pat*n_q, bs*t, d_model
             # import ipdb; ipdb.set_trace()
-        hs, references, cls_hs = self.decoder(cls_tgt, loc_tgt, memory, memory_key_padding_mask=mask,
+        if not self.more_offset:
+            hs, references, cls_hs = self.decoder(loc_tgt, cls_tgt, memory, memory_key_padding_mask=mask,
                           pos=pos_embed, refpoints_unsigmoid=refpoint_embed)
-        return hs, references, cls_hs
+            return hs, references, cls_hs
+        else:
+            hs, references, cls_hs, cls_hs2 = self.decoder(loc_tgt, cls_tgt, memory, memory_key_padding_mask=mask,
+                          pos=pos_embed, refpoints_unsigmoid=refpoint_embed)            
+            return hs, references, cls_hs, cls_hs2
+
 
 
 class TransformerEncoder(nn.Module):
@@ -254,7 +262,7 @@ class TransformerDecoder(nn.Module):
         output = loc_tgt
         cls_output = cls_tgt
         if self.more_offset:
-            cls_output, cls_output2 = cls_tgt.split(2, dim=0)
+            cls_output, cls_output2 = cls_tgt.chunk(2, dim=0)
             cls_intermediate2 = []
         intermediate = []
         cls_intermediate = []

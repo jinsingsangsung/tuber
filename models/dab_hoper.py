@@ -224,7 +224,7 @@ class DETR(nn.Module):
                 outputs_class_b = outputs_class_b.reshape(-1, bs, t, self.num_queries, 3)
         
         if self.more_offset:
-            outputs_class = torch.cat([outputs_class, outputs_class2], dim=1)
+            outputs_class = torch.cat([outputs_class, outputs_class2], dim=2)
 
         if self.rm_binary:
             out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1],}

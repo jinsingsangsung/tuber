@@ -51,7 +51,9 @@ class SetCriterionAVA(nn.Module):
         assert 'pred_logits' in outputs
         src_logits = outputs['pred_logits']
         if self.more_offset:
-            src_logits, src_logits2 = src_logits.split(2, dim=1)
+            src_logits, src_logits2 = src_logits.chunk(2, dim=1)
+        if isinstance(indices, tuple):
+            indices, indices2 = indices
         idx = self._get_src_permutation_idx(indices)
         try:
             src_logits_b = outputs['pred_logits_b'] # bs nq 3
@@ -72,15 +74,26 @@ class SetCriterionAVA(nn.Module):
 
         weights = weights.view(weights.shape[0], weights.shape[1], 1)  # [:,:,None]
         target_classes[idx] = target_classes_o
+        if self.more_offset:
+            src_logits2_sig = src_logits2.sigmoid()
         if self.evaluation:
             loss_ce = F.binary_cross_entropy(src_logits_sig, target_classes)
+            if self.more_offset:
+                loss_ce2 = F.binary_cross_entropy(src_logits2_sig, target_classes)
         else:
             # loss_ce = F.binary_cross_entropy(src_logits_sig, target_classes, weight=weights)
             loss_ce = sigmoid_focal_loss(src_logits, target_classes, weights)
             # eps = 1e-8
             # loss_ce = -(((1 - src_logits_sig)**self.focal_loss_gamma * target_classes * torch.log(src_logits_sig + eps) + src_logits_sig**self.focal_loss_gamma * (1-target_classes) * torch.log(1-src_logits_sig+eps))*weights).sum()
+            if self.more_offset:
+                loss_ce2 = sigmoid_focal_loss(src_logits2, target_classes, weights)
+                uniform_class_dist = torch.full(target_classes.shape, 1/target_classes.size(-1), device=src_logits.device)
+                if loss_ce < loss_ce2:
+                    loss_ce2 = sigmoid_focal_loss(src_logits2, uniform_class_dist, weights)
+                else:
+                    loss_ce = sigmoid_focal_loss(src_logits, uniform_class_dist, weights)
 
-        losses = {'loss_ce': loss_ce}
+        losses = {'loss_ce': (loss_ce + loss_ce2)/2}
         try:
             losses['loss_ce_b'] = loss_ce_b
         except:
@@ -194,11 +207,11 @@ class SetCriterionAVA(nn.Module):
         """
         outputs_without_aux = {k: v for k, v in outputs.items() if k != 'aux_outputs'}
         # Retrieve the matching between the outputs of the last layer and the targets
-        if not self.more_offset:
-            indices = self.matcher(outputs_without_aux, targets)
-        else:
+        try:
             indices, indices2 = self.matcher(outputs_without_aux, targets)
             indices = torch.cat([indices, indices2], dim=0)
+        except:
+            indices = self.matcher(outputs_without_aux, targets)
         # _, sidx = self._get_src_permutation_idx(indices)
         # Compute the average number of target boxes accross all nodes, for normalization purposes
         num_boxes = sum(len(t["labels"]) for t in targets)
@@ -212,11 +225,11 @@ class SetCriterionAVA(nn.Module):
         # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
         if 'aux_outputs' in outputs:
             for i, aux_outputs in enumerate(outputs['aux_outputs']):
-                if not self.more_offset:
-                    indices = self.matcher(aux_outputs, targets)
-                else:
+                try:
                     indices, indices2 = self.matcher(outputs_without_aux, targets)
                     indices = torch.cat([indices, indices2], dim=0)
+                except:
+                    indices = self.matcher(aux_outputs, targets)
                 for loss in self.losses:
                     if loss == 'masks':
                         # Intermediate masks losses are too costly to compute, we ignore them.
@@ -271,6 +284,7 @@ class SetCriterion(nn.Module):
         targets dicts must contain the key "labels" containing a tensor of dim [nb_target_boxes]
         """
         assert 'pred_logits' in outputs
+        import pdb; pdb.set_trace()
         src_logits = outputs['pred_logits'].flatten(0,1) #bs*t, n_q, n_c
         T = outputs['pred_logits'].size(1)
         idx = self._get_src_permutation_idx(indices)

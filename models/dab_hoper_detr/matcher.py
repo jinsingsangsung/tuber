@@ -67,7 +67,7 @@ class HungarianMatcher(nn.Module):
                 len(index_i) = len(index_j) = min(num_queries, num_target_boxes)
         """
         if self.more_offset:
-            bs, num_queries = outputs["pred_logits"].split(2, dim=1)[0].shape[:2]
+            bs, num_queries = outputs["pred_logits"].chunk(2, dim=1)[0].shape[:2]
         else:
             bs, num_queries = outputs["pred_logits"].shape[:2]
         # bs, num_queries = outputs["pred_boxes"].shape[:2]
@@ -90,8 +90,8 @@ class HungarianMatcher(nn.Module):
             if not self.more_offset:
                 out_classes = outputs["pred_logits"].flatten(0,1).sigmoid().clamp(min=self.epsilon, max=1-self.epsilon)
             else:
-                out_classes = outputs["pred_logits"].split(2, dim=1)[0].flatten(0,1).sigmoid().clamp(min=self.epsilon, max=1-self.epsilon)
-                out_classes2 = outputs["pred_logits"].split(2, dim=1)[1].flatten(0,1).sigmoid().clamp(min=self.epsilon, max=1-self.epsilon)
+                out_classes = outputs["pred_logits"].chunk(2, dim=1)[0].flatten(0,1).sigmoid().clamp(min=self.epsilon, max=1-self.epsilon)
+                out_classes2 = outputs["pred_logits"].chunk(2, dim=1)[1].flatten(0,1).sigmoid().clamp(min=self.epsilon, max=1-self.epsilon)
             tgt_classes = torch.cat([v["labels"] for v in targets])
             # ce-loss for matching cost
             cost_class = -(torch.mm(out_classes.log(), tgt_classes.T) + torch.mm((1-out_classes).log(), (1-tgt_classes).T))/tgt_classes.shape[1]
@@ -104,14 +104,14 @@ class HungarianMatcher(nn.Module):
         # Final cost matrix
         C = self.cost_bbox * cost_bbox+ self.cost_giou * cost_giou + self.cost_class * cost_class 
         C = C.view(bs, num_queries, -1).cpu()
-        if self.more_offset:
+        if self.more_offset and not self.binary_loss:
             C2 = self.cost_bbox * cost_bbox+ self.cost_giou * cost_giou + self.cost_class * cost_class2
             C2 = C2.view(bs, num_queries, -1).cpu()
 
         sizes = [len(v["boxes"]) for v in targets]
 
         indices = [linear_sum_assignment(c[i]) for i, c in enumerate(C.split(sizes, -1))]
-        if not self.more_offset:
+        if not self.more_offset or (self.more_offset and self.binary_loss):
             return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
         else:
             indices2 = [linear_sum_assignment(c[i]) for i, c in enumerate(C2.split(sizes, -1))]
