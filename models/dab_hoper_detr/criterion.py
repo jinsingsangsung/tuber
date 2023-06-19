@@ -18,7 +18,7 @@ class SetCriterionAVA(nn.Module):
     """
 
     def __init__(self, weight, num_classes, num_queries, matcher, weight_dict, eos_coef, losses, data_file,
-                 evaluation=False):
+                 evaluation=False, more_offset=False):
         """ Create the criterion.
         Parameters
             num_classes: number of object categories, omitting the special no-object category
@@ -42,6 +42,7 @@ class SetCriterionAVA(nn.Module):
         self.register_buffer('empty_weight', empty_weight)
         self.focal_loss_alpha = 0.25
         self.focal_loss_gamma = 2.0
+        self.more_offset = more_offset
 
     def loss_labels(self, outputs, targets, indices, num_boxes, log=True):
         """Classification loss (NLL)
@@ -49,7 +50,8 @@ class SetCriterionAVA(nn.Module):
         """
         assert 'pred_logits' in outputs
         src_logits = outputs['pred_logits']
-
+        if self.more_offset:
+            src_logits, src_logits2 = src_logits.split(2, dim=1)
         idx = self._get_src_permutation_idx(indices)
         try:
             src_logits_b = outputs['pred_logits_b'] # bs nq 3
@@ -192,7 +194,11 @@ class SetCriterionAVA(nn.Module):
         """
         outputs_without_aux = {k: v for k, v in outputs.items() if k != 'aux_outputs'}
         # Retrieve the matching between the outputs of the last layer and the targets
-        indices = self.matcher(outputs_without_aux, targets)
+        if not self.more_offset:
+            indices = self.matcher(outputs_without_aux, targets)
+        else:
+            indices, indices2 = self.matcher(outputs_without_aux, targets)
+            indices = torch.cat([indices, indices2], dim=0)
         # _, sidx = self._get_src_permutation_idx(indices)
         # Compute the average number of target boxes accross all nodes, for normalization purposes
         num_boxes = sum(len(t["labels"]) for t in targets)
@@ -206,7 +212,11 @@ class SetCriterionAVA(nn.Module):
         # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
         if 'aux_outputs' in outputs:
             for i, aux_outputs in enumerate(outputs['aux_outputs']):
-                indices = self.matcher(aux_outputs, targets)
+                if not self.more_offset:
+                    indices = self.matcher(aux_outputs, targets)
+                else:
+                    indices, indices2 = self.matcher(outputs_without_aux, targets)
+                    indices = torch.cat([indices, indices2], dim=0)
                 for loss in self.losses:
                     if loss == 'masks':
                         # Intermediate masks losses are too costly to compute, we ignore them.
