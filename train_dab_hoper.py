@@ -96,7 +96,7 @@ def main_worker(cfg):
     max_accuracy = 0.0
 
     if cfg.CONFIG.LOG.WANDB and cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
-        save_path = '/datasets/result/%s' % cfg.CONFIG.LOG.EXP_NAME
+        save_path = '/dataset/result/%s' % cfg.CONFIG.LOG.EXP_NAME
         prj_name = "_".join(cfg.CONFIG.LOG.EXP_NAME.split("_")[:2])
         exp_name = "_".join(cfg.CONFIG.LOG.EXP_NAME.split("_")[2:]) + datetime.datetime.now().strftime("%H:%M:%S")
         wandb.init(project=prj_name, name=exp_name)
