@@ -16,6 +16,8 @@ from utils.nsml_utils import *
 import numpy as np
 import random
 import os
+from datetime import date
+import wandb
 
 def main_worker(cfg):
 
@@ -86,25 +88,21 @@ def main_worker(cfg):
     # create lr scheduler
     lr_scheduler = build_scheduler(cfg, optimizer, len(train_loader))
 
-    #  if int(os.getenv('NSML_SESSION', '0')) > 0:
-        # 실험 이어하기의 경우
-    #    study = os.environ["NSML_STUDY"]
-    #    run = os.environ["NSML_RUN_NAME"].split("/")[-1]
-    #    exp_name = cfg.CONFIG.LOG.EXP_NAME.format(study, run)
-    #    epochs_folder = os.listdir(os.path.join(cfg.CONFIG.LOG.BASE_PATH, exp_name, cfg.CONFIG.LOG.SAVE_DIR))
-    #    epochs_folder.sort()
-    #    latest_epoch = epochs_folder[-1]
-    #    cfg.CONFIG.MODEL.PRETRAINED_PATH = os.path.join(cfg.CONFIG.LOG.BASE_PATH, exp_name, cfg.CONFIG.LOG.SAVE_DIR, latest_epoch) # find the pretrained_path
-    #    model, optimizer, lr_scheduler, start_epoch = load_model_and_states(model, optimizer, lr_scheduler, cfg)
-    #    cfg.CONFIG.TRAIN.START_EPOCH = start_epoch
-
-    # else:
     if cfg.CONFIG.MODEL.LOAD:
         model, _ = load_model(model, cfg, load_fc=cfg.CONFIG.MODEL.LOAD_FC)
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0: 
         print_log(save_path, 'Start training...')
     start_time = time.time()
     max_accuracy = 0.0
+
+    if cfg.CONFIG.LOG.WANDB and cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
+        save_path = '/datasets/result/%s' % cfg.CONFIG.LOG.EXP_NAME
+        prj_name = "_".join(cfg.CONFIG.LOG.EXP_NAME.split("_")[:2])
+        exp_name = "_".join(cfg.CONFIG.LOG.EXP_NAME.split("_")[2:]) + datetime.datetime.now().strftime("%H:%M:%S")
+        wandb.init(project=prj_name, name=exp_name)
+        wandb.config.update(cfg)
+        wandb.watch(model)
+
     for epoch in range(cfg.CONFIG.TRAIN.START_EPOCH, cfg.CONFIG.TRAIN.EPOCH_NUM):
         if cfg.DDP_CONFIG.DISTRIBUTED:
             train_sampler.set_epoch(epoch)
@@ -116,22 +114,27 @@ def main_worker(cfg):
 
         if (epoch % cfg.CONFIG.VAL.FREQ == 0 or epoch == cfg.CONFIG.TRAIN.EPOCH_NUM - 1):
             if cfg.CONFIG.DATA.DATASET_NAME == 'ava':
-                validate_tuber_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)
+                curr_accuracy = validate_tuber_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)
+                if max_accuracy < curr_accuracy:
+                    max_accuracy = curr_accuracy
+                    os.remove(os.path.join(cfg.CONFIG.LOG.BASE_PATH,
+                                  cfg.CONFIG.LOG.EXP_NAME,
+                                  cfg.CONFIG.LOG.SAVE_DIR,
+                                  f'ckpt_epoch_{epoch:02d}.pth')
+                                )
             elif cfg.CONFIG.DATA.DATASET_NAME == 'jhmdb':
                 validate_tuber_jhmdb_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)
             else:
                 validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)
-#        if os.getenv('NSML_RANK', '0') == '0':
-#           set_nsml_reschedule()
 
     if writer is not None:
         writer.close()
-#    unset_nsml_reschedule()
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0: 
         print_log(save_path, 'Training time {}'.format(total_time_str))
+        print_log(save_path, 'Final performance: {}'.format(max_accuracy))
 
 
 if __name__ == '__main__':
@@ -145,6 +148,7 @@ if __name__ == '__main__':
     parser.add_argument('--use_cls_sa', action='store_true', help="attach self attention layer to the decoder")
     parser.add_argument('--rm_binary', action="store_true", help="remove binary branch")
     parser.add_argument('--cut_grad', action="store_true", help="cut cls loss gradient to the anchor box")
+    parser.add_argument('--wandb', action="store_true", help="turn on the wandb")
     args = parser.parse_args()
     random.seed(args.random_seed)
     np.random.seed(args.random_seed)
@@ -154,14 +158,15 @@ if __name__ == '__main__':
 
     cfg = get_cfg_defaults()
     cfg.merge_from_file(args.config_file)
-    study = 1 # os.environ["NSML_STUDY"]
-    run = 1 #os.environ["NSML_RUN_NAME"].split("/")[-1]
-    cfg.CONFIG.LOG.RES_DIR = cfg.CONFIG.LOG.RES_DIR.format(study, run)
-    cfg.CONFIG.LOG.EXP_NAME = cfg.CONFIG.LOG.EXP_NAME.format(study, run)
+    datetime = date.today().strftime("%m/%d/%y")
+    month = datetime.split("/")[0]
+    day = datetime.split("/")[1]
+    cfg.CONFIG.LOG.RES_DIR = cfg.CONFIG.LOG.RES_DIR.format(month, day)
+    cfg.CONFIG.LOG.EXP_NAME = cfg.CONFIG.LOG.EXP_NAME.format(month, day)
     if args.debug:
         cfg.DDP_CONFIG.DISTRIBUTED = False
-        cfg.CONFIG.LOG.RES_DIR = "debug_{}-{}/res/".format(study,run)
-        cfg.CONFIG.LOG.EXP_NAME = "debug_{}-{}".format(study,run)
+        cfg.CONFIG.LOG.RES_DIR = "debug_{}-{}/res/".format(month, day)
+        cfg.CONFIG.LOG.EXP_NAME = "debug_{}-{}".format(month, day)
     if args.eff:
         cfg.CONFIG.EFFICIENT = True
     if args.use_cls_sa:
@@ -170,6 +175,8 @@ if __name__ == '__main__':
         cfg.CONFIG.MODEL.RM_BINARY = True
     if args.cut_grad:
         cfg.CONFIG.TRAIN.CUT_GRADIENT = True
+    if args.wandb:
+        cfg.CONFIG.LOG.WANDB = True
 
     import socket 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

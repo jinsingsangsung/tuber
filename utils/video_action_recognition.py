@@ -10,6 +10,7 @@ import numpy as np
 
 import torch
 import math
+import wandb
 
 from .utils import AverageMeter, accuracy, calculate_mAP, read_labelmap, print_log
 from evaluates.evaluate_ava import STDetectionEvaluater, STDetectionEvaluaterSinglePerson
@@ -241,20 +242,18 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
     
     try:
         metrics_data = json.dumps({
-            '@epoch': epoch,
-            '@step': epoch, # actually epoch
-            '@time': time.time(),
+            'epoch': epoch,
+            'time': time.time(),
             'class_error': float(class_err.avg),
             'loss': float(losses_avg.avg),
             'loss_giou': float(losses_giou.avg),
             'loss_ce': float(losses_ce.avg),
             # 'loss_ce_b': losses_ce_b.avg,
             })
-        # Report JSON data to the NSML metric API server with a simple HTTP POST request.
-        requests.post(os.environ['NSML_METRIC_API'], data=metrics_data)
-    except requests.exceptions.RequestException:
+        wandb.log(data=metrics_data, step=epoch)
+    except:
         # Sometimes, the HTTP request might fail, but the training process should not be stopped.
-        traceback.print_exc()
+        print("wandb logging failed")
     # batch_bar.close()
 
 @torch.no_grad()
@@ -536,9 +535,8 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
 
     if Map_ != 0:
         metrics_data = json.dumps({
-                '@epoch': epoch,
-                '@step': epoch, # actually epoch
-                '@time': time.time(),
+                'epoch': epoch,
+                'time': time.time(),
                 'val_class_error': class_err.avg,
                 'val_loss': losses_avg.avg,
                 'val_loss_giou': losses_giou.avg,
@@ -548,10 +546,9 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
                 })
         try:
             # Report JSON data to the NSML metric API server with a simple HTTP POST request.
-            requests.post(os.environ['NSML_METRIC_API'], data=metrics_data)
-        except requests.exceptions.RequestException:
-            # Sometimes, the HTTP request might fail, but the training process should not be stopped.
-            traceback.print_exc()    
+            wandb.log(data=metrics_data, step=epoch)
+        except:
+            print("wandb logging failed")    
     torch.distributed.barrier()
     time.sleep(30)
     return Map_
