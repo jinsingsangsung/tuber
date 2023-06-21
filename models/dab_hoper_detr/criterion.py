@@ -759,8 +759,8 @@ class PostProcessAVA(nn.Module):
             uniform_dist = torch.full(out_logits.shape, 1/out_logits.size(-1), device=out_logits.device)
             loss1 = F.binary_cross_entropy(out_logits.sigmoid(), uniform_dist)
             loss2 = F.binary_cross_entropy(out_logits2.sigmoid(), uniform_dist)
-            if loss1 > loss2:
-                out_logits2 = out_logits
+            if loss2 > loss1:
+                out_logits = out_logits2
 
         assert len(out_logits) == len(target_sizes)
         assert target_sizes.shape[1] == 2
