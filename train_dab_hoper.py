@@ -28,10 +28,10 @@ def main_worker(cfg):
     else:
         writer = None
 
-    if int(os.getenv('NSML_SESSION', '0')) > 0:
-        cfg.CONFIG.MODEL.LOAD = True
-        cfg.CONFIG.MODEL.LOAD_FC = True
-        cfg.CONFIG.MODEL.LOAD_DETR = False
+        # if int(os.getenv('NSML_SESSION', '0')) > 0:
+        # cfg.CONFIG.MODEL.LOAD = True
+        # cfg.CONFIG.MODEL.LOAD_FC = True
+        # cfg.CONFIG.MODEL.LOAD_DETR = False
 
     # create model
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:    
@@ -86,21 +86,21 @@ def main_worker(cfg):
     # create lr scheduler
     lr_scheduler = build_scheduler(cfg, optimizer, len(train_loader))
 
-    if int(os.getenv('NSML_SESSION', '0')) > 0:
+    #  if int(os.getenv('NSML_SESSION', '0')) > 0:
         # 실험 이어하기의 경우
-        study = os.environ["NSML_STUDY"]
-        run = os.environ["NSML_RUN_NAME"].split("/")[-1]
-        exp_name = cfg.CONFIG.LOG.EXP_NAME.format(study, run)
-        epochs_folder = os.listdir(os.path.join(cfg.CONFIG.LOG.BASE_PATH, exp_name, cfg.CONFIG.LOG.SAVE_DIR))
-        epochs_folder.sort()
-        latest_epoch = epochs_folder[-1]
-        cfg.CONFIG.MODEL.PRETRAINED_PATH = os.path.join(cfg.CONFIG.LOG.BASE_PATH, exp_name, cfg.CONFIG.LOG.SAVE_DIR, latest_epoch) # find the pretrained_path
-        model, optimizer, lr_scheduler, start_epoch = load_model_and_states(model, optimizer, lr_scheduler, cfg)
-        cfg.CONFIG.TRAIN.START_EPOCH = start_epoch
+    #    study = os.environ["NSML_STUDY"]
+    #    run = os.environ["NSML_RUN_NAME"].split("/")[-1]
+    #    exp_name = cfg.CONFIG.LOG.EXP_NAME.format(study, run)
+    #    epochs_folder = os.listdir(os.path.join(cfg.CONFIG.LOG.BASE_PATH, exp_name, cfg.CONFIG.LOG.SAVE_DIR))
+    #    epochs_folder.sort()
+    #    latest_epoch = epochs_folder[-1]
+    #    cfg.CONFIG.MODEL.PRETRAINED_PATH = os.path.join(cfg.CONFIG.LOG.BASE_PATH, exp_name, cfg.CONFIG.LOG.SAVE_DIR, latest_epoch) # find the pretrained_path
+    #    model, optimizer, lr_scheduler, start_epoch = load_model_and_states(model, optimizer, lr_scheduler, cfg)
+    #    cfg.CONFIG.TRAIN.START_EPOCH = start_epoch
 
-    else:
-        if cfg.CONFIG.MODEL.LOAD:
-            model, _ = load_model(model, cfg, load_fc=cfg.CONFIG.MODEL.LOAD_FC)
+    # else:
+    if cfg.CONFIG.MODEL.LOAD:
+        model, _ = load_model(model, cfg, load_fc=cfg.CONFIG.MODEL.LOAD_FC)
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0: 
         print_log(save_path, 'Start training...')
     start_time = time.time()
@@ -121,12 +121,12 @@ def main_worker(cfg):
                 validate_tuber_jhmdb_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)
             else:
                 validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)
-        if os.getenv('NSML_RANK', '0') == '0':
-            set_nsml_reschedule()
+#        if os.getenv('NSML_RANK', '0') == '0':
+#           set_nsml_reschedule()
 
     if writer is not None:
         writer.close()
-    unset_nsml_reschedule()
+#    unset_nsml_reschedule()
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
@@ -154,8 +154,8 @@ if __name__ == '__main__':
 
     cfg = get_cfg_defaults()
     cfg.merge_from_file(args.config_file)
-    study = os.environ["NSML_STUDY"]
-    run = os.environ["NSML_RUN_NAME"].split("/")[-1]
+    study = 1 # os.environ["NSML_STUDY"]
+    run = 1 #os.environ["NSML_RUN_NAME"].split("/")[-1]
     cfg.CONFIG.LOG.RES_DIR = cfg.CONFIG.LOG.RES_DIR.format(study, run)
     cfg.CONFIG.LOG.EXP_NAME = cfg.CONFIG.LOG.EXP_NAME.format(study, run)
     if args.debug:
