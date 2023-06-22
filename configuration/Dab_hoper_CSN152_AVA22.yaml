@@ -48,7 +48,7 @@ CONFIG:
     DATASET_NAME: 'ava'
     LABEL_PATH: '../assets/ava_action_list_v2.1_for_activitynet_2018.pbtxt'
     ANNO_PATH: '../assets/ava_{}_v22_updated.json'
-    DATA_PATH: '/dataset/frames/{}/'
+    DATA_PATH: '../frames/{}/'
     NUM_CLASSES: 80
     MULTIGRID: False
     IMG_SIZE: 256
@@ -77,7 +77,7 @@ CONFIG:
     SAMPLE_RATE: 2
     PRETRAINED: True
     PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_152_ft_kinetics_from_ig65m_f126851907.mat"
-    PRETRAIN_TRANSFORMER_DIR: "../pretrained_models/transformer/dab-sa-hier-rm-bin.pth"
+    PRETRAIN_TRANSFORMER_DIR: "../pretrained_models/transformer/dab-sa-hoper-rm-bin.pth"
     PRETRAINED_PATH: "../pretrained_models/transformer/dab-sa-hoper.pth"
     LOAD: False
     LOAD_FC: False
@@ -113,10 +113,10 @@ CONFIG:
     CLIPS_MAX_NORM: 0.1
 
   LOG:
-    BASE_PATH: '/dataset/result'
+    BASE_PATH: '../result'
     LOG_DIR: 'tb_log'
     SAVE_DIR: 'checkpoints'
-    EVAL_DIR: '/dataset/result'
+    EVAL_DIR: '../result'
     SAVE_FREQ: 1
     RES_DIR: Dab_hoper_{}-{}/res
     EXP_NAME: Dab_hoper_{}-{}
