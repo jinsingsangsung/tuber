@@ -120,11 +120,15 @@ def main_worker(cfg):
                 curr_accuracy = validate_tuber_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)
                 if max_accuracy < curr_accuracy:
                     max_accuracy = curr_accuracy
-                    os.remove(os.path.join(cfg.CONFIG.LOG.BASE_PATH,
-                                  cfg.CONFIG.LOG.EXP_NAME,
-                                  cfg.CONFIG.LOG.SAVE_DIR,
-                                  f'ckpt_epoch_{epoch:02d}.pth')
-                                )
+                    try:
+                        os.remove(os.path.join(cfg.CONFIG.LOG.BASE_PATH,
+                                      cfg.CONFIG.LOG.EXP_NAME,
+                                      cfg.CONFIG.LOG.SAVE_DIR,
+                                      f'ckpt_epoch_{epoch:02d}.pth')
+                                    )
+                    except: # to avoid permission issue when removing
+                        pass
+                        print("inferior model ckpt is alive")
             elif cfg.CONFIG.DATA.DATASET_NAME == 'jhmdb':
                 validate_tuber_jhmdb_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)
             else:

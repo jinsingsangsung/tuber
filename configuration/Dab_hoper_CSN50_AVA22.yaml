@@ -113,10 +113,10 @@ CONFIG:
     CLIPS_MAX_NORM: 0.1
 
   LOG:
-    BASE_PATH: '/datasets/result'
+    BASE_PATH: '/dataset/result'
     LOG_DIR: 'tb_log'
     SAVE_DIR: 'checkpoints'
-    EVAL_DIR: '/datasets/result'
+    EVAL_DIR: '/dataset/result'
     SAVE_FREQ: 1
     RES_DIR: Dab_hoper_{}-{}/res
     EXP_NAME: Dab_hoper_{}-{}
