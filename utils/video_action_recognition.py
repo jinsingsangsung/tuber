@@ -579,7 +579,8 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
     print_log(save_path, "tmp files are all loaded")
 
     # write files and align all workers
-    torch.distributed.barrier()
+    if cfg.DDP_CONFIG.DISTRIBUTED:
+        torch.distributed.barrier()
     # aggregate files
     Map_ = 0
     # aggregate files
@@ -617,7 +618,8 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
             wandb.log(data=metrics_data, step=epoch)
         except:
             print("wandb logging failed")    
-    torch.distributed.barrier()
+    if cfg.DDP_CONFIG.DISTRIBUTED:
+        torch.distributed.barrier()
     time.sleep(30)
     return Map_
 
