@@ -11,3 +11,4 @@ cp -r /mnt/video-nfs5/users/jinsung/results/tubelet-transformer/og-dab-detr.pth 
 cp -r /mnt/video-nfs5/users/jinsung/results/tubelet-transformer/finetuned-og-dab-detr.pth ../pretrained_models/transformer/
 cp -r /mnt/video-nfs5/users/jinsung/results/tubelet-transformer/finetuned-dab-hier-detr.pth ../pretrained_models/transformer/
 cp -r /mnt/video-nfs5/users/jinsung/results/tubelet-transformer/dab-sa-hier-detr.pth ../pretrained_models/transformer/
+cp -r /mnt/video-nfs5/users/jinsung/results/tubelet-transformer/dab-sa-hoper-rmbin.pth ../pretrained_models/transformer/
