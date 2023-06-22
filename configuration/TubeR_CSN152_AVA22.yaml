@@ -39,8 +39,8 @@ CONFIG:
 
   DATA:
     DATASET_NAME: 'ava'
-    LABEL_PATH: '/home/nsml/assets/ava_action_list_v2.1_for_activitynet_2018.pbtxt'
-    ANNO_PATH: '/home/nsml/assets/ava_{}_v22.json'
+    LABEL_PATH: '/../assets/ava_action_list_v2.1_for_activitynet_2018.pbtxt'
+    ANNO_PATH: '/../assets/ava_{}_v22.json'
     DATA_PATH: '/mnt/tmp/frames/{}/'
     NUM_CLASSES: 80
     MULTIGRID: False

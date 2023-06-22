@@ -92,13 +92,16 @@ def main_worker(cfg):
         model, _ = load_model(model, cfg, load_fc=cfg.CONFIG.MODEL.LOAD_FC)
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0: 
         print_log(save_path, 'Start training...')
+    scaler = None
+    if cfg.CONFIG.TRAIN.AMP:
+        scaler = torch.cuda.amp.GradScaler()
     start_time = time.time()
     max_accuracy = 0.0
 
     if cfg.CONFIG.LOG.WANDB and cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
         save_path = '/dataset/result/%s' % cfg.CONFIG.LOG.EXP_NAME
         prj_name = "_".join(cfg.CONFIG.LOG.EXP_NAME.split("_")[:2])
-        exp_name = "_".join(cfg.CONFIG.LOG.EXP_NAME.split("_")[2:]) + datetime.datetime.now().strftime("%H:%M:%S")
+        exp_name = "_".join(cfg.CONFIG.LOG.EXP_NAME.split("_")[2:]) + "_" + datetime.datetime.now().strftime("%H:%M:%S")
         wandb.init(project=prj_name, name=exp_name)
         wandb.config.update(cfg)
         wandb.watch(model)
@@ -106,7 +109,7 @@ def main_worker(cfg):
     for epoch in range(cfg.CONFIG.TRAIN.START_EPOCH, cfg.CONFIG.TRAIN.EPOCH_NUM):
         if cfg.DDP_CONFIG.DISTRIBUTED:
             train_sampler.set_epoch(epoch)
-        train_tuber_detection(cfg, model, criterion, train_loader, optimizer, epoch, cfg.CONFIG.LOSS_COFS.CLIPS_MAX_NORM, lr_scheduler, writer)
+        train_tuber_detection(cfg, model, criterion, train_loader, optimizer, epoch, cfg.CONFIG.LOSS_COFS.CLIPS_MAX_NORM, lr_scheduler, scaler, writer)
 
         if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0 and (
                 epoch % cfg.CONFIG.LOG.SAVE_FREQ == 0 or epoch == cfg.CONFIG.TRAIN.EPOCH_NUM - 1):
@@ -148,6 +151,7 @@ if __name__ == '__main__':
     parser.add_argument('--use_cls_sa', action='store_true', help="attach self attention layer to the decoder")
     parser.add_argument('--rm_binary', action="store_true", help="remove binary branch")
     parser.add_argument('--cut_grad', action="store_true", help="cut cls loss gradient to the anchor box")
+    parser.add_argument('--amp', action="store_true", help="use average mixed precision")
     parser.add_argument('--wandb', action="store_true", help="turn on the wandb")
     args = parser.parse_args()
     random.seed(args.random_seed)
@@ -158,9 +162,9 @@ if __name__ == '__main__':
 
     cfg = get_cfg_defaults()
     cfg.merge_from_file(args.config_file)
-    datetime = date.today().strftime("%m/%d/%y")
-    month = datetime.split("/")[0]
-    day = datetime.split("/")[1]
+    date_time = date.today().strftime("%m/%d/%y")
+    month = date_time.split("/")[0]
+    day = date_time.split("/")[1]
     cfg.CONFIG.LOG.RES_DIR = cfg.CONFIG.LOG.RES_DIR.format(month, day)
     cfg.CONFIG.LOG.EXP_NAME = cfg.CONFIG.LOG.EXP_NAME.format(month, day)
     if args.debug:
@@ -175,6 +179,8 @@ if __name__ == '__main__':
         cfg.CONFIG.MODEL.RM_BINARY = True
     if args.cut_grad:
         cfg.CONFIG.TRAIN.CUT_GRADIENT = True
+    if args.amp:
+        cfg.CONFIG.TRAIN.AMP = True
     if args.wandb:
         cfg.CONFIG.LOG.WANDB = True
 

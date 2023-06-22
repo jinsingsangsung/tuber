@@ -35,7 +35,8 @@ CONFIG:
     AUX_LOSS: True
     LR_SCHEDULER:
       NAME: 'multistep'
-    CUT_GRADIENT: FALSE
+    CUT_GRADIENT: False
+    AMP: False
 
   VAL:
     BATCH_SIZE: 1
@@ -76,8 +77,8 @@ CONFIG:
     SAMPLE_RATE: 2
     PRETRAINED: True
     PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_50_ft_kinetics_from_ig65m_f233743920.mat"
-    PRETRAIN_TRANSFORMER_DIR: "../pretrained_models/transformer/dab-hoper-detr.pth"
-    PRETRAINED_PATH: "../pretrained_models/transformer/dab-hoper-detr.pth"
+    PRETRAIN_TRANSFORMER_DIR: "../pretrained_models/transformer/dab-sa-hier-rm-bin.pth"
+    PRETRAINED_PATH: "../pretrained_models/transformer/dab-sa-hoper.pth"
     LOAD: False
     LOAD_FC: False
     LOAD_DETR: True

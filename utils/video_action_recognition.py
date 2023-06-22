@@ -19,6 +19,7 @@ from evaluates.evaluate_jhmdb import STDetectionEvaluaterJHMDB
 
 import requests
 import traceback
+from torch.cuda.amp import autocast
 
 __all__ = ["merge_jsons", "train_classification", "train_tuber_detection", "validate_tuber_detection", "validate_tuber_ucf_detection"]
 
@@ -88,7 +89,7 @@ def train_classification(base_iter, model, dataloader, epoch, criterion,
     # batch_bar.close()
     return base_iter
 
-def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, max_norm, lr_scheduler, writer=None):
+def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, max_norm, lr_scheduler, scaler=None, writer=None):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     class_err = AverageMeter()
@@ -112,66 +113,133 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
         # for samples, targets in metric_logger.log_every(data_loader, print_freq, epoch, ddp_params, writer, header):
         device = "cuda:" + str(cfg.DDP_CONFIG.GPU)
         samples = data[0]
-        if cfg.CONFIG.TWO_STREAM:
-            samples2 = data[1]
-            targets = data[2]
-            samples2 = samples2.to(device)
+        if cfg.CONFIG.TRAIN.AMP:
+            with autocast():
+                if cfg.CONFIG.TWO_STREAM:
+                    samples2 = data[1]
+                    targets = data[2]
+                    samples2 = samples2.to(device)
+                else:
+                    targets = data[1]
+                if cfg.CONFIG.USE_LFB:
+                    if cfg.CONFIG.USE_LOCATION:
+                        lfb_features = data[-2]
+                        lfb_features = lfb_features.to(device)
+
+                        lfb_location_features = data[-1]
+                        lfb_location_features = lfb_location_features.to(device)
+                    else:
+                        lfb_features = data[-1]
+                        lfb_features = lfb_features.to(device)
+                for t in targets: del t["image_id"]
+
+                samples = samples.to(device)
+                targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+                if cfg.CONFIG.TWO_STREAM:
+                    if cfg.CONFIG.USE_LFB:
+                        if cfg.CONFIG.USE_LOCATION:
+                            outputs = model(samples, samples2, lfb_features, lfb_location_features)
+                        else:
+                            outputs = model(samples, samples2, lfb_features)
+                    else:
+                        outputs = model(samples, samples2)
+                else:
+                    if cfg.CONFIG.USE_LFB:
+                        if cfg.CONFIG.USE_LOCATION:
+                            outputs = model(samples, lfb_features, lfb_location_features)
+                        else:
+                            outputs = model(samples, lfb_features)
+                    else:
+                        if not "DN" in cfg.CONFIG.LOG.RES_DIR:
+                            outputs = model(samples)
+                            loss_dict = criterion(outputs, targets)
+                        else:
+                            dn_args = targets, cfg.CONFIG.MODEL.SCALAR, cfg.CONFIG.MODEL.LABEL_NOISE_SCALE, cfg.CONFIG.MODEL.BOX_NOISE_SCALE, cfg.CONFIG.MODEL.NUM_PATTERNS
+                            outputs, mask_dict = model(samples, dn_args)
+                            loss_dict = criterion(outputs, targets, mask_dict)
+
+                # if not math.isfinite(outputs["pred_logits"][0].data.cpu().numpy()[0,0]):
+                #     print(outputs["pred_logits"][0].data.cpu().numpy())
+                
+                weight_dict = criterion.weight_dict
+                if epoch > cfg.CONFIG.LOSS_COFS.WEIGHT_CHANGE:
+                    weight_dict['loss_ce'] = cfg.CONFIG.LOSS_COFS.LOSS_CHANGE_COF
+
+                losses = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
+                # losses = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if (k in weight_dict and "bbox" not in k and "giou" not in k))
+                # loss_dict.keys(): dict_keys(['loss_ce', 'loss_ce_b', 'class_error', 'loss_bbox', 'loss_giou'])  
+
+            optimizer.zero_grad()
+            # optimizer_c.zero_grad()
+            scaler.scale(losses).backward()
+            # losses.backward()
+            scaler.unscale_(optimizer)
+            if max_norm > 0: torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
+            scaler.step(optimizer)
+            scaler.update()
+        # optimizer.step()
+
         else:
-            targets = data[1]
-        if cfg.CONFIG.USE_LFB:
-            if cfg.CONFIG.USE_LOCATION:
-                lfb_features = data[-2]
-                lfb_features = lfb_features.to(device)
-
-                lfb_location_features = data[-1]
-                lfb_location_features = lfb_location_features.to(device)
+            if cfg.CONFIG.TWO_STREAM:
+                samples2 = data[1]
+                targets = data[2]
+                samples2 = samples2.to(device)
             else:
-                lfb_features = data[-1]
-                lfb_features = lfb_features.to(device)
-        for t in targets: del t["image_id"]
-
-        samples = samples.to(device)
-        targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
-        if cfg.CONFIG.TWO_STREAM:
+                targets = data[1]
             if cfg.CONFIG.USE_LFB:
                 if cfg.CONFIG.USE_LOCATION:
-                    outputs = model(samples, samples2, lfb_features, lfb_location_features)
+                    lfb_features = data[-2]
+                    lfb_features = lfb_features.to(device)
+
+                    lfb_location_features = data[-1]
+                    lfb_location_features = lfb_location_features.to(device)
                 else:
-                    outputs = model(samples, samples2, lfb_features)
+                    lfb_features = data[-1]
+                    lfb_features = lfb_features.to(device)
+            for t in targets: del t["image_id"]
+
+            samples = samples.to(device)
+            targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+            if cfg.CONFIG.TWO_STREAM:
+                if cfg.CONFIG.USE_LFB:
+                    if cfg.CONFIG.USE_LOCATION:
+                        outputs = model(samples, samples2, lfb_features, lfb_location_features)
+                    else:
+                        outputs = model(samples, samples2, lfb_features)
+                else:
+                    outputs = model(samples, samples2)
             else:
-                outputs = model(samples, samples2)
-        else:
-            if cfg.CONFIG.USE_LFB:
-                if cfg.CONFIG.USE_LOCATION:
-                    outputs = model(samples, lfb_features, lfb_location_features)
+                if cfg.CONFIG.USE_LFB:
+                    if cfg.CONFIG.USE_LOCATION:
+                        outputs = model(samples, lfb_features, lfb_location_features)
+                    else:
+                        outputs = model(samples, lfb_features)
                 else:
-                    outputs = model(samples, lfb_features)
-            else:
-                if not "DN" in cfg.CONFIG.LOG.RES_DIR:
-                    outputs = model(samples)
-                    loss_dict = criterion(outputs, targets)
-                else:
-                    dn_args = targets, cfg.CONFIG.MODEL.SCALAR, cfg.CONFIG.MODEL.LABEL_NOISE_SCALE, cfg.CONFIG.MODEL.BOX_NOISE_SCALE, cfg.CONFIG.MODEL.NUM_PATTERNS
-                    outputs, mask_dict = model(samples, dn_args)
-                    loss_dict = criterion(outputs, targets, mask_dict)
+                    if not "DN" in cfg.CONFIG.LOG.RES_DIR:
+                        outputs = model(samples)
+                        loss_dict = criterion(outputs, targets)
+                    else:
+                        dn_args = targets, cfg.CONFIG.MODEL.SCALAR, cfg.CONFIG.MODEL.LABEL_NOISE_SCALE, cfg.CONFIG.MODEL.BOX_NOISE_SCALE, cfg.CONFIG.MODEL.NUM_PATTERNS
+                        outputs, mask_dict = model(samples, dn_args)
+                        loss_dict = criterion(outputs, targets, mask_dict)
 
-        # if not math.isfinite(outputs["pred_logits"][0].data.cpu().numpy()[0,0]):
-        #     print(outputs["pred_logits"][0].data.cpu().numpy())
-        
-        weight_dict = criterion.weight_dict
-        if epoch > cfg.CONFIG.LOSS_COFS.WEIGHT_CHANGE:
-            weight_dict['loss_ce'] = cfg.CONFIG.LOSS_COFS.LOSS_CHANGE_COF
+            # if not math.isfinite(outputs["pred_logits"][0].data.cpu().numpy()[0,0]):
+            #     print(outputs["pred_logits"][0].data.cpu().numpy())
+            
+            weight_dict = criterion.weight_dict
+            if epoch > cfg.CONFIG.LOSS_COFS.WEIGHT_CHANGE:
+                weight_dict['loss_ce'] = cfg.CONFIG.LOSS_COFS.LOSS_CHANGE_COF
 
-        losses = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
-        # losses = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if (k in weight_dict and "bbox" not in k and "giou" not in k))
-        # loss_dict.keys(): dict_keys(['loss_ce', 'loss_ce_b', 'class_error', 'loss_bbox', 'loss_giou'])  
+            losses = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
+            # losses = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if (k in weight_dict and "bbox" not in k and "giou" not in k))
+            # loss_dict.keys(): dict_keys(['loss_ce', 'loss_ce_b', 'class_error', 'loss_bbox', 'loss_giou'])  
 
-        optimizer.zero_grad()
-        # optimizer_c.zero_grad()
-        losses.backward()
-        if max_norm > 0: torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
-        optimizer.step()
-        # optimizer_c.step()
+            optimizer.zero_grad()
+            # optimizer_c.zero_grad()
+            losses.backward()
+            if max_norm > 0: torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
+            optimizer.step()           
+
         lr_scheduler.step_update(epoch * len(data_loader) + idx)
         batch_time.update(time.time() - end)
         end = time.time()
@@ -241,7 +309,7 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
             # writer.add_scalar('train/loss_ce_b', losses_ce_b.avg, idx + epoch * len(data_loader))
     
     try:
-        metrics_data = json.dumps({
+        metrics_data = {
             'epoch': epoch,
             'time': time.time(),
             'class_error': float(class_err.avg),
@@ -249,7 +317,7 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
             'loss_giou': float(losses_giou.avg),
             'loss_ce': float(losses_ce.avg),
             # 'loss_ce_b': losses_ce_b.avg,
-            })
+            }
         wandb.log(data=metrics_data, step=epoch)
     except:
         # Sometimes, the HTTP request might fail, but the training process should not be stopped.
@@ -534,7 +602,7 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
         Map_ = mAP[0]
 
     if Map_ != 0:
-        metrics_data = json.dumps({
+        metrics_data = {
                 'epoch': epoch,
                 'time': time.time(),
                 'val_class_error': class_err.avg,
@@ -543,7 +611,7 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
                 'val_loss_ce': losses_ce.avg,
                 # 'val_loss_ce_b': losses_ce_b.avg,
                 'val_mAP': Map_
-                })
+                }
         try:
             # Report JSON data to the NSML metric API server with a simple HTTP POST request.
             wandb.log(data=metrics_data, step=epoch)
