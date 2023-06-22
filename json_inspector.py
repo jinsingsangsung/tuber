@@ -1,7 +1,7 @@
 import json
 
 print("..........working in val json file.............")
-val_json = json.load(open('/home/nsml/assets/ava_{}_v22.json'.format("val"))) 
+val_json = json.load(open('../assets/ava_{}_v22.json'.format("val"))) 
 frame_bbox = val_json["video_frame_bbox"]
 frame_keys_list = val_json["frame_keys_list"]
 num_bboxes = 0
@@ -15,7 +15,7 @@ print("num_boxes in json file: ", num_bboxes)
 print("num_actions in json file: ", num_actions)
 
 
-val_csv = open('/home/nsml/assets/ava_{}_v2.2.csv'.format("val")).readlines()
+val_csv = open('../assets/ava_{}_v2.2.csv'.format("val")).readlines()
 num_bboxes_csv = 0
 frame_bbox_csv = {
     "video_frame_bbox": {},
@@ -84,7 +84,7 @@ print("number of omitted frames:", len(omitted_frames))
 
 # is omitted frames are made on purpose?
 
-excluded_stamps_val = open('/home/nsml/assets/ava_{}_excluded_timestamps_v2.1.csv'.format("val")).readlines()
+excluded_stamps_val = open('../assets/ava_{}_excluded_timestamps_v2.1.csv'.format("val")).readlines()
 excluded_stamps = []
 for line in excluded_stamps_val:
     excluded_stamps.append(line[:-1])
@@ -105,7 +105,7 @@ print("renewed val json file has been saved")
 
 
 print("..........working in train json file.............")
-train_json = json.load(open('/home/nsml/assets/ava_{}_v22.json'.format("train"))) 
+train_json = json.load(open('../assets/ava_{}_v22.json'.format("train"))) 
 frame_bbox = train_json["video_frame_bbox"]
 frame_keys_list = train_json["frame_keys_list"]
 num_bboxes = 0
@@ -119,7 +119,7 @@ print("num_boxes in json file: ", num_bboxes)
 print("num_actions in json file: ", num_actions)
 
 
-train_csv = open('/home/nsml/assets/ava_{}_v2.2.csv'.format("train")).readlines()
+train_csv = open('../assets/ava_{}_v2.2.csv'.format("train")).readlines()
 num_bboxes_csv = 0
 frame_bbox_csv = {
     "video_frame_bbox": {},
