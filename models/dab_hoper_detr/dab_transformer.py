@@ -93,7 +93,10 @@ class Transformer(nn.Module):
         cls_decoder_layer = TransformerClsDecoderLayer(d_model, nhead, dim_feedforward,
                                                 dropout, activation, normalize_before, keep_query_pos=keep_query_pos, rm_self_attn_decoder= not use_cls_sa)
         decoder_norm = nn.LayerNorm(d_model)
-        cls_decoder_norm = nn.LayerNorm(d_model)
+        if more_offset:
+            cls_decoder_norm = nn.LayerNorm(2*d_model)
+        else:
+            cls_decoder_norm = nn.LayerNorm(d_model)
         self.decoder = TransformerDecoder(decoder_layer, cls_decoder_layer, num_decoder_layers, decoder_norm, cls_decoder_norm,
                                           return_intermediate=return_intermediate_dec,
                                           d_model=d_model, query_dim=query_dim, keep_query_pos=keep_query_pos, query_scale_type=query_scale_type,
@@ -155,14 +158,9 @@ class Transformer(nn.Module):
         # tgt = self.patterns.weight[:, None, None, :].repeat(1, self.num_queries, bs*t, 1).flatten(0, 1) # n_q*n_pat, bs, d_model
         # refpoint_embed = refpoint_embed.repeat(self.num_patterns, 1, 1) # n_pat*n_q, bs*t, d_model
             # import ipdb; ipdb.set_trace()
-        if not self.more_offset:
-            hs, references, cls_hs = self.decoder(loc_tgt, cls_tgt, memory, memory_key_padding_mask=mask,
-                          pos=pos_embed, refpoints_unsigmoid=refpoint_embed)
-            return hs, references, cls_hs
-        else:
-            hs, references, cls_hs, cls_hs2 = self.decoder(loc_tgt, cls_tgt, memory, memory_key_padding_mask=mask,
-                          pos=pos_embed, refpoints_unsigmoid=refpoint_embed)            
-            return hs, references, cls_hs, cls_hs2
+        hs, references, cls_hs = self.decoder(loc_tgt, cls_tgt, memory, memory_key_padding_mask=mask,
+                        pos=pos_embed, refpoints_unsigmoid=refpoint_embed)
+        return hs, references, cls_hs
 
 
 
@@ -316,11 +314,11 @@ class TransformerDecoder(nn.Module):
                 if self.offset_embed_diff_each_layer:
                     offset = self.offset_embed[layer_id](cls_output)
                     if self.more_offset:
-                        offset2 = self.offset_embed2[layer_id](cls_output)
+                        offset2 = self.offset_embed2[layer_id](output)
                 else:
                     offset = self.offset_embed(cls_output)
                     if self.more_offset:
-                        offset2 = self.offset_embed2(cls_output)
+                        offset2 = self.offset_embed2(output)
             # if layer_id == 0:
             if self.cut_gradient:
                 cls_reference_points = (offset + inverse_sigmoid(reference_points.clone().detach())).sigmoid()
@@ -356,14 +354,17 @@ class TransformerDecoder(nn.Module):
                                     pos=pos, cls_query_pos=cls_query_pos2, cls_query_sine_embed=cls_query_sine_embed2,
                                     is_first=(layer_id == 0))
 
-            if self.cut_gradient:
-                cls_output = self.cls_loc_merger(torch.cat([output.clone().detach(), cls_output], -1))
-                if self.more_offset:
-                    cls_output2 = self.cls_loc_merger(torch.cat([output.clone().detach(), cls_output2], -1))
-            else:
-                cls_output = self.cls_loc_merger(torch.cat([output, cls_output], -1))
-                if self.more_offset:
-                    cls_output2 = self.cls_loc_merger(torch.cat([output, cls_output2], -1))
+            # if self.cut_gradient:
+            #     cls_output = self.cls_loc_merger(torch.cat([output.clone().detach(), cls_output], -1))
+            #     if self.more_offset:
+            #         cls_output2 = self.cls_loc_merger(torch.cat([output.clone().detach(), cls_output2], -1))
+            # else:
+            #     cls_output = self.cls_loc_merger(torch.cat([output, cls_output], -1))
+            #     if self.more_offset:
+            #         cls_output2 = self.cls_loc_merger(torch.cat([output, cls_output2], -1))
+
+            if self.more_offset:
+                cls_output_both = torch.cat([cls_output, cls_output2], dim=-1)
 
             # iter update
             if self.bbox_embed is not None:
@@ -380,56 +381,31 @@ class TransformerDecoder(nn.Module):
 
             if self.return_intermediate:
                 intermediate.append(self.norm(output))
-                cls_intermediate.append(self.cls_norm(cls_output))
-                if self.more_offset:
-                    cls_intermediate2.append(self.cls_norm(cls_output2))
+                cls_intermediate.append(self.cls_norm(cls_output_both))
 
         if self.norm is not None:
             output = self.norm(output)
-            cls_output = self.cls_norm(cls_output)
+            cls_output_both = self.cls_norm(cls_output_both)
             if self.return_intermediate:
                 intermediate.pop()
                 intermediate.append(output)
                 cls_intermediate.pop()
-                cls_intermediate.append(cls_output)
-                if self.more_offset:
-                    cls_intermediate2.pop()
-                    cls_intermediate2.append(cls_output2)
-
+                cls_intermediate.append(cls_output_both)
 
         if self.return_intermediate:
             if self.bbox_embed is not None:
-                if not self.more_offset:
-                    return [
-                        torch.stack(intermediate).transpose(1, 2),
-                        torch.stack(ref_points).transpose(1, 2),
-                        torch.stack(cls_intermediate).transpose(1,2),
-                    ]
-                else:
-                    return [
-                        torch.stack(intermediate).transpose(1, 2),
-                        torch.stack(ref_points).transpose(1, 2),
-                        torch.stack(cls_intermediate).transpose(1,2),
-                        torch.stack(cls_intermediate2).transpose(1,2),
-                    ]                    
+                return [
+                    torch.stack(intermediate).transpose(1, 2),
+                    torch.stack(ref_points).transpose(1, 2),
+                    torch.stack(cls_intermediate).transpose(1,2),
+                ]     
             else:
-                if not self.more_offset:
-                    return [
-                        torch.stack(intermediate).transpose(1, 2), 
-                        reference_points.unsqueeze(0).transpose(1, 2),
-                        torch.stack(cls_intermediate).transpose(1, 2), 
+                return [
+                    torch.stack(intermediate).transpose(1, 2), 
+                    reference_points.unsqueeze(0).transpose(1, 2),
+                    torch.stack(cls_intermediate).transpose(1, 2), 
                     ]
-                else:
-                    return [
-                        torch.stack(intermediate).transpose(1, 2), 
-                        reference_points.unsqueeze(0).transpose(1, 2),
-                        torch.stack(cls_intermediate).transpose(1, 2),
-                        torch.stack(cls_intermediate2).transpose(1, 2), 
-                    ]
-        if not self.more_offset:
-            return output.unsqueeze(0), cls_output.unsqueeze(0)
-        else:
-            return output.unsqueeze(0), cls_output.unsqueeze(0), cls_output2.unsqueeze(0)
+        return output.unsqueeze(0), cls_output.unsqueeze(0)
 
 
 class TransformerEncoderLayer(nn.Module): # spatially, temporally
