@@ -50,10 +50,10 @@ class SetCriterionAVA(nn.Module):
         """
         assert 'pred_logits' in outputs
         src_logits = outputs['pred_logits']
-        if self.more_offset:
-            src_logits, src_logits2 = src_logits.chunk(2, dim=1)
-        if isinstance(indices, tuple):
-            indices, indices2 = indices
+        # if self.more_offset:
+        #     src_logits, src_logits2 = src_logits.chunk(2, dim=1)
+        # if isinstance(indices, tuple):
+        #     indices, indices2 = indices
         idx = self._get_src_permutation_idx(indices)
         try:
             src_logits_b = outputs['pred_logits_b'] # bs nq 3
@@ -74,39 +74,38 @@ class SetCriterionAVA(nn.Module):
 
         weights = weights.view(weights.shape[0], weights.shape[1], 1)  # [:,:,None]
         target_classes[idx] = target_classes_o
-        if self.more_offset:
-            src_logits2_sig = src_logits2.sigmoid()
+        # if self.more_offset:
+        #     src_logits2_sig = src_logits2.sigmoid()
         if self.evaluation:
             loss_ce = F.binary_cross_entropy(src_logits_sig, target_classes)
-            if self.more_offset:
-                loss_ce2 = F.binary_cross_entropy(src_logits2_sig, target_classes)
+
         else:
             # loss_ce = F.binary_cross_entropy(src_logits_sig, target_classes, weight=weights)
             loss_ce = sigmoid_focal_loss(src_logits, target_classes, weights)
             # eps = 1e-8
             # loss_ce = -(((1 - src_logits_sig)**self.focal_loss_gamma * target_classes * torch.log(src_logits_sig + eps) + src_logits_sig**self.focal_loss_gamma * (1-target_classes) * torch.log(1-src_logits_sig+eps))*weights).sum()
-            if self.more_offset:
-                loss_ce2 = sigmoid_focal_loss(src_logits2, target_classes, weights)
-                uniform_class_dist = torch.full(target_classes.shape, 1/target_classes.size(-1), device=src_logits.device)
-                if loss_ce < loss_ce2:
-                    loss_ce2 = sigmoid_focal_loss(src_logits2, uniform_class_dist, weights)
-                else:
-                    loss_ce = sigmoid_focal_loss(src_logits, uniform_class_dist, weights)
+            # if self.more_offset:
+            #     loss_ce2 = sigmoid_focal_loss(src_logits2, target_classes, weights)
+            #     uniform_class_dist = torch.full(target_classes.shape, 1/target_classes.size(-1), device=src_logits.device)
+            #     if loss_ce < loss_ce2:
+            #         loss_ce2 = sigmoid_focal_loss(src_logits2, uniform_class_dist, weights)
+            #     else:
+            #         loss_ce = sigmoid_focal_loss(src_logits, uniform_class_dist, weights)
 
-        losses = {'loss_ce': (loss_ce + loss_ce2)/2}
+        losses = {'loss_ce': loss_ce}
         try:
             losses['loss_ce_b'] = loss_ce_b
         except:
             pass
         if log:
             # docs this should probably be a separate loss, not hacked in this one here
-            if not self.more_offset:
-                losses['class_error'] = 100 - accuracy_sigmoid(src_logits[idx], target_classes_o)[0]
-            else:
-                if loss_ce < loss_ce2:
-                    losses['class_error'] = 100 - accuracy_sigmoid(src_logits[idx], target_classes_o)[0]
-                else:
-                    losses['class_error'] = 100 - accuracy_sigmoid(src_logits2[idx], target_classes_o)[0]
+            # if not self.more_offset:
+            losses['class_error'] = 100 - accuracy_sigmoid(src_logits[idx], target_classes_o)[0]
+            # else:
+            #     if loss_ce < loss_ce2:
+            #         losses['class_error'] = 100 - accuracy_sigmoid(src_logits[idx], target_classes_o)[0]
+            #     else:
+            #         losses['class_error'] = 100 - accuracy_sigmoid(src_logits2[idx], target_classes_o)[0]
 
         return losses
 
@@ -754,13 +753,13 @@ class PostProcessAVA(nn.Module):
             out_logits_b, out_logits, out_bbox = outputs['pred_logits_b'], outputs['pred_logits'], outputs['pred_boxes']
         except:
             out_logits, out_bbox = outputs['pred_logits'], outputs['pred_boxes']
-        if out_bbox.size(2) != out_logits.size(2):
-            out_logits, out_logits2 = outputs["pred_logits"].chunk(2, dim=1)
-            uniform_dist = torch.full(out_logits.shape, 1/out_logits.size(-1), device=out_logits.device)
-            loss1 = F.binary_cross_entropy(out_logits.sigmoid(), uniform_dist)
-            loss2 = F.binary_cross_entropy(out_logits2.sigmoid(), uniform_dist)
-            if loss2 > loss1:
-                out_logits = out_logits2
+        # if out_bbox.size(2) != out_logits.size(2):
+        #     out_logits, out_logits2 = outputs["pred_logits"].chunk(2, dim=1)
+        #     uniform_dist = torch.full(out_logits.shape, 1/out_logits.size(-1), device=out_logits.device)
+        #     loss1 = F.binary_cross_entropy(out_logits.sigmoid(), uniform_dist)
+        #     loss2 = F.binary_cross_entropy(out_logits2.sigmoid(), uniform_dist)
+        #     if loss2 > loss1:
+        #         out_logits = out_logits2
 
         assert len(out_logits) == len(target_sizes)
         assert target_sizes.shape[1] == 2

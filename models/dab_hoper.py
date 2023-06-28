@@ -87,7 +87,7 @@ class DETR(nn.Module):
         prior_prob = 0.01
         bias_value = -math.log((1 - prior_prob) / prior_prob)
         if self.dataset_mode == 'ava':
-            self.class_embed = nn.Linear(hidden_dim, num_classes)
+            self.class_embed = nn.Linear(2*hidden_dim, num_classes)
             self.class_embed.bias.data = torch.ones(num_classes) * bias_value
             if not rm_binary:
                 self.class_embed_b = nn.Linear(hidden_dim, 3)
@@ -96,7 +96,6 @@ class DETR(nn.Module):
             self.class_embed.bias.data = torch.ones(num_classes+1) * bias_value
             if not rm_binary:
                 self.class_embed_b = nn.Linear(hidden_dim, 3)
-            
         
 
         if bbox_embed_diff_each_layer:
@@ -166,10 +165,7 @@ class DETR(nn.Module):
         else:
             embedweight = self.refpoint_embed.weight.view(self.num_queries, 1, 4)      # nq, 1, 4        
 
-        if not self.more_offset:
-            hs, reference, cls_hs = self.transformer(self.input_proj(src), mask, embedweight, pos[-1])
-        else:
-            hs, reference, cls_hs, cls_hs2 = self.transformer(self.input_proj(src), mask, embedweight, pos[-1])
+        hs, reference, cls_hs = self.transformer(self.input_proj(src), mask, embedweight, pos[-1])
         
         if not self.rm_binary:
             outputs_class_b = self.class_embed_b(hs)
@@ -196,35 +192,27 @@ class DETR(nn.Module):
         
         if not self.efficient:
             outputs_class = self.class_embed(self.dropout(cls_hs)).reshape(lay_n, bs*t, self.num_queries, -1)
-            if self.more_offset:
-                outputs_class2 = self.class_embed(self.dropout(cls_hs2)).reshape(lay_n, bs*t, self.num_queries, -1)
         else:
             outputs_class = self.class_embed(self.dropout(cls_hs)).reshape(lay_n, bs, self.num_queries, -1)      
-            if self.more_offset:
-                outputs_class2 = self.class_embed(self.dropout(cls_hs2)).reshape(lay_n, bs, self.num_queries, -1)  
         if self.dataset_mode == "ava":
             if not self.efficient:
                 outputs_class = outputs_class.reshape(-1, bs, t, self.num_queries, self.num_classes)[:,:,self.temporal_length//2,:,:]
                 outputs_coord = outputs_coord.reshape(-1, bs, t, self.num_queries, 4)[:,:,self.temporal_length//2,:,:]
                 if not self.rm_binary:
                     outputs_class_b = outputs_class_b.reshape(-1, bs, t, self.num_queries, 3)[:,:,self.temporal_length//2,:,:]
-                if self.more_offset:
-                    outputs_class2 = outputs_class2.reshape(-1, bs, t, self.num_queries, self.num_classes)[:,:,self.temporal_length//2,:,:]
             else:
                 outputs_class = outputs_class.reshape(-1, bs, self.num_queries, self.num_classes)
                 outputs_coord = outputs_coord.reshape(-1, bs, self.num_queries, 4)
                 if not self.rm_binary:
                     outputs_class_b = outputs_class_b.reshape(-1, bs, self.num_queries, 3)
-                if self.more_offset:
-                    outputs_class2 = outputs_class2.reshape(-1, bs, self.num_queries, self.num_classes)
         else:
             outputs_class = outputs_class.reshape(-1, bs, t, self.num_queries, self.num_classes+1)
             outputs_coord = outputs_coord.reshape(-1, bs, t, self.num_queries, 4)
             if not self.rm_binary:
                 outputs_class_b = outputs_class_b.reshape(-1, bs, t, self.num_queries, 3)
         
-        if self.more_offset:
-            outputs_class = torch.cat([outputs_class, outputs_class2], dim=2)
+        # if self.more_offset:
+        #     outputs_class = torch.cat([outputs_class, outputs_class2], dim=2)
 
         if self.rm_binary:
             out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1],}
