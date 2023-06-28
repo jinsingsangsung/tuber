@@ -22,6 +22,8 @@ def load_detr_weights(model, pretrain_dir, cfg):
         l = 1        
     for k, v in checkpoint['model'].items():
         if k.split('.')[l] == 'transformer':
+            if "decoder.cls_norm" in k:
+                continue
             if "offset_embed" in k:
                 for i in range(6):
                     pretrained_dict.update({k.replace("offset_embed.layers", "offset_embed.{}.layers".format(i)): v})
