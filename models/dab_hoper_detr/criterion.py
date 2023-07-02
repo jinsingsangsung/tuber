@@ -768,11 +768,10 @@ class PostProcessAVA(nn.Module):
 
         try:
             prob_binary = out_logits_b.softmax(-1)[:, :, 1:2]
-            prob_bbox = (prob_binary > 0.8).float() * prob_binary
+            prob_bbox = (prob_binary > 0.7).float() * prob_binary
             prob = out_logits.sigmoid() * prob_bbox
         except:
-            pass
-        prob = out_logits.sigmoid()
+            prob = out_logits.sigmoid()
 
         boxes = box_ops.box_cxcywh_to_xyxy(out_bbox)
         img_h, img_w = target_sizes.unbind(1)
