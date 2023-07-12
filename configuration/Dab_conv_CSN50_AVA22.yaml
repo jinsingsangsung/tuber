@@ -17,10 +17,10 @@ CONFIG:
   USE_LOCATION: False
   EFFICIENT: False
   TRAIN:
-    EPOCH_NUM: 20
-    BATCH_SIZE: 2
+    EPOCH_NUM: 25
+    BATCH_SIZE: 4
     LR: 1e-4
-    MIN_LR: 1e-5 # only if cosine scheduler is used
+    MIN_LR: 1e-6 # only if cosine scheduler is used
     LR_BACKBONE: 1e-5 # if <=0, freezes the backbone
     MOMENTUM: 0.9
     W_DECAY: 1e-4
