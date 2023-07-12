@@ -234,11 +234,11 @@ class DETR(nn.Module):
 
 def build_model(cfg):
     if cfg.CONFIG.DATA.DATASET_NAME == 'ava':
-        from models.dab_baseline_detr.matcher import build_matcher
+        from models.dab_conv_detr.matcher import build_matcher
     elif cfg.CONFIG.DATA.DATASET_NAME == 'jhmdb':
-        from models.dab_baseline_detr.matcher_ucf import build_matcher
+        from models.dab_conv_detr.matcher_ucf import build_matcher
     else:
-        from models.dab_baseline_detr.matcher_ucf_ import build_matcher
+        from models.dab_conv_detr.matcher_ucf_ import build_matcher
     num_classes = cfg.CONFIG.DATA.NUM_CLASSES
     log_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
