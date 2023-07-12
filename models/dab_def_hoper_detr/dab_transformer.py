@@ -231,16 +231,16 @@ class TransformerDecoder(nn.Module):
             raise NotImplementedError("Unknown query_scale_type: {}".format(query_scale_type))
         
         self.ref_point_head = MLP(query_dim // 2 * d_model, d_model, d_model, 2)
-        self.cls_ref_point_head = MLP(query_dim // 2 * d_model, d_model, d_model, 2)
+        # self.cls_ref_point_head = MLP(query_dim // 2 * d_model, d_model, d_model, 2)
         
         self.bbox_embed = None
         self.offset_embed = MLP(d_model, d_model, 4, 3)
         self.d_model = d_model
         self.modulate_hw_attn = modulate_hw_attn
         self.bbox_embed_diff_each_layer = bbox_embed_diff_each_layer
-        self.offset_embed_diff_each_layer = offset_embed_diff_each_layer
-        if offset_embed_diff_each_layer:
-            self.offset_embed = nn.ModuleList([MLP(d_model, d_model, 4, 3) for i in range(num_layers)])
+        # self.offset_embed_diff_each_layer = offset_embed_diff_each_layer
+        # if offset_embed_diff_each_layer:
+        #     self.offset_embed = nn.ModuleList([MLP(d_model, d_model, 4, 3) for i in range(num_layers)])
 
         if modulate_hw_attn:
             self.ref_anchor_head = MLP(d_model, d_model, 2, 2)
@@ -613,8 +613,8 @@ class TransformerClsDecoderLayer(nn.Module):
 
         self.nhead = nhead
         self.rm_self_attn_decoder = rm_self_attn_decoder
-        self.linear_out = nn.Linear(d_model, d_model)
-        constant_(self.linear_out.bias, 0.)
+        # self.linear_out = nn.Linear(d_model, d_model)
+        # constant_(self.linear_out.bias, 0.)
         
         # Implementation of Feedforward model
         self.linear1 = nn.Linear(d_model, dim_feedforward)
