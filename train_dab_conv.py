@@ -27,7 +27,7 @@ def main_worker(cfg):
     else:
         writer = None
 
-    if int(os.getenv('NSML_SESSION', '0')) <= 0:
+    if int(os.getenv('NSML_SESSION', '0')) > 0:
         cfg.CONFIG.MODEL.LOAD = True
         cfg.CONFIG.MODEL.LOAD_FC = True
         cfg.CONFIG.MODEL.LOAD_DETR = False
@@ -85,7 +85,7 @@ def main_worker(cfg):
     # create lr scheduler
     lr_scheduler = build_scheduler(cfg, optimizer, len(train_loader))
 
-    if int(os.getenv('NSML_SESSION', '0')) <= 0:
+    if int(os.getenv('NSML_SESSION', '0')) > 0:
         # 실험 이어하기의 경우
         study = os.environ["NSML_STUDY"]
         run = os.environ["NSML_RUN_NAME"].split("/")[-1]
