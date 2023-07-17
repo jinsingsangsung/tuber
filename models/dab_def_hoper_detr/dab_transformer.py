@@ -234,7 +234,7 @@ class TransformerDecoder(nn.Module):
         # self.cls_ref_point_head = MLP(query_dim // 2 * d_model, d_model, d_model, 2)
         
         self.bbox_embed = None
-        self.offset_embed = MLP(d_model, d_model, 4, 3)
+        # self.offset_embed = MLP(d_model, d_model, 4, 3)
         self.d_model = d_model
         self.modulate_hw_attn = modulate_hw_attn
         self.bbox_embed_diff_each_layer = bbox_embed_diff_each_layer
