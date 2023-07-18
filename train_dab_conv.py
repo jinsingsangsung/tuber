@@ -147,6 +147,9 @@ if __name__ == '__main__':
     torch.manual_seed(args.random_seed)
     torch.cuda.manual_seed(args.random_seed)
     torch.cuda.manual_seed_all(args.random_seed)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+
 
     cfg = get_cfg_defaults()
     cfg.merge_from_file(args.config_file)
