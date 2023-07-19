@@ -24,7 +24,7 @@ CONFIG:
     LR_BACKBONE: 1e-5 # if <=0, freezes the backbone
     MOMENTUM: 0.9
     W_DECAY: 1e-4
-    LR_POLICY: 'step'
+    # LR_POLICY: 'step'
     USE_WARMUP: True # does nothing
     WARMUP_START_LR: 1e-5
     WARMUP_EPOCHS: 4 # this determines whether to use Warmup unless using "step"
@@ -34,7 +34,7 @@ CONFIG:
       NAME: ADAMW
     AUX_LOSS: True
     LR_SCHEDULER:
-      NAME: 'multistep'
+      NAME: 'cosine'
     CUT_GRADIENT: FALSE
 
   VAL:
