@@ -62,17 +62,17 @@ def load_detr_weights(model, pretrain_dir, cfg):
     if distributed:
         pretrained_dict_ = {k: v for k, v in pretrained_dict.items() if k in model_dict}
         unused_dict = {k: v for k, v in pretrained_dict.items() if not k in model_dict}
-        # not_found_dict = {k: v for k, v in model_dict.items() if not k in pretrained_dict}
+        not_found_dict = {k: v for k, v in model_dict.items() if not k in pretrained_dict}
     else:
         pretrained_dict_ = {k[7:]: v for k, v in pretrained_dict.items() if k[7:] in model_dict}
         unused_dict = {k[7:]: v for k, v in pretrained_dict.items() if not k[7:] in model_dict}
-        # not_found_dict = {k: v for k, v in model_dict.items() if not k in pretrained_dict}
+        not_found_dict = {k: v for k, v in model_dict.items() if not "module."+k in pretrained_dict}
 
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
         print_log(log_path, "number of detr unused model layers:", len(unused_dict.keys()))
         print_log(log_path, "number of detr used model layers:", len(pretrained_dict_.keys()))
     # print("model_dict",[i for i in model_dict.keys()][:10])
-    # print("not found layers:", not_found_dict.keys())
+        print_log(logt_path, "not found layers:", not_found_dict.keys())
 
     model_dict.update(pretrained_dict_)
     model.load_state_dict(model_dict)
