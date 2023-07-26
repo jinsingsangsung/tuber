@@ -296,10 +296,18 @@ class TransformerDecoder(nn.Module):
 
             cls_feature = self.conv1(torch.cat([actor_feature_expanded, encoded_feature_expanded], dim=1))
             # cls_feature = self.bn1(cls_feature)
-            query = self.q_proj(self.conv_activation(cls_feature))
-            key = self.k_proj(encoded_feature_expanded)
+            # query = self.q_proj(self.conv_activation(cls_feature)) #N_q*B, D, h, w
+            query = self.q_proj(cls_feature) # N_q*B, D, h, w
+            mean = query.flatten(2).mean(dim=2, keepdim=True)
+            # now, get the normalized landscape for each channel
+            landscape = (query.flatten(2)-mean).reshape(output.shape[0], output.shape[1], output.shape[2], -1)[0] # B, D, h*w
+            channel_query = (query.view(output.shape[0], output.shape[1], output.shape[2], -1) - landscape[None, ...])[..., 0] # N_q, B, D
+            attn = torch.einsum('bij,bjk->bik', channel_query.transpose(0,1), landscape).softmax(dim=-1).transpose(0,1).flatten(0,1).reshape(-1, 1, h, w)
+            # key = self.k_proj(encoded_feature_expanded)
             value = self.v_proj(encoded_feature_expanded)
-            attn = (query*key).sum(dim=1).flatten(1).softmax(dim=1).reshape(-1, 1, h, w)
+
+            
+            # attn = (query*key).sum(dim=1).flatten(1).softmax(dim=1).reshape(-1, 1, h, w)
             cls_output = (attn * value).sum(dim=-1).sum(dim=-1).view(len(tgt), -1, cls_feature.shape[1]) #N_q, B, D
             cls_output = self.linear(cls_output)
 
