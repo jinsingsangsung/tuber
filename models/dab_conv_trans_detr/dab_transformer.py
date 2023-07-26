@@ -221,7 +221,7 @@ class TransformerDecoder(nn.Module):
 
         self.conv1 = nn.Conv2d(512, d_model, kernel_size=1)
         self.q_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
-        self.k_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
+        # self.k_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
         self.v_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
         # self.conv2 = nn.Conv2d(d_model, 2*d_model, kernel_size=3, stride=2)
         # self.conv3 = nn.Conv2d(2*d_model, 2*d_model, kernel_size=3, stride=2)
