@@ -72,7 +72,7 @@ def load_detr_weights(model, pretrain_dir, cfg):
         print_log(log_path, "number of detr unused model layers:", len(unused_dict.keys()))
         print_log(log_path, "number of detr used model layers:", len(pretrained_dict_.keys()))
     # print("model_dict",[i for i in model_dict.keys()][:10])
-        print_log(logt_path, "not found layers:", not_found_dict.keys())
+        print_log(log_path, "not found layers:", not_found_dict.keys())
 
     model_dict.update(pretrained_dict_)
     model.load_state_dict(model_dict)
