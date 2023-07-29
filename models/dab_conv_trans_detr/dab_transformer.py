@@ -287,9 +287,9 @@ class TransformerDecoder(nn.Module):
             actor_feature = actor_feature.clone().detach()
             actor_feature2 = self.cls_linear2(self.dropout(self.activation(self.cls_linear1(actor_feature))))
             actor_feature = actor_feature + self.dropout(actor_feature2)
-            actor_feature = self.cls_norm(actor_feature)
             if layer_id != 0:
-                actor_feature += cls_output
+                actor_feature += cls_output            
+            actor_feature = self.cls_norm(actor_feature)
 
             # apply convolution
             h, w = orig_res
