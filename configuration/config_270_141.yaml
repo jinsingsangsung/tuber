@@ -28,7 +28,7 @@ CONFIG:
     USE_WARMUP: True # does nothing
     WARMUP_START_LR: 1e-5
     WARMUP_EPOCHS: 3 # this determines whether to use Warmup unless using "step"
-    LR_MILESTONE: [15] #only for multistep
+    LR_MILESTONE: [14] #only for multistep
     STEP: 0.1 # gamma for lr decay
     OPTIMIZER:
       NAME: ADAMW
