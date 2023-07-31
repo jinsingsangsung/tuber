@@ -229,10 +229,10 @@ class TransformerDecoder(nn.Module):
         # self.conv2 = nn.Conv2d(d_model, 2*d_model, kernel_size=3, stride=2)
         # self.conv3 = nn.Conv2d(2*d_model, 2*d_model, kernel_size=3, stride=2)
         # self.linear = nn.Linear(d_model, d_model)
-        # self.cls_norm_ = nn.LayerNorm(d_model)
-        # self.cls_linear1_ = nn.Linear(d_model, dim_feedforward)
-        # self.cls_linear2_ = nn.Linear(dim_feedforward, d_model)
-        # self.dropout_ = nn.Dropout(dropout)
+        self.cls_norm_ = nn.LayerNorm(d_model)
+        self.cls_linear1_ = nn.Linear(d_model, dim_feedforward)
+        self.cls_linear2_ = nn.Linear(dim_feedforward, d_model)
+        self.dropout_ = nn.Dropout(dropout)
         
         self.cls_norm2 = nn.LayerNorm(d_model)
         
@@ -302,6 +302,9 @@ class TransformerDecoder(nn.Module):
             cls_output = self.cross_attn(q, k, value=v, attn_mask=memory_mask,
                               key_padding_mask=memory_key_padding_mask)[0]
             
+            cls_output2 = self.cls_linear2_(self.dropout_(self.activation(self.cls_linear1_(cls_output))))
+            cls_output = cls_output + self.dropout_(cls_output2)
+            cls_output = self.cls_norm_(cls_output)                   
             
             # # apply convolution
             # h, w = orig_res
@@ -316,11 +319,6 @@ class TransformerDecoder(nn.Module):
             # attn = (query*key).sum(dim=1).flatten(1).softmax(dim=1).reshape(-1, 1, h, w)
             # cls_output = (attn * value).sum(dim=-1).sum(dim=-1).view(len(tgt), -1, cls_feature.shape[1]) #N_q, B, D
             # cls_output = self.linear(cls_output)
-
-            # cls_output2 = self.cls_linear2_(self.dropout_(self.activation(self.cls_linear1_(cls_output))))
-            # cls_output = cls_output + self.dropout_(cls_output2)
-            # cls_output = self.cls_norm_(cls_output)            
-            
             
             # iter update
             if self.bbox_embed is not None:
