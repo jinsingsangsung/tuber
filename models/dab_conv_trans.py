@@ -90,14 +90,19 @@ class DETR(nn.Module):
         # decoder_norm = nn.LayerNorm(hidden_dim)
         # self.decoder = TransformerDecoder(decoder_layer=decoder_layer, num_layers=3, norm=decoder_norm, return_intermediate=True, query_dim=4, modulate_hw_attn=True, bbox_embed_diff_each_layer=True)
         # self.num_patterns = 3
-        # self.num_pattern_level = 4
+        # self.num_pattern_message:%3CTQB5fQ7CQ_2uZmev7pIQjA@geopod-ismtpd-5%3Elevel = 4
         # self.patterns = nn.Embedding(self.num_patterns*self.num_pattern_level, hidden_dim)
         prior_prob = 0.01
         bias_value = -math.log((1 - prior_prob) / prior_prob)
         if self.dataset_mode == 'ava':
-            self.class_embed = nn.Linear(hidden_dim, num_classes)
+            # self.class_embed = nn.Linear(hidden_dim, num_classes)
+            self.class_embed = nn.Sequential(
+                nn.Linear(hidden_dim, hidden_dim),
+                nn.ReLU(),
+                nn.Linear(hidden_dim, 1)
+            )
             self.class_embed_b = nn.Linear(hidden_dim, 3)
-            self.class_embed.bias.data = torch.ones(num_classes) * bias_value
+            # self.class_embed.bias.data = torch.ones(num_classes) * bias_value
         else:
             self.class_embed = nn.Linear(2*hidden_dim, num_classes+1)
             self.class_embed_b = nn.Linear(hidden_dim, 3)
@@ -203,7 +208,7 @@ class DETR(nn.Module):
         if not self.efficient:
             outputs_class = self.class_embed(self.dropout(cls_hs)).reshape(lay_n, bs*t, self.num_queries, -1)
         else:
-            outputs_class = self.class_embed(self.dropout(cls_hs)).reshape(lay_n, bs, self.num_queries, -1)        
+            outputs_class = self.class_embed(self.dropout(cls_hs)).reshape(lay_n, bs, self.num_queries, -1)
         if self.dataset_mode == "ava":
             if not self.efficient:
                 outputs_class = outputs_class.reshape(-1, bs, t, self.num_queries, self.num_classes)[:,:,self.temporal_length//2,:,:]

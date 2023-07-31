@@ -223,6 +223,8 @@ class TransformerDecoder(nn.Module):
         self.q_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
         self.k_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
         self.v_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
+        
+        self.cls_params = nn.Linear(d_model, 80).weight
         # self.conv2 = nn.Conv2d(d_model, 2*d_model, kernel_size=3, stride=2)
         # self.conv3 = nn.Conv2d(2*d_model, 2*d_model, kernel_size=3, stride=2)
         self.linear = nn.Linear(d_model, d_model)
@@ -297,16 +299,15 @@ class TransformerDecoder(nn.Module):
             cls_feature = self.conv1(torch.cat([actor_feature_expanded, encoded_feature_expanded], dim=1))
             # cls_feature = self.bn1(cls_feature)
             query = self.q_proj(self.conv_activation(cls_feature))
-            key = self.k_proj(encoded_feature_expanded)
-            value = self.v_proj(encoded_feature_expanded)
-            attn = (query*key).sum(dim=1).flatten(1).softmax(dim=1).reshape(-1, 1, h, w)
-            cls_output = (attn * value).sum(dim=-1).sum(dim=-1).view(len(tgt), -1, cls_feature.shape[1]) #N_q, B, D
+            query = query[:, None].expand(-1, 80, -1, -1, -1)
+            key = self.cls_params[None, :, :, None, None].expand(len(tgt), -1, -1, h, w)
+            attn = (query*key).sum(dim=2).flatten(2).softmax(dim=2).reshape(len(tgt), -1, h, w)[:, :, None]
+            value = self.v_proj(encoded_feature_expanded)[:, None]
+            cls_output = (attn * value).sum(dim=-1).sum(dim=-1).view(len(tgt), -1, 80, cls_feature.shape[1]) #N_q, B, N_c, D
             cls_output = self.linear(cls_output)
-
             cls_output2 = self.cls_linear2_(self.dropout_(self.activation(self.cls_linear1_(cls_output))))
             cls_output = cls_output + self.dropout_(cls_output2)
-            cls_output = self.cls_norm_(cls_output)            
-            
+            cls_output = self.cls_norm_(cls_output)
             
             # iter update
             if self.bbox_embed is not None:
