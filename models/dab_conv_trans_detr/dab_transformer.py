@@ -293,15 +293,15 @@ class TransformerDecoder(nn.Module):
 
             # apply convolution
             h, w = orig_res
-            actor_feature_expanded = actor_feature.flatten(0,1)[..., None, None].repeat(1, 1, h, w) # N_q*B, D, H, W
-            encoded_feature_expanded = memory[:, None].repeat(1, len(tgt), 1, 1).flatten(1,2).view(h,w,-1,actor_feature.shape[-1]).permute(2,3,0,1) # N_q*B, D, H, W
+            actor_feature_expanded = actor_feature.flatten(0,1)[..., None, None].expand(-1, -1, h, w) # N_q*B, D, H, W
+            encoded_feature_expanded = memory[:, None].expand(-1, len(tgt), -1, -1).flatten(1,2).view(h,w,-1,actor_feature.shape[-1]).permute(2,3,0,1) # N_q*B, D, H, W
 
             cls_feature = self.conv1(torch.cat([actor_feature_expanded, encoded_feature_expanded], dim=1))
             # cls_feature = self.bn1(cls_feature)
             query = self.q_proj(self.conv_activation(cls_feature))
             query = query[:, None].expand(-1, 80, -1, -1, -1)
-            key = self.cls_params[None, :, :, None, None].expand(len(tgt), -1, -1, h, w)
-            attn = (query*key).sum(dim=2).flatten(2).softmax(dim=2).reshape(len(tgt), -1, h, w)[:, :, None]
+            key = self.cls_params[None, :, :, None, None].expand(actor_feature_expanded.shape[0], -1, -1, h, w)
+            attn = (query*key).sum(dim=2).flatten(2).softmax(dim=2).reshape(actor_feature_expanded.shape[0], -1, h, w)[:, :, None]
             value = self.v_proj(encoded_feature_expanded)[:, None]
             cls_output = (attn * value).sum(dim=-1).sum(dim=-1).view(len(tgt), -1, 80, cls_feature.shape[1]) #N_q, B, N_c, D
             cls_output = self.linear(cls_output)
