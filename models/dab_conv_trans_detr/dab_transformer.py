@@ -217,21 +217,26 @@ class TransformerDecoder(nn.Module):
         self.cls_linear1 = nn.Linear(d_model, dim_feedforward)
         self.cls_linear2 = nn.Linear(dim_feedforward, d_model)
         self.dropout = nn.Dropout(dropout)
-        self.conv_activation = _get_activation_fn("relu")
+        # self.conv_activation = _get_activation_fn("relu")
 
-        self.conv1 = nn.Conv2d(512, d_model, kernel_size=1)
-        self.q_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
-        self.k_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
-        self.v_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
+        # self.conv1 = nn.Conv2d(512, d_model, kernel_size=1)
+        # self.q_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
+        # self.k_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
+        # self.v_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
+        self.q_proj = nn.Linear(d_model, d_model)
+        self.k_proj = nn.Linear(d_model, d_model)
+        self.v_proj = nn.Linear(d_model, d_model)        
         # self.conv2 = nn.Conv2d(d_model, 2*d_model, kernel_size=3, stride=2)
         # self.conv3 = nn.Conv2d(2*d_model, 2*d_model, kernel_size=3, stride=2)
-        self.linear = nn.Linear(d_model, d_model)
-        self.cls_norm_ = nn.LayerNorm(d_model)
-        self.cls_linear1_ = nn.Linear(d_model, dim_feedforward)
-        self.cls_linear2_ = nn.Linear(dim_feedforward, d_model)
-        self.dropout_ = nn.Dropout(dropout)
+        # self.linear = nn.Linear(d_model, d_model)
+        # self.cls_norm_ = nn.LayerNorm(d_model)
+        # self.cls_linear1_ = nn.Linear(d_model, dim_feedforward)
+        # self.cls_linear2_ = nn.Linear(dim_feedforward, d_model)
+        # self.dropout_ = nn.Dropout(dropout)
         
         self.cls_norm2 = nn.LayerNorm(d_model)
+        
+        self.cross_attn = nn.MultiheadAttention(d_model, 8, dropout=dropout)
 
     def forward(self, tgt, memory,
                 tgt_mask: Optional[Tensor] = None,
@@ -289,23 +294,32 @@ class TransformerDecoder(nn.Module):
             actor_feature = actor_feature + self.dropout(actor_feature2)
             actor_feature = self.cls_norm(actor_feature)
 
-            # apply convolution
-            h, w = orig_res
-            actor_feature_expanded = actor_feature.flatten(0,1)[..., None, None].repeat(1, 1, h, w) # N_q*B, D, H, W
-            encoded_feature_expanded = memory[:, None].repeat(1, len(tgt), 1, 1).flatten(1,2).view(h,w,-1,actor_feature.shape[-1]).permute(2,3,0,1) # N_q*B, D, H, W
 
-            cls_feature = self.conv1(torch.cat([actor_feature_expanded, encoded_feature_expanded], dim=1))
-            # cls_feature = self.bn1(cls_feature)
-            query = self.q_proj(self.conv_activation(cls_feature))
-            key = self.k_proj(encoded_feature_expanded)
-            value = self.v_proj(encoded_feature_expanded)
-            attn = (query*key).sum(dim=1).flatten(1).softmax(dim=1).reshape(-1, 1, h, w)
-            cls_output = (attn * value).sum(dim=-1).sum(dim=-1).view(len(tgt), -1, cls_feature.shape[1]) #N_q, B, D
-            cls_output = self.linear(cls_output)
+            # what if we attach normal transformer?
+            q = self.q_proj(actor_feature)
+            k = self.k_proj(memory)
+            v = self.v_proj(memory)
+            cls_output = self.cross_attn(q, k, value=v, attn_mask=memory_mask,
+                              key_padding_mask=memory_key_padding_mask)[0]
+            
+            
+            # # apply convolution
+            # h, w = orig_res
+            # actor_feature_expanded = actor_feature.flatten(0,1)[..., None, None].repeat(1, 1, h, w) # N_q*B, D, H, W
+            # encoded_feature_expanded = memory[:, None].repeat(1, len(tgt), 1, 1).flatten(1,2).view(h,w,-1,actor_feature.shape[-1]).permute(2,3,0,1) # N_q*B, D, H, W
 
-            cls_output2 = self.cls_linear2_(self.dropout_(self.activation(self.cls_linear1_(cls_output))))
-            cls_output = cls_output + self.dropout_(cls_output2)
-            cls_output = self.cls_norm_(cls_output)            
+            # cls_feature = self.conv1(torch.cat([actor_feature_expanded, encoded_feature_expanded], dim=1))
+            # # cls_feature = self.bn1(cls_feature)
+            # query = self.q_proj(self.conv_activation(cls_feature))
+            # key = self.k_proj(encoded_feature_expanded)
+            # value = self.v_proj(encoded_feature_expanded)
+            # attn = (query*key).sum(dim=1).flatten(1).softmax(dim=1).reshape(-1, 1, h, w)
+            # cls_output = (attn * value).sum(dim=-1).sum(dim=-1).view(len(tgt), -1, cls_feature.shape[1]) #N_q, B, D
+            # cls_output = self.linear(cls_output)
+
+            # cls_output2 = self.cls_linear2_(self.dropout_(self.activation(self.cls_linear1_(cls_output))))
+            # cls_output = cls_output + self.dropout_(cls_output2)
+            # cls_output = self.cls_norm_(cls_output)            
             
             
             # iter update
