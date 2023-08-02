@@ -217,9 +217,10 @@ class TransformerDecoder(nn.Module):
         self.cls_linear1 = nn.Linear(d_model, dim_feedforward)
         self.cls_linear2 = nn.Linear(dim_feedforward, d_model)
         self.dropout = nn.Dropout(dropout)
-        self.conv_activation = _get_activation_fn("relu")
+        self.conv_activation = _get_activation_fn("gelu")
 
-        self.conv1 = nn.Conv2d(512, d_model, kernel_size=1)
+        self.conv1 = nn.Conv2d(2*d_model, d_model, kernel_size=1)
+        self.conv2 = nn.Conv2d(d_model, d_model, kernel_size=1)
         self.q_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
         self.k_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
         self.v_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
@@ -296,9 +297,10 @@ class TransformerDecoder(nn.Module):
             actor_feature_expanded = actor_feature.flatten(0,1)[..., None, None].expand(-1, -1, h, w) # N_q*B, D, H, W
             encoded_feature_expanded = memory[:, None].expand(-1, len(tgt), -1, -1).flatten(1,2).view(h,w,-1,actor_feature.shape[-1]).permute(2,3,0,1) # N_q*B, D, H, W
 
-            cls_feature = self.conv1(torch.cat([actor_feature_expanded, encoded_feature_expanded], dim=1))
+            cls_feature = self.conv_activation(self.conv1(torch.cat([actor_feature_expanded, encoded_feature_expanded], dim=1)))
+            cls_feature = self.conv_activation(self.conv2(cls_feature))
             # cls_feature = self.bn1(cls_feature)
-            query = self.q_proj(self.conv_activation(cls_feature))
+            query = self.q_proj(cls_feature)
             query = query[:, None].expand(-1, 80, -1, -1, -1)
             key = self.cls_params[None, :, :, None, None].expand(actor_feature_expanded.shape[0], -1, -1, h, w)
             attn = (query*key).sum(dim=2).flatten(2).softmax(dim=2).reshape(actor_feature_expanded.shape[0], -1, h, w)[:, :, None]
