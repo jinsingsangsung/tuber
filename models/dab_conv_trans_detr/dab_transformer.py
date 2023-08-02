@@ -225,11 +225,13 @@ class TransformerDecoder(nn.Module):
         self.k_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
         self.v_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
         
-        self.cls_params = nn.Linear(d_model, 80).weight
+        # self.cls_params = nn.Linear(d_model, 80).weight
+        self.class_queries = nn.Embedding(80, 256).weight
         # self.conv2 = nn.Conv2d(d_model, 2*d_model, kernel_size=3, stride=2)
         # self.conv3 = nn.Conv2d(2*d_model, 2*d_model, kernel_size=3, stride=2)
         self.linear = nn.Linear(d_model, d_model)
         self.cls_norm_ = nn.LayerNorm(d_model)
+        self.cls_norm__ = nn.LayerNorm(d_model)
         self.cls_linear1_ = nn.Linear(d_model, dim_feedforward)
         self.cls_linear2_ = nn.Linear(dim_feedforward, d_model)
         self.dropout_ = nn.Dropout(dropout)
@@ -302,7 +304,8 @@ class TransformerDecoder(nn.Module):
             # cls_feature = self.bn1(cls_feature)
             query = self.q_proj(cls_feature)
             query = query[:, None].expand(-1, 80, -1, -1, -1)
-            key = self.cls_params[None, :, :, None, None].expand(actor_feature_expanded.shape[0], -1, -1, h, w)
+            key = self.class_queries[None, :, :, None, None].expand(actor_feature_expanded.shape[0], -1, -1, h, w)
+            # key = self.cls_params[None, :, :, None, None].expand(actor_feature_expanded.shape[0], -1, -1, h, w)
             attn = (query*key).sum(dim=2).flatten(2).softmax(dim=2).reshape(actor_feature_expanded.shape[0], -1, h, w)[:, :, None]
             value = self.v_proj(encoded_feature_expanded)[:, None]
             cls_output = (attn * value).sum(dim=-1).sum(dim=-1).view(len(tgt), -1, 80, cls_feature.shape[1]) #N_q, B, N_c, D
@@ -310,6 +313,9 @@ class TransformerDecoder(nn.Module):
             cls_output2 = self.cls_linear2_(self.dropout_(self.activation(self.cls_linear1_(cls_output))))
             cls_output = cls_output + self.dropout_(cls_output2)
             cls_output = self.cls_norm_(cls_output)
+            if layer_id != 0:
+                cls_output = self.cls_norm__(cls_output + prev_output)
+            prev_output = cls_output
             
             # iter update
             if self.bbox_embed is not None:
