@@ -96,11 +96,11 @@ class DETR(nn.Module):
         bias_value = -math.log((1 - prior_prob) / prior_prob)
         if self.dataset_mode == 'ava':
             # self.class_embed = nn.Linear(hidden_dim, num_classes)
-            self.class_embed = nn.Sequential(
-                nn.Linear(hidden_dim, hidden_dim),
-                nn.ReLU(),
-                nn.Linear(hidden_dim, 1)
-            )
+            # self.class_embed = nn.Sequential(
+            #     nn.Linear(hidden_dim, hidden_dim),
+            #     nn.ReLU(),
+            #     nn.Linear(hidden_dim, 1)
+            # )
             self.class_embed_b = nn.Linear(hidden_dim, 3)
             # self.class_embed.bias.data = torch.ones(num_classes) * bias_value
         else:
@@ -206,9 +206,9 @@ class DETR(nn.Module):
         lay_n = self.transformer.decoder.num_layers
         # outputs_class = self.class_embed(self.dropout(hs)).reshape(lay_n, bs*t, self.num_patterns, self.num_queries, -1).max(dim = 2)[0]
         if not self.efficient:
-            outputs_class = self.class_embed(self.dropout(cls_hs)).reshape(lay_n, bs*t, self.num_queries, -1)
+            outputs_class = self.dropout(cls_hs).mean(dim=-1).reshape(lay_n, bs*t, self.num_queries, -1)
         else:
-            outputs_class = self.class_embed(self.dropout(cls_hs)).reshape(lay_n, bs, self.num_queries, -1)
+            outputs_class = self.dropout(cls_hs).mean(dim=-1).reshape(lay_n, bs, self.num_queries, -1)
         if self.dataset_mode == "ava":
             if not self.efficient:
                 outputs_class = outputs_class.reshape(-1, bs, t, self.num_queries, self.num_classes)[:,:,self.temporal_length//2,:,:]
