@@ -300,7 +300,6 @@ class TransformerDecoder(nn.Module):
 
             # apply convolution
             h, w = orig_res
-            import pdb; pdb.set_trace()
             actor_feature_expanded = actor_feature.flatten(0,1)[..., None, None].expand(-1, -1, h, w) # N_q*B, D, H, W
             encoded_feature_expanded = cls_memory[:, None].expand(-1, len(tgt), -1, -1).flatten(1,2).view(h,w,-1,actor_feature.shape[-1]).permute(2,3,0,1) # N_q*B, D, H, W
 
