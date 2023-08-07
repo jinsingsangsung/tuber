@@ -104,6 +104,8 @@ class Transformer(nn.Module):
             self.num_patterns = 0
         if self.num_patterns > 0:
             self.patterns = nn.Embedding(self.num_patterns, d_model)
+        enc_layer = TransformerEncoderLayer(d_model, 8, 2048, 0.1, "relu", normalize_before=False)
+        self.cls_encoder = TransformerEncoder(enc_layer, num_layers=1, norm=None)
 
     def _reset_parameters(self):
         for p in self.parameters():
@@ -123,6 +125,8 @@ class Transformer(nn.Module):
         mask = mask.flatten(0,1).flatten(1)
 
         memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed, src_shape=src_shape) 
+        cls_memory = self.cls_encoder(src, src_key_padding_mask=mask, pos=pos_embed, src_shape=src_shape)
+        cls_memory = memory.reshape(-1, bs, t, c).mean(2)
         # temporal dimension is alive
         # query_embed = gen_sineembed_for_position(refpoint_embed)
         num_queries = refpoint_embed.shape[0]
@@ -137,7 +141,7 @@ class Transformer(nn.Module):
         # tgt = self.patterns.weight[:, None, None, :].repeat(1, self.num_queries, bs*t, 1).flatten(0, 1) # n_q*n_pat, bs, d_model
         # refpoint_embed = refpoint_embed.repeat(self.num_patterns, 1, 1) # n_pat*n_q, bs*t, d_model
             # import ipdb; ipdb.set_trace()
-        hs, cls_hs, references = self.decoder(tgt, memory, memory_key_padding_mask=mask,
+        hs, cls_hs, references = self.decoder(tgt, memory, cls_memory, memory_key_padding_mask=mask,
                           pos=pos_embed, refpoints_unsigmoid=refpoint_embed, orig_res=(h,w))
         return hs, cls_hs, references
 
@@ -238,7 +242,7 @@ class TransformerDecoder(nn.Module):
         
         self.cls_norm2 = nn.LayerNorm(d_model)
 
-    def forward(self, tgt, memory,
+    def forward(self, tgt, memory, cls_memory,
                 tgt_mask: Optional[Tensor] = None,
                 memory_mask: Optional[Tensor] = None,
                 tgt_key_padding_mask: Optional[Tensor] = None,
@@ -296,8 +300,9 @@ class TransformerDecoder(nn.Module):
 
             # apply convolution
             h, w = orig_res
+            import pdb; pdb.set_trace()
             actor_feature_expanded = actor_feature.flatten(0,1)[..., None, None].expand(-1, -1, h, w) # N_q*B, D, H, W
-            encoded_feature_expanded = memory[:, None].expand(-1, len(tgt), -1, -1).flatten(1,2).view(h,w,-1,actor_feature.shape[-1]).permute(2,3,0,1) # N_q*B, D, H, W
+            encoded_feature_expanded = cls_memory[:, None].expand(-1, len(tgt), -1, -1).flatten(1,2).view(h,w,-1,actor_feature.shape[-1]).permute(2,3,0,1) # N_q*B, D, H, W
 
             cls_feature = self.conv_activation(self.conv1(torch.cat([actor_feature_expanded, encoded_feature_expanded], dim=1)))
             cls_feature = self.conv_activation(self.conv2(cls_feature))
