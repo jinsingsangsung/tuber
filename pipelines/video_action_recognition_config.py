@@ -218,6 +218,9 @@ _C.CONFIG.LOG.DISPLAY_FREQ = 1
 
 _C.CONFIG.GRADIENT_CHECKPOINTING = False
 _C.CONFIG.FREEZE_BACKBONE = False
+_C.CONFIG.MODEL.NUM_PATTERNS = 0
+_C.CONFIG.MODEL.BBOX_EMBED_DIFF_EACH_LAYER = False 
+_C.CONFIG.EFFICIENT = True
 
 def get_cfg_defaults():
     """Get a yacs CfgNode object with default values for your project."""
