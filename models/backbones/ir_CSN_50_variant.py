@@ -4,11 +4,11 @@ The code refers to https://github.com/dmlc/gluon-cv
 Modified by Zhang Yanyi
 '''
 
-
 import torch
 import torch.nn as nn
 from utils.utils import print_log
 import os
+# import torch.utils.checkpoint as checkpoint
 
 eps = 1e-3
 bn_mmt = 0.1
@@ -135,7 +135,7 @@ class ResNeXt(nn.Module):
 
         self.avgpool = nn.AdaptiveAvgPool3d(output_size=(1, 1, 1))
 
-        self.out_fc = nn.Linear(in_features=2048, out_features=num_classes)
+        # self.out_fc = nn.Linear(in_features=2048, out_features=num_classes)
         self.sigmoid = nn.Sigmoid()
 
     def _make_layer(self,
@@ -180,8 +180,10 @@ class ResNeXt(nn.Module):
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
+        
+        # modules = [module for k, module in self._modules.items()][:-3]
+        # x = checkpoint.checkpoint_sequential(modules, len(modules), x)
         x = self.layer4(x)
-
         # x = self.avgpool(x)
         # x = x.view(bs, -1)
         # logits = self.sigmoid(self.out_fc(x))

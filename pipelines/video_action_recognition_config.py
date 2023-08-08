@@ -216,6 +216,7 @@ _C.CONFIG.LOG.SAVE_FREQ = 1
 # Display the training log after every this number of iterations
 _C.CONFIG.LOG.DISPLAY_FREQ = 1
 
+_C.CONFIG.GRADIENT_CHECKPOINTING = False
 
 def get_cfg_defaults():
     """Get a yacs CfgNode object with default values for your project."""

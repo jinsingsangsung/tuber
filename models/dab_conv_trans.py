@@ -23,6 +23,7 @@ from models.dab_conv_trans_detr.criterion import SetCriterion, SetCriterionAVA, 
 from models.dab_conv_trans_detr.transformer_layers import TransformerEncoderLayer, TransformerEncoder
 from models.dab_conv_trans_detr.dab_transformer import TransformerDecoderLayer, TransformerDecoder
 
+import torch.utils.checkpoint as checkpoint
 import copy
 import math
 
@@ -79,7 +80,7 @@ class DETR(nn.Module):
             self.class_proj = nn.Conv3d(2048 + 512, hidden_dim, kernel_size=1)
         else:
             self.input_proj = nn.Conv3d(backbone.num_channels, hidden_dim, kernel_size=1)
-            self.class_proj = nn.Conv3d(backbone.num_channels, hidden_dim, kernel_size=1)
+            # self.class_proj = nn.Conv3d(backbone.num_channels, hidden_dim, kernel_size=1)
         nn.init.xavier_uniform_(self.input_proj.weight, gain=1)
         nn.init.constant_(self.input_proj.bias, 0)    
         # self.class_proj = nn.Conv3d(backbone.num_channels[-1], hidden_dim, kernel_size=(4,1,1))
@@ -144,6 +145,18 @@ class DETR(nn.Module):
             param.requires_grad = False
         for param in self.class_embed_b.parameters():
             param.requires_grad = False
+    
+    # def custom_backbone(self, module):
+    #     def custom_forward(*inputs):
+    #         inputs = module(*inputs)
+    #         return inputs
+    #     return custom_forward
+    
+    # def custom(self, module):
+    #     def custom_forward(*inputs):
+    #         inputs = module(*inputs)
+    #         return inputs
+    #     return custom_forward
 
     def forward(self, samples: NestedTensor, targets=None):
         """ The forward expects a NestedTensor, which consists of:
@@ -162,6 +175,7 @@ class DETR(nn.Module):
         """
         if not isinstance(samples, NestedTensor):
             samples = nested_tensor_from_tensor_list(samples)
+        # features, pos = checkpoint.checkpoint(self.custom_backbone(self.backbone), samples)
         features, pos = self.backbone(samples)
         src, mask = features[-1].decompose()
         assert mask is not None
@@ -170,6 +184,7 @@ class DETR(nn.Module):
             embedweight = self.refpoint_embed.weight.view(self.num_queries, self.temporal_length, 4)      # nq, t, 4
         else:
             embedweight = self.refpoint_embed.weight.view(self.num_queries, 1, 4)  
+        # hs, cls_hs, reference = checkpoint.checkpoint(self.custom(self.transformer), self.input_proj(src), mask, embedweight, pos[-1])
         hs, cls_hs, reference  = self.transformer(self.input_proj(src), mask, embedweight, pos[-1])
         outputs_class_b = self.class_embed_b(hs)
         ######## localization head
