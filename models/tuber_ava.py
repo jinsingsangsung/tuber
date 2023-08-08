@@ -10,11 +10,12 @@ from torch import nn
 from models.transformer.util import box_ops
 from utils.misc import (NestedTensor, nested_tensor_from_tensor_list,
                        accuracy, accuracy_sigmoid, get_world_size, interpolate,
-                       is_dist_avail_and_initialized)
+                       is_dist_avail_and_initialized, inverse_sigmoid)
 
 from models.backbone_builder import build_backbone
 from models.detr.segmentation import (dice_loss, sigmoid_focal_loss)
-from models.transformer.transformer import build_transformer
+# from models.transformer.transformer import build_transformer
+from models.dab_conv_trans_detr.dab_transformer import build_transformer
 from models.transformer.transformer_layers import TransformerEncoderLayer, TransformerEncoder
 from models.criterion import SetCriterion, PostProcess, SetCriterionAVA, PostProcessAVA, MLP
 
@@ -23,7 +24,7 @@ class DETR(nn.Module):
     """ This is the DETR module that performs object detection """
     def __init__(self, backbone, transformer, num_classes, num_queries,
                  hidden_dim, temporal_length, aux_loss=False, generate_lfb=False,
-                 backbone_name='CSN-152', ds_rate=1, last_stride=True, dataset_mode='ava', freeze_backbone=False):
+                 backbone_name='CSN-152', ds_rate=1, last_stride=True, dataset_mode='ava', freeze_backbone=False, query_dim=4):
         """ Initializes the model.
         Parameters:
             backbone: torch module of the backbone to be used. See backbone.py
@@ -81,6 +82,14 @@ class DETR(nn.Module):
         self.last_stride = last_stride
         self.freeze_backbone_ = freeze_backbone
 
+        self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
+        nn.init.constant_(self.bbox_embed.layers[-1].weight.data, 0)
+        nn.init.constant_(self.bbox_embed.layers[-1].bias.data, 0)
+        self.transformer.decoder.bbox_embed = self.bbox_embed
+        self.transformer.eff = True
+        self.refpoint_embed = nn.Embedding(num_queries, 4)
+        self.query_dim = query_dim
+
     def freeze_backbone(self):
         for param in self.backbone.parameters():
             param.requires_grad = False
@@ -128,8 +137,9 @@ class DETR(nn.Module):
         src, mask = features[-1].decompose()
         assert mask is not None
 
-        hs = self.transformer(self.input_proj(src), mask, self.query_embed.weight, pos[-1])[0]
-
+        embedweight = self.refpoint_embed.weight.view(self.num_queries, 1, 4)
+        # hs = self.transformer(self.input_proj(src), mask, self.query_embed.weight, pos[-1])[0]
+        hs, _, reference  = self.transformer(self.input_proj(src), mask, embedweight, pos[-1])
         if self.dataset_mode == 'ava':
             outputs_class_b = self.class_embed_b(hs)
         else:
@@ -151,7 +161,12 @@ class DETR(nn.Module):
         q_class = q_class.permute(1, 0, 2).contiguous().view(lay_n, bs, nb, self.hidden_dim)
 
         outputs_class = self.class_fc(self.dropout(q_class))
-        outputs_coord = self.bbox_embed(hs).sigmoid()
+        # outputs_coord = self.bbox_embed(hs).sigmoid()
+        
+        reference_before_sigmoid = inverse_sigmoid(reference)
+        tmp = self.bbox_embed(hs)
+        tmp[..., :self.query_dim] += reference_before_sigmoid
+        outputs_coord = tmp.sigmoid()
 
         out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1], 'pred_logits_b': outputs_class_b[-1],}
         if self.aux_loss:

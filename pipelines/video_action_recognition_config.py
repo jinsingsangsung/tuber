@@ -217,6 +217,7 @@ _C.CONFIG.LOG.SAVE_FREQ = 1
 _C.CONFIG.LOG.DISPLAY_FREQ = 1
 
 _C.CONFIG.GRADIENT_CHECKPOINTING = False
+_C.CONFIG.FREEZE_BACKBONE = False
 
 def get_cfg_defaults():
     """Get a yacs CfgNode object with default values for your project."""
