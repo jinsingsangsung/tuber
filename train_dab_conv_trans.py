@@ -141,6 +141,8 @@ if __name__ == '__main__':
     parser.add_argument('--random_seed', default=1, type=int, help='random_seed')
     parser.add_argument('--debug', action='store_true', help="debug, and ddp is disabled")
     parser.add_argument('--eff', action='store_true', help="only for AVA, efficiently output only keyframe")
+    parser.add_argument('--grad_ckpt', action='store_true', help="use gradient checkpoint")
+    parser.add_argument('--batch', default=0, type=int, help="batch size")    
     args = parser.parse_args()
     random.seed(args.random_seed)
     np.random.seed(args.random_seed)
@@ -165,6 +167,10 @@ if __name__ == '__main__':
         cfg.CONFIG.EFFICIENT = True
     else:
         cfg.CONFIG.EFFICIENT = False
+    if args.grad_ckpt:
+        cfg.CONFIG.GRADIENT_CHECKPOINTING = True
+    if args.batch != 0:
+        cfg.CONFIG.TRAIN.BATCH_SIZE = args.batch
     
     import socket 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
