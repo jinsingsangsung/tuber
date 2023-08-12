@@ -1,6 +1,7 @@
 import argparse
 import datetime
 import time
+import os
 
 import torch
 import torch.optim
@@ -63,10 +64,10 @@ def main_worker(cfg):
     else:
         raise AssertionError("optimizer is one of SGD or ADAMW")
     # create lr scheduler
-    if cfg.CONFIG.TRAIN.LR_POLICY == "step":
-        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=cfg.CONFIG.TRAIN.LR_MILESTONE, gamma=cfg.CONFIG.TRAIN.STEP)
-    else:
-        lr_scheduler = build_scheduler(cfg, optimizer, len(train_loader))
+    # if cfg.CONFIG.TRAIN.LR_POLICY == "step":
+        # lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=cfg.CONFIG.TRAIN.LR_MILESTONE, gamma=cfg.CONFIG.TRAIN.STEP)
+    # else:
+    lr_scheduler = build_scheduler(cfg, optimizer, len(train_loader))
 
     # docs: add resume option
     if cfg.CONFIG.MODEL.LOAD:
@@ -87,7 +88,7 @@ def main_worker(cfg):
 
         if epoch % cfg.CONFIG.VAL.FREQ == 0 or epoch == cfg.CONFIG.TRAIN.EPOCH_NUM - 1:
             validate_tuber_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)
-        lr_scheduler.step()
+
 
     if writer is not None:
         writer.close()
@@ -107,6 +108,10 @@ if __name__ == '__main__':
 
     cfg = get_cfg_defaults()
     cfg.merge_from_file(args.config_file)
+    study = os.environ["NSML_STUDY"]
+    run = os.environ["NSML_RUN_NAME"].split("/")[-1]
+    cfg.CONFIG.LOG.RES_DIR = cfg.CONFIG.LOG.RES_DIR.format(study, run)
+    cfg.CONFIG.LOG.EXP_NAME = cfg.CONFIG.LOG.EXP_NAME.format(study, run)
     cfg.DDP_CONFIG.GPU_WORLD_SIZE = args.num_gpu
     import socket 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
