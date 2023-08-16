@@ -150,16 +150,8 @@ class Transformer(nn.Module):
         # tgt = self.patterns.weight[:, None, None, :].repeat(1, self.num_queries, bs*t, 1).flatten(0, 1) # n_q*n_pat, bs, d_model
         # refpoint_embed = refpoint_embed.repeat(self.num_patterns, 1, 1) # n_pat*n_q, bs*t, d_model
         
-        if self.gradient_checkpointing:
-            def custom_decoder(module):
-                def custom_forward(tgt, memory, mask, pos_embed, refpoint_embed, orig_res):
-                    return module(tgt, memory, memory_key_padding_mask=mask, 
-                                                  pos=pos_embed, refpoints_unsigmoid=refpoint_embed, orig_res=orig_res)
-                return custom_forward
-            hs, cls_hs, references = checkpoint.checkpoint(custom_decoder(self.decoder), tgt, memory, mask, pos_embed, refpoint_embed, (h, w))
-        else:
-            hs, cls_hs, references = self.decoder(tgt, memory, memory_key_padding_mask=mask, 
-                                                  pos=pos_embed, refpoints_unsigmoid=refpoint_embed, orig_res=(h,w))
+        hs, cls_hs, references = self.decoder(tgt, memory, memory_key_padding_mask=mask, 
+                                                pos=pos_embed, refpoints_unsigmoid=refpoint_embed, orig_res=(h,w))
         
         return hs, cls_hs, references
 
