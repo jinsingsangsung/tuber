@@ -20,7 +20,6 @@ import torch
 import torch.nn.functional as F
 from torch import nn, Tensor
 from .attention import MultiheadAttention
-import torch.utils.checkpoint as checkpoint
 
 class MLP(nn.Module):
     """ Very simple multi-layer perceptron (also called FFN)"""
@@ -74,7 +73,6 @@ class Transformer(nn.Module):
                  num_patterns=0,
                  modulate_hw_attn=True,
                  bbox_embed_diff_each_layer=False,
-                 gradient_checkpointing=False,
                  ):
 
         super().__init__()
@@ -106,8 +104,6 @@ class Transformer(nn.Module):
             self.num_patterns = 0
         if self.num_patterns > 0:
             self.patterns = nn.Embedding(self.num_patterns, d_model)
-        
-        self.gradient_checkpointing = gradient_checkpointing
 
     def _reset_parameters(self):
         for p in self.parameters():
@@ -126,17 +122,7 @@ class Transformer(nn.Module):
         refpoint_embed = refpoint_embed.repeat(1, bs, 1) #n_q, bs * t, 4
         mask = mask.flatten(0,1).flatten(1)
 
-        if self.gradient_checkpointing:
-            def custom_encoder(module, mask, pos_embed, src_shape):
-                def custom_forward(inputs):
-                    inputs = module(inputs, src_key_padding_mask=mask, pos=pos_embed, src_shape=src_shape)
-                    return inputs
-                return custom_forward
-            memory = checkpoint.checkpoint(custom_encoder(self.encoder, mask, pos_embed, src_shape), src)
-            
-        else:
-            memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed, src_shape=src_shape)
-        
+        memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed, src_shape=src_shape) 
         # temporal dimension is alive
         # query_embed = gen_sineembed_for_position(refpoint_embed)
         num_queries = refpoint_embed.shape[0]
@@ -150,18 +136,9 @@ class Transformer(nn.Module):
         # tgt, refpoint_embed = pattern_expansion(num_patterns, num_pattern_levels, self.patterns, refpoint_embed)
         # tgt = self.patterns.weight[:, None, None, :].repeat(1, self.num_queries, bs*t, 1).flatten(0, 1) # n_q*n_pat, bs, d_model
         # refpoint_embed = refpoint_embed.repeat(self.num_patterns, 1, 1) # n_pat*n_q, bs*t, d_model
-        
-        if self.gradient_checkpointing:
-            def custom_decoder(module, mask, pos_embed, refpoint_embed, src_shape):
-                def custom_forward(*inputs):
-                    inputs = module(*inputs, memory_key_padding_mask=mask, pos=pos_embed, refpoints_unsigmoid=refpoint_embed, orig_res=src_shape)
-                    return inputs
-                return custom_forward
-            hs, cls_hs, references = checkpoint.checkpoint(custom_decoder(self.decoder, mask, pos_embed, refpoint_embed, (h,w)), tgt, memory)
-        else:
-            hs, cls_hs, references = self.decoder(tgt, memory, memory_key_padding_mask=mask, 
-                                                  pos=pos_embed, refpoints_unsigmoid=refpoint_embed, orig_res=(h,w))
-        
+            # import ipdb; ipdb.set_trace()
+        hs, cls_hs, references = self.decoder(tgt, memory, memory_key_padding_mask=mask,
+                          pos=pos_embed, refpoints_unsigmoid=refpoint_embed, orig_res=(h,w))
         return hs, cls_hs, references
 
 
@@ -240,16 +217,21 @@ class TransformerDecoder(nn.Module):
         self.cls_linear1 = nn.Linear(d_model, dim_feedforward)
         self.cls_linear2 = nn.Linear(dim_feedforward, d_model)
         self.dropout = nn.Dropout(dropout)
-        self.conv_activation = _get_activation_fn("relu")
+        self.conv_activation = _get_activation_fn("gelu")
 
-        self.conv1 = nn.Conv2d(512, d_model, kernel_size=1)
+        self.conv1 = nn.Conv2d(2*d_model, d_model, kernel_size=1)
+        self.conv2 = nn.Conv2d(d_model, d_model, kernel_size=1)
         self.q_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
         self.k_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
         self.v_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
+        
+        # self.cls_params = nn.Linear(d_model, 80).weight
+        self.class_queries = nn.Embedding(80, 256).weight
         # self.conv2 = nn.Conv2d(d_model, 2*d_model, kernel_size=3, stride=2)
         # self.conv3 = nn.Conv2d(2*d_model, 2*d_model, kernel_size=3, stride=2)
         self.linear = nn.Linear(d_model, d_model)
         self.cls_norm_ = nn.LayerNorm(d_model)
+        self.cls_norm__ = nn.LayerNorm(d_model)
         self.cls_linear1_ = nn.Linear(d_model, dim_feedforward)
         self.cls_linear2_ = nn.Linear(dim_feedforward, d_model)
         self.dropout_ = nn.Dropout(dropout)
@@ -314,22 +296,26 @@ class TransformerDecoder(nn.Module):
 
             # apply convolution
             h, w = orig_res
-            actor_feature_expanded = actor_feature.flatten(0,1)[..., None, None].repeat(1, 1, h, w) # N_q*B, D, H, W
-            encoded_feature_expanded = memory[:, None].repeat(1, len(tgt), 1, 1).flatten(1,2).view(h,w,-1,actor_feature.shape[-1]).permute(2,3,0,1) # N_q*B, D, H, W
+            actor_feature_expanded = actor_feature.flatten(0,1)[..., None, None].expand(-1, -1, h, w) # N_q*B, D, H, W
+            encoded_feature_expanded = memory[:, None].expand(-1, len(tgt), -1, -1).flatten(1,2).view(h,w,-1,actor_feature.shape[-1]).permute(2,3,0,1) # N_q*B, D, H, W
 
-            cls_feature = self.conv1(torch.cat([actor_feature_expanded, encoded_feature_expanded], dim=1))
+            cls_feature = self.conv_activation(self.conv1(torch.cat([actor_feature_expanded, encoded_feature_expanded], dim=1)))
+            cls_feature = self.conv_activation(self.conv2(cls_feature))
             # cls_feature = self.bn1(cls_feature)
-            query = self.q_proj(self.conv_activation(cls_feature))
-            key = self.k_proj(encoded_feature_expanded)
-            value = self.v_proj(encoded_feature_expanded)
-            attn = (query*key).sum(dim=1).flatten(1).softmax(dim=1).reshape(-1, 1, h, w)
-            cls_output = (attn * value).sum(dim=-1).sum(dim=-1).view(len(tgt), -1, cls_feature.shape[1]) #N_q, B, D
+            query = self.q_proj(cls_feature)
+            query = query[:, None].expand(-1, 80, -1, -1, -1)
+            key = self.class_queries[None, :, :, None, None].expand(actor_feature_expanded.shape[0], -1, -1, h, w)
+            # key = self.cls_params[None, :, :, None, None].expand(actor_feature_expanded.shape[0], -1, -1, h, w)
+            attn = (query*key).sum(dim=2).flatten(2).softmax(dim=2).reshape(actor_feature_expanded.shape[0], -1, h, w)[:, :, None]
+            value = self.v_proj(encoded_feature_expanded)[:, None]
+            cls_output = (attn * value).sum(dim=-1).sum(dim=-1).view(len(tgt), -1, 80, cls_feature.shape[1]) #N_q, B, N_c, D
             cls_output = self.linear(cls_output)
-
             cls_output2 = self.cls_linear2_(self.dropout_(self.activation(self.cls_linear1_(cls_output))))
             cls_output = cls_output + self.dropout_(cls_output2)
-            cls_output = self.cls_norm_(cls_output)            
-            
+            cls_output = self.cls_norm_(cls_output)
+            if layer_id != 0:
+                cls_output = self.cls_norm__(cls_output + prev_output)
+            prev_output = cls_output
             
             # iter update
             if self.bbox_embed is not None:
@@ -423,21 +409,21 @@ class TransformerEncoderLayer(nn.Module): # spatially, temporally
         src = src + self.dropout2_s(src2)
         src = self.norm2_s(src) # spatially encoded
         
-        # temporally encode
-        src = src.reshape(-1,b,t,c).permute(2,1,0,3).contiguous().flatten(1,2) # t, b*hw, c
-        pos = pos.reshape(-1,b,t,c).permute(2,1,0,3).contiguous().flatten(1,2)
-        q = k = self.with_pos_embed(src, pos)
-        # src_key_padding_mask_t = torch.zeros((b*h*w, t), device = src_key_padding_mask.device)>0
-        src2 = self.self_attn_t(q, k, value=src, attn_mask=src_mask,
-                              key_padding_mask=None)[0]
-        src = src + self.dropout1_t(src2)
-        src = self.norm1_t(src)
-        src2 = self.linear2_t(self.dropout_t(self.activation(self.linear1_t(src))))
-        src = src + self.dropout2_t(src2)
-        src = self.norm2_t(src) # spatially encoded
+        # # temporally encode
+        # src = src.reshape(-1,b,t,c).permute(2,1,0,3).contiguous().flatten(1,2) # t, b*hw, c
+        # pos = pos.reshape(-1,b,t,c).permute(2,1,0,3).contiguous().flatten(1,2)
+        # q = k = self.with_pos_embed(src, pos)
+        # # src_key_padding_mask_t = torch.zeros((b*h*w, t), device = src_key_padding_mask.device)>0
+        # src2 = self.self_attn_t(q, k, value=src, attn_mask=src_mask,
+        #                       key_padding_mask=None)[0]
+        # src = src + self.dropout1_t(src2)
+        # src = self.norm1_t(src)
+        # src2 = self.linear2_t(self.dropout_t(self.activation(self.linear1_t(src))))
+        # src = src + self.dropout2_t(src2)
+        # src = self.norm2_t(src) # spatially encoded
 
-        # make it to the original input shape so that it can iterate
-        src = src.reshape(t, b, h*w, c).permute(2,1,0,3).contiguous().flatten(1,2)
+        # # make it to the original input shape so that it can iterate
+        # src = src.reshape(t, b, h*w, c).permute(2,1,0,3).contiguous().flatten(1,2)
         return src
 
 
@@ -589,7 +575,6 @@ def build_transformer(cfg):
         activation="relu",
         num_patterns=cfg.CONFIG.MODEL.NUM_PATTERNS,
         bbox_embed_diff_each_layer=cfg.CONFIG.MODEL.BBOX_EMBED_DIFF_EACH_LAYER,
-        gradient_checkpointing=cfg.CONFIG.GRADIENT_CHECKPOINTING,
     )
 
 

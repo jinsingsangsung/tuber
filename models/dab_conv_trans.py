@@ -11,31 +11,20 @@ from models.transformer.util import box_ops
 from utils.misc import (NestedTensor, nested_tensor_from_tensor_list,
                        accuracy, accuracy_sigmoid, get_world_size, interpolate,
                        is_dist_avail_and_initialized, inverse_sigmoid)
-from utils.utils import print_log
-import os
 
-from models.backbone_builder2 import build_backbone
+from models.backbone_builder import build_backbone
 from models.detr.segmentation import (dice_loss, sigmoid_focal_loss)
+# from models.transformer.transformer import build_transformer
 from models.dab_conv_trans_detr.dab_transformer import build_transformer
-# from models.transformer.transformer_layers import TransformerEncoderLayer, TransformerEncoder
-from models.dab_conv_trans_detr.criterion import PostProcess, PostProcessAVA, MLP
-from models.dab_conv_trans_detr.criterion import SetCriterion, SetCriterionAVA, SetCriterionUCF
-from models.dab_conv_trans_detr.transformer_layers import TransformerEncoderLayer, TransformerEncoder
-from models.dab_conv_trans_detr.dab_transformer import TransformerDecoderLayer, TransformerDecoder
+from models.transformer.transformer_layers import TransformerEncoderLayer, TransformerEncoder
+from models.criterion import SetCriterion, PostProcess, SetCriterionAVA, PostProcessAVA, MLP
 
-import torch.utils.checkpoint as checkpoint
-import copy
-import math
-
-def _get_clones(module, N):
-    return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
 
 class DETR(nn.Module):
     """ This is the DETR module that performs object detection """
-    def __init__(self, backbone, transformer, num_classes, num_queries, num_frames,
-                 hidden_dim, temporal_length, aux_loss=False, generate_lfb=False, two_stage=False, random_refpoints_xy=False, query_dim=4,
-                 backbone_name='CSN-152', ds_rate=1, last_stride=True, dataset_mode='ava', bbox_embed_diff_each_layer=True, training=True, iter_update=True,
-                 gpu_world_rank=0, log_path=None, efficient=True):
+    def __init__(self, backbone, transformer, num_classes, num_queries,
+                 hidden_dim, temporal_length, aux_loss=False, generate_lfb=False,
+                 backbone_name='CSN-152', ds_rate=1, last_stride=True, dataset_mode='ava', freeze_backbone=False, query_dim=4):
         """ Initializes the model.
         Parameters:
             backbone: torch module of the backbone to be used. See backbone.py
@@ -44,35 +33,22 @@ class DETR(nn.Module):
             num_queries: number of object queries, ie detection slot. This is the maximal number of objects
                          DETR can detect in a single image. For COCO, we recommend 100 queries.
             aux_loss: True if auxiliary decoding losses (loss at each decoder layer) are to be used.
-            random_refpoints_xy: random init the x,y of anchor boxes and freeze them. (It sometimes helps to improve the performance)
-        """            
-        super(DETR, self).__init__()
+        """
+        super().__init__()
         self.temporal_length = temporal_length
         self.num_queries = num_queries
-        self.num_frames = num_frames
         self.transformer = transformer
+        self.avg = nn.AvgPool3d(kernel_size=(temporal_length, 1, 1))
         self.dataset_mode = dataset_mode
-        self.num_classes = num_classes
-        self.bbox_embed_diff_each_layer = bbox_embed_diff_each_layer
-        
-        self.query_dim = query_dim
-        assert query_dim in [2, 4]
-        self.efficient = efficient
-        if not efficient:
-            self.refpoint_embed = nn.Embedding(num_queries*temporal_length, 4)
-        else:
-            assert dataset_mode == "ava", "efficient mode is only for AVA"
-            self.refpoint_embed = nn.Embedding(num_queries, 4)
-        self.transformer.eff = efficient
-        self.random_refpoints_xy = random_refpoints_xy
-        if random_refpoints_xy:
-            # import ipdb; ipdb.set_trace()
-            self.refpoint_embed.weight.data[:, :2].uniform_(0,1)
-            self.refpoint_embed.weight.data[:, :2] = inverse_sigmoid(self.refpoint_embed.weight.data[:, :2])
-            self.refpoint_embed.weight.data[:, :2].requires_grad = False          
 
+        if self.dataset_mode != 'ava':
+            self.avg_s = nn.AdaptiveAvgPool3d((1, 1, 1))
+            self.query_embed = nn.Embedding(num_queries * temporal_length, hidden_dim)
+        else:
+            self.query_embed = nn.Embedding(num_queries, hidden_dim)
+            
         if "SWIN" in backbone_name:
-            if gpu_world_rank == 0: print_log(log_path, "using swin")
+            print("using swin")
             self.input_proj = nn.Conv3d(1024, hidden_dim, kernel_size=1)
             self.class_proj = nn.Conv3d(1024, hidden_dim, kernel_size=1)
         elif "SlowFast" in backbone_name:
@@ -80,64 +56,52 @@ class DETR(nn.Module):
             self.class_proj = nn.Conv3d(2048 + 512, hidden_dim, kernel_size=1)
         else:
             self.input_proj = nn.Conv3d(backbone.num_channels, hidden_dim, kernel_size=1)
-            # self.class_proj = nn.Conv3d(backbone.num_channels, hidden_dim, kernel_size=1)
-        nn.init.xavier_uniform_(self.input_proj.weight, gain=1)
-        nn.init.constant_(self.input_proj.bias, 0)    
-        # self.class_proj = nn.Conv3d(backbone.num_channels[-1], hidden_dim, kernel_size=(4,1,1))
+            self.class_proj = nn.Conv3d(backbone.num_channels, hidden_dim, kernel_size=1)
 
-        # encoder_layer = TransformerEncoderLayer(hidden_dim, 8, 2048, 0.1, "relu", normalize_before=False)
-        # self.encoder = TransformerEncoder(encoder_layer=encoder_layer, num_layers=2)
-        # decoder_layer = TransformerDecoderLayer(hidden_dim, 8, 2048, 0.1, "relu", normalize_before=False)        
-        # decoder_norm = nn.LayerNorm(hidden_dim)
-        # self.decoder = TransformerDecoder(decoder_layer=decoder_layer, num_layers=3, norm=decoder_norm, return_intermediate=True, query_dim=4, modulate_hw_attn=True, bbox_embed_diff_each_layer=True)
-        # self.num_patterns = 3
-        # self.num_pattern_level = 4
-        # self.patterns = nn.Embedding(self.num_patterns*self.num_pattern_level, hidden_dim)
-        prior_prob = 0.01
-        bias_value = -math.log((1 - prior_prob) / prior_prob)
+        encoder_layer = TransformerEncoderLayer(hidden_dim, 8, 2048, 0.1, "relu", normalize_before=False)
+        self.encoder = TransformerEncoder(encoder_layer, num_layers=1, norm=None)
+        self.cross_attn = nn.MultiheadAttention(256, num_heads=8, dropout=0.1)
+
         if self.dataset_mode == 'ava':
-            self.class_embed = nn.Linear(hidden_dim, num_classes)
             self.class_embed_b = nn.Linear(hidden_dim, 3)
-            self.class_embed.bias.data = torch.ones(num_classes) * bias_value
         else:
-            self.class_embed = nn.Linear(2*hidden_dim, num_classes+1)
-            self.class_embed_b = nn.Linear(hidden_dim, 3)
-            self.class_embed.bias.data = torch.ones(num_classes+1) * bias_value
-        
+            self.class_embed_b = nn.Linear(2048, 2)
+        self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
 
-        if bbox_embed_diff_each_layer:
-            self.bbox_embed = nn.ModuleList([MLP(hidden_dim, hidden_dim, 4, 3) for i in range(transformer.num_dec_layers)])
-            for bbox_embed in self.bbox_embed:
-                nn.init.constant_(bbox_embed.layers[-1].weight.data, 0)
-                nn.init.constant_(bbox_embed.layers[-1].bias.data, 0)
-        else:
-            self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
-            nn.init.constant_(self.bbox_embed.layers[-1].weight.data, 0)
-            nn.init.constant_(self.bbox_embed.layers[-1].bias.data, 0)
-
-
-        self.iter_update = iter_update
-        if self.iter_update:
-            self.transformer.decoder.bbox_embed = self.bbox_embed
-
-
+        # if self.dataset_mode == 'ava':
+        #     self.class_fc = nn.Linear(hidden_dim, num_classes)
+        # else:
+        #     self.class_fc = nn.Linear(hidden_dim, num_classes + 1)
         self.dropout = nn.Dropout(0.5)
 
         self.backbone = backbone
         self.aux_loss = aux_loss
-
-        self.two_stage = two_stage
         self.hidden_dim = hidden_dim
         self.is_swin = "SWIN" in backbone_name
         self.generate_lfb = generate_lfb
         self.last_stride = last_stride
-        self.training = training
+        self.freeze_backbone_ = freeze_backbone
 
+        self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
+        nn.init.constant_(self.bbox_embed.layers[-1].weight.data, 0)
+        nn.init.constant_(self.bbox_embed.layers[-1].bias.data, 0)
+        self.transformer.decoder.bbox_embed = self.bbox_embed
+        self.transformer.eff = True
+        self.refpoint_embed = nn.Embedding(num_queries, 4)
+        self.query_dim = query_dim
+
+    def freeze_backbone(self):
+        for param in self.backbone.parameters():
+            param.requires_grad = False
+        for _, param in self.backbone.body.named_parameters():
+            param.requires_grad = False
 
     def freeze_params(self):
         for param in self.backbone.parameters():
             param.requires_grad = False
         for param in self.transformer.parameters():
+            param.requires_grad = False
+        for param in self.query_embed.parameters():
             param.requires_grad = False
         for param in self.bbox_embed.parameters():
             param.requires_grad = False
@@ -145,20 +109,8 @@ class DETR(nn.Module):
             param.requires_grad = False
         for param in self.class_embed_b.parameters():
             param.requires_grad = False
-    
-    # def custom_backbone(self, module):
-    #     def custom_forward(*inputs):
-    #         inputs = module(*inputs)
-    #         return inputs
-    #     return custom_forward
-    
-    # def custom(self, module):
-    #     def custom_forward(*inputs):
-    #         inputs = module(*inputs)
-    #         return inputs
-    #     return custom_forward
 
-    def forward(self, samples: NestedTensor, targets=None):
+    def forward(self, samples: NestedTensor):
         """ The forward expects a NestedTensor, which consists of:
                - samples.tensor: batched images, of shape [batch_size x 3 x H x W]
                - samples.mask: a binary mask of shape [batch_size x H x W], containing 1 on padded pixels
@@ -175,68 +127,54 @@ class DETR(nn.Module):
         """
         if not isinstance(samples, NestedTensor):
             samples = nested_tensor_from_tensor_list(samples)
-        # features, pos = checkpoint.checkpoint(self.custom_backbone(self.backbone), samples)
-        features, pos = self.backbone(samples)
+
+        features, pos, xt = self.backbone(samples)
+        if self.freeze_backbone_:
+            for feature in features:
+                feature.tensors.detach()
+                xt.detach()
+
         src, mask = features[-1].decompose()
         assert mask is not None
-        # bs = samples.tensors.shape[0]
-        if not self.efficient:
-            embedweight = self.refpoint_embed.weight.view(self.num_queries, self.temporal_length, 4)      # nq, t, 4
-        else:
-            embedweight = self.refpoint_embed.weight.view(self.num_queries, 1, 4)  
-        # hs, cls_hs, reference = checkpoint.checkpoint(self.custom(self.transformer), self.input_proj(src), mask, embedweight, pos[-1])
-        hs, cls_hs, reference  = self.transformer(self.input_proj(src), mask, embedweight, pos[-1])
-        outputs_class_b = self.class_embed_b(hs)
-        ######## localization head
-        if not self.bbox_embed_diff_each_layer:
-            reference_before_sigmoid = inverse_sigmoid(reference)
-            tmp = self.bbox_embed(hs)
-            tmp[..., :self.query_dim] += reference_before_sigmoid
-            outputs_coord = tmp.sigmoid()
-        else:
-            reference_before_sigmoid = inverse_sigmoid(reference)
-            outputs_coords = []
-            for lvl in range(hs.shape[0]):
-                # hs.shape: lay_n, bs, nq, dim
-                tmp = self.bbox_embed[lvl](hs[lvl])
-                tmp[..., :self.query_dim] += reference_before_sigmoid[lvl]
-                outputs_coord = tmp.sigmoid()
-                outputs_coords.append(outputs_coord)
-            outputs_coord = torch.stack(outputs_coords)        
 
-        ######## mix temporal features for classification
-        # lay_n, bst, nq, dim = hs.shape
-        # hw, bst, ch = memory.shape
-        bs, _, t, h, w = src.shape
-        # memory = self.encoder(memory, src.shape, mask, pos_embed)
-        ##### prepare for the second decoder
-        # tgt = self.patterns.weight[:, None, None, :].repeat(1, self.num_queries, bs*t, 1).flatten(0, 1) # n_q*n_pat, bs, d_model
-        # embedweight = embedweight.repeat(self.num_patterns, bs, 1) # n_pat*n_q, bst, 4
-        # hs_c, ref_c = self.decoder(tgt, memory, memory_key_padding_mask=mask, pos=pos_embed, refpoints_unsigmoid=embedweight)
-        lay_n = self.transformer.decoder.num_layers
-        # outputs_class = self.class_embed(self.dropout(hs)).reshape(lay_n, bs*t, self.num_patterns, self.num_queries, -1).max(dim = 2)[0]
-        if not self.efficient:
-            outputs_class = self.class_embed(self.dropout(cls_hs)).reshape(lay_n, bs*t, self.num_queries, -1)
+        embedweight = self.refpoint_embed.weight.view(self.num_queries, 1, 4)
+        # hs = self.transformer(self.input_proj(src), mask, self.query_embed.weight, pos[-1])[0]
+        hs, cls_hs, reference  = self.transformer(self.input_proj(src), mask, embedweight, pos[-1])
+        if self.dataset_mode == 'ava':
+            outputs_class_b = self.class_embed_b(hs)
         else:
-            outputs_class = self.class_embed(self.dropout(cls_hs)).reshape(lay_n, bs, self.num_queries, -1)        
-        if self.dataset_mode == "ava":
-            if not self.efficient:
-                outputs_class = outputs_class.reshape(-1, bs, t, self.num_queries, self.num_classes)[:,:,self.temporal_length//2,:,:]
-                outputs_coord = outputs_coord.reshape(-1, bs, t, self.num_queries, 4)[:,:,self.temporal_length//2,:,:]
-                outputs_class_b = outputs_class_b.reshape(-1, bs, t, self.num_queries, 3)[:,:,self.temporal_length//2,:,:]
-            else:
-                outputs_class = outputs_class.reshape(-1, bs, self.num_queries, self.num_classes)
-                outputs_coord = outputs_coord.reshape(-1, bs, self.num_queries, 4)
-                outputs_class_b = outputs_class_b.reshape(-1, bs, self.num_queries, 3)
-        else:
-            outputs_class = outputs_class.reshape(-1, bs, t, self.num_queries, self.num_classes+1)
-            outputs_coord = outputs_coord.reshape(-1, bs, t, self.num_queries, 4)
-            outputs_class_b = outputs_class_b.reshape(-1, bs, t, self.num_queries, 3)
+            outputs_class_b = self.class_embed_b(self.avg_s(xt).squeeze(-1).squeeze(-1).squeeze(-1))
+            outputs_class_b = outputs_class_b.unsqueeze(0).repeat(6, 1, 1)
+        #############momentum
+        lay_n, bs, nb, dim = hs.shape
+
+        # src_c = self.class_proj(xt)
+
+        # hs_t_agg = hs.contiguous().view(lay_n, bs, 1, nb, dim)
+
+        # src_flatten = src_c.view(1, bs, self.hidden_dim, -1).repeat(lay_n, 1, 1, 1).view(lay_n * bs, self.hidden_dim, -1).permute(2, 0, 1).contiguous()
+        # if not self.is_swin:
+            # src_flatten, _ = self.encoder(src_flatten, orig_shape=src_c.shape)
+
+        # hs_query = hs_t_agg.view(lay_n * bs, nb, dim).permute(1, 0, 2).contiguous()
+        # q_class = self.cross_attn(hs_query, src_flatten, src_flatten)[0]
+        # q_class = q_class.permute(1, 0, 2).contiguous().view(lay_n, bs, nb, self.hidden_dim)
+
+        outputs_class = self.dropout(cls_hs).mean(dim=-1).reshape(lay_n, bs, self.num_queries, -1)
+        # outputs_class = self.class_fc(self.dropout(q_class))
+        # outputs_coord = self.bbox_embed(hs).sigmoid()
+        
+        reference_before_sigmoid = inverse_sigmoid(reference)
+        tmp = self.bbox_embed(hs)
+        tmp[..., :self.query_dim] += reference_before_sigmoid
+        outputs_coord = tmp.sigmoid()
+
         out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1], 'pred_logits_b': outputs_class_b[-1],}
         if self.aux_loss:
             out['aux_outputs'] = self._set_aux_loss(outputs_class, outputs_coord, outputs_class_b)
 
         return out
+
     @torch.jit.unused
     def _set_aux_loss(self, outputs_class, outputs_coord, outputs_class_b):
         # this is a workaround to make torchscript happy, as torchscript
@@ -244,20 +182,16 @@ class DETR(nn.Module):
         # as a dict having both a Tensor and a list.
 
         return [{'pred_logits': a, 'pred_boxes': b, 'pred_logits_b': c}
-                for a, b, c in zip(outputs_class[:-1], outputs_coord[:-1], outputs_class_b[:-1])]
+                for a, b ,c in zip(outputs_class[:-1], outputs_coord[:-1], outputs_class_b[:-1])]
 
 
 def build_model(cfg):
     if cfg.CONFIG.DATA.DATASET_NAME == 'ava':
-        from models.dab_conv_trans_detr.matcher import build_matcher
-    elif cfg.CONFIG.DATA.DATASET_NAME == 'jhmdb':
-        from models.dab_conv_trans_detr.matcher_ucf import build_matcher
+        from models.detr.matcher import build_matcher
     else:
-        from models.dab_conv_trans_detr.matcher_ucf_ import build_matcher
+        from models.detr.matcher_ucf import build_matcher
     num_classes = cfg.CONFIG.DATA.NUM_CLASSES
-    log_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
-    if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
-        print_log(log_path, 'num_classes', num_classes)
+    print('num_classes', num_classes)
 
     backbone = build_backbone(cfg)
     transformer = build_transformer(cfg)
@@ -266,7 +200,6 @@ def build_model(cfg):
                  transformer,
                  num_classes=cfg.CONFIG.DATA.NUM_CLASSES,
                  num_queries=cfg.CONFIG.MODEL.QUERY_NUM,
-                 num_frames=cfg.CONFIG.MODEL.TEMP_LEN,
                  aux_loss=cfg.CONFIG.TRAIN.AUX_LOSS,
                  hidden_dim=cfg.CONFIG.MODEL.D_MODEL,
                  temporal_length=cfg.CONFIG.MODEL.TEMP_LEN,
@@ -275,8 +208,11 @@ def build_model(cfg):
                  ds_rate=cfg.CONFIG.MODEL.DS_RATE,
                  last_stride=cfg.CONFIG.MODEL.LAST_STRIDE,
                  dataset_mode=cfg.CONFIG.DATA.DATASET_NAME,
-                 bbox_embed_diff_each_layer=cfg.CONFIG.MODEL.BBOX_EMBED_DIFF_EACH_LAYER,
-                 )
+                 freeze_backbone=cfg.CONFIG.FREEZE_BACKBONE)
+
+    if cfg.CONFIG.FREEZE_BACKBONE:
+        model.freeze_backbone()
+
 
     matcher = build_matcher(cfg)
     weight_dict = {'loss_ce': cfg.CONFIG.LOSS_COFS.DICE_COF, 'loss_bbox': cfg.CONFIG.LOSS_COFS.BBOX_COF}
@@ -303,24 +239,15 @@ def build_model(cfg):
                                     losses=losses,
                                     data_file=cfg.CONFIG.DATA.DATASET_NAME,
                                     evaluation=cfg.CONFIG.EVAL_ONLY)
-    elif cfg.CONFIG.DATA.DATASET_NAME == 'jhmdb':
-        criterion = SetCriterion(cfg.CONFIG.LOSS_COFS.WEIGHT,
-                                    num_classes,
-                                    num_queries=cfg.CONFIG.MODEL.QUERY_NUM,
-                                    matcher=matcher, weight_dict=weight_dict,
-                                    eos_coef=cfg.CONFIG.LOSS_COFS.EOS_COF,                                    
-                                    losses=losses,
-                                    data_file=cfg.CONFIG.DATA.DATASET_NAME,
-                                    evaluation=cfg.CONFIG.EVAL_ONLY)
     else:
-        criterion = SetCriterionUCF(cfg.CONFIG.LOSS_COFS.WEIGHT,
-                                    num_classes,
-                                    num_queries=cfg.CONFIG.MODEL.QUERY_NUM,
-                                    matcher=matcher, weight_dict=weight_dict,
-                                    eos_coef=cfg.CONFIG.LOSS_COFS.EOS_COF,                                    
-                                    losses=losses,
-                                    data_file=cfg.CONFIG.DATA.DATASET_NAME,
-                                    evaluation=cfg.CONFIG.EVAL_ONLY)
+        criterion = SetCriterion(cfg.CONFIG.LOSS_COFS.WEIGHT,
+                        num_classes,
+                        num_queries=cfg.CONFIG.MODEL.QUERY_NUM,
+                        matcher=matcher, weight_dict=weight_dict,
+                        eos_coef=cfg.CONFIG.LOSS_COFS.EOS_COF,
+                        losses=losses,
+                        data_file=cfg.CONFIG.DATA.DATASET_NAME,
+                        evaluation=cfg.CONFIG.EVAL_ONLY)
 
     postprocessors = {'bbox': PostProcessAVA() if cfg.CONFIG.DATA.DATASET_NAME == 'ava' else PostProcess()}
 
