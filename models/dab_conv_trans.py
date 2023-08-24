@@ -14,7 +14,7 @@ from utils.misc import (NestedTensor, nested_tensor_from_tensor_list,
 from utils.utils import print_log
 import os
 
-from models.backbone_builder2 import build_backbone
+from models.backbone_3d_builder import build_3d_backbone
 from models.detr.segmentation import (dice_loss, sigmoid_focal_loss)
 from models.dab_conv_trans_detr.dab_transformer import build_transformer
 # from models.transformer.transformer_layers import TransformerEncoderLayer, TransformerEncoder
@@ -78,8 +78,8 @@ class DETR(nn.Module):
             self.input_proj = nn.Conv3d(backbone.num_channels, hidden_dim, kernel_size=1)
             self.class_proj = nn.Conv3d(2048 + 512, hidden_dim, kernel_size=1)
         else:
-            self.input_proj = nn.Conv3d(backbone.num_channels, hidden_dim, kernel_size=1)
-            self.class_proj = nn.Conv3d(backbone.num_channels, hidden_dim, kernel_size=1)
+            self.input_proj = nn.Conv3d(backbone.num_channels[-1], hidden_dim, kernel_size=1)
+            self.class_proj = nn.Conv3d(backbone.num_channels[-1], hidden_dim, kernel_size=1)
         nn.init.xavier_uniform_(self.input_proj.weight, gain=1)
         nn.init.constant_(self.input_proj.bias, 0)    
         # self.class_proj = nn.Conv3d(backbone.num_channels[-1], hidden_dim, kernel_size=(4,1,1))
@@ -168,14 +168,18 @@ class DETR(nn.Module):
         if not isinstance(samples, NestedTensor):
             samples = nested_tensor_from_tensor_list(samples)
         features, pos = self.backbone(samples)
-        src, mask = features[-1].decompose()
-        assert mask is not None
+        # src, mask = features[-1].decompose()
+        srcs = torch.stack([feature.tensors for feature in features], dim=-1) # B, C, T, H, W, L
+        masks = torch.stack([feature.mask for feature in features], dim=-1) # B, T, H, W, L        
+        pos = torch.stack(pos, dim=-1) # B, C, T, H, W, L        
+
         # bs = samples.tensors.shape[0]
         if not self.efficient:
             embedweight = self.refpoint_embed.weight.view(self.num_queries, self.temporal_length, 4)      # nq, t, 4
         else:
             embedweight = self.refpoint_embed.weight.view(self.num_queries, 1, 4)  
-        hs, cls_hs, reference  = self.transformer(self.input_proj(src), mask, embedweight, pos[-1])
+        # hs, cls_hs, reference  = self.transformer(self.input_proj(src), mask, embedweight, pos[-1])
+        hs, cls_hs, reference  = self.transformer(srcs, masks, embedweight, pos)
         outputs_class_b = self.class_embed_b(hs)
         ######## localization head
         if not self.bbox_embed_diff_each_layer:
@@ -197,7 +201,7 @@ class DETR(nn.Module):
         ######## mix temporal features for classification
         # lay_n, bst, nq, dim = hs.shape
         # hw, bst, ch = memory.shape
-        bs, _, t, h, w = src.shape
+        bs, _, t, h, w, _ = srcs.shape
         # memory = self.encoder(memory, src.shape, mask, pos_embed)
         ##### prepare for the second decoder
         # tgt = self.patterns.weight[:, None, None, :].repeat(1, self.num_queries, bs*t, 1).flatten(0, 1) # n_q*n_pat, bs, d_model
@@ -249,7 +253,7 @@ def build_model(cfg):
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
         print_log(log_path, 'num_classes', num_classes)
 
-    backbone = build_backbone(cfg)
+    backbone = build_3d_backbone(cfg)
     transformer = build_transformer(cfg)
 
     model = DETR(backbone,

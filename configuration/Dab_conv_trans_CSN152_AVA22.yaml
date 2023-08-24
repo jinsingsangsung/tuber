@@ -17,8 +17,8 @@ CONFIG:
   USE_LOCATION: False
   EFFICIENT: False
   TRAIN:
-    EPOCH_NUM: 25
-    BATCH_SIZE: 4
+    EPOCH_NUM: 20
+    BATCH_SIZE: 2
     LR: 1e-4
     MIN_LR: 1e-6 # only if cosine scheduler is used
     LR_BACKBONE: 1e-5 # if <=0, freezes the backbone
@@ -27,8 +27,8 @@ CONFIG:
     LR_POLICY: 'cosine'
     USE_WARMUP: True # does nothing
     WARMUP_START_LR: 1e-5
-    WARMUP_EPOCHS: 3 # this determines whether to use Warmup unless using "step"
-    LR_MILESTONE: [12,17] #only for multistep
+    WARMUP_EPOCHS: 4 # this determines whether to use Warmup unless using "step"
+    LR_MILESTONE: [14] #only for multistep
     STEP: 0.1 # gamma for lr decay
     OPTIMIZER:
       NAME: ADAMW
@@ -57,7 +57,7 @@ CONFIG:
 
   MODEL:
     SINGLE_FRAME: True
-    BACKBONE_NAME: CSN-50
+    BACKBONE_NAME: CSN-152
     TEMPORAL_DS_STRATEGY: decode
     LAST_STRIDE: False
     GENERATE_LFB: False
@@ -75,7 +75,7 @@ CONFIG:
     TEMP_LEN: 32
     SAMPLE_RATE: 2
     PRETRAINED: True
-    PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_50_ft_kinetics_from_ig65m_f233743920.mat"
+    PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_152_ft_kinetics_from_ig65m_f126851907.mat"
     PRETRAIN_TRANSFORMER_DIR: "/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/Dab_clswise_271.pth"
     PRETRAINED_PATH: ""
     LOAD: False
@@ -117,6 +117,6 @@ CONFIG:
     SAVE_DIR: 'checkpoints'
     EVAL_DIR: '/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/AVA_Tuber/eval'
     SAVE_FREQ: 1
-    RES_DIR: Dab_conv_trans_{}-{}/res
-    EXP_NAME: Dab_conv_trans_{}-{}
+    RES_DIR: Dab_conv_trans_new_encoder_CSN152_{}-{}/res
+    EXP_NAME: Dab_conv_trans_new_encoder_CSN152_{}-{}
     DISPLAY_FREQ: 1000
