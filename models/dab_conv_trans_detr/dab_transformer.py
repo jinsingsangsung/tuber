@@ -20,6 +20,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn, Tensor
 from .attention import MultiheadAttention
+from models.transformer.transformer_layers import LSTRTransformerDecoder, LSTRTransformerDecoderLayer, layer_norm
 from einops import rearrange, repeat
 
 class MLP(nn.Module):
@@ -66,7 +67,7 @@ def gen_sineembed_for_position(pos_tensor):
 
 class Transformer(nn.Module):
 
-    def __init__(self, d_model=512, nhead=8, num_queries=300, num_encoder_layers=6,
+    def __init__(self, cfg, d_model=512, nhead=8, num_queries=300, num_encoder_layers=6,
                  num_decoder_layers=6, dim_feedforward=2048, dropout=0.1,
                  activation="relu", normalize_before=False,
                  return_intermediate_dec=False, query_dim=4,
@@ -116,6 +117,19 @@ class Transformer(nn.Module):
         if self.num_patterns > 0:
             self.patterns = nn.Embedding(self.num_patterns, d_model)
 
+        if cfg.CONFIG.MODEL.SINGLE_FRAME:
+            if cfg.CONFIG.MODEL.TEMPORAL_DS_STRATEGY == 'avg':
+                self.pool = nn.AvgPool3d((cfg.CONFIG.DATA.TEMP_LEN // cfg.CONFIG.MODEL.DS_RATE, 1, 1))
+                # print("avg pool: {}".format(cfg.CONFIG.DATA.TEMP_LEN // cfg.CONFIG.MODEL.DS_RATE))
+            elif cfg.CONFIG.MODEL.TEMPORAL_DS_STRATEGY == 'max':
+                self.pool = nn.MaxPool3d((cfg.CONFIG.DATA.TEMP_LEN // cfg.CONFIG.MODEL.DS_RATE, 1, 1))
+                print("max pool: {}".format(cfg.CONFIG.DATA.TEMP_LEN // cfg.CONFIG.MODEL.DS_RATE))
+            elif cfg.CONFIG.MODEL.TEMPORAL_DS_STRATEGY == 'decode':
+                self.query_pool = nn.Embedding(1, 2048)
+                self.pool_decoder = LSTRTransformerDecoder(
+                    LSTRTransformerDecoderLayer(d_model=2048, nhead=8, dim_feedforward=2048, dropout=0.1), 1,
+                    norm=layer_norm(d_model=2048, condition=True))
+
     def _reset_parameters(self):
         for p in self.parameters():
             if p.dim() > 1:
@@ -134,6 +148,14 @@ class Transformer(nn.Module):
         mask = masks[..., -1] # B, T, H, W
         pos = pos[..., -1] # B, C, T, H, W                
         
+        try:
+            srcs = srcs.view(bs, c, t, w * h).permute(2, 0, 3, 1).contiguous().view(t, bs * w * h, c)
+            query_embed = self.query_pool.weight.unsqueeze(1).repeat(1, bs * w * h, 1)
+            srcs = self.pool_decoder(query_embed, srcs)
+            srcs = srcs.view(1, bs, w * h, c).permute(1, 3, 0, 2).contiguous().view(bs, c, 1, w, h)            
+        except:
+            pass
+
         memory = rearrange(srcs.mean(dim=-1), 'B C T H W -> (H W) (B T) C')
         mask = rearrange(mask, 'B T H W -> B T (H W)')
         pos_embed = rearrange(pos, 'B C T H W -> (H W) (B T) C')
@@ -584,7 +606,7 @@ class TransformerDecoderLayer(nn.Module):
 class EncoderStage(nn.Module):
     def __init__(self,
                  feat_channels=256,
-                 num_pts=4,
+                 num_pts=8,
                  num_offsets=4,
                  num_levels=4,
                  feedforward_channels=2048,
@@ -787,7 +809,7 @@ def _get_clones(module, N):
 
 
 def build_transformer(cfg):
-    return Transformer(
+    return Transformer(cfg=cfg,
         d_model=cfg.CONFIG.MODEL.D_MODEL,
         dropout=cfg.CONFIG.MODEL.DROPOUT,
         nhead=cfg.CONFIG.MODEL.NHEAD,
