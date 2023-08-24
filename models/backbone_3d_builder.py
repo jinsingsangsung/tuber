@@ -20,7 +20,7 @@ from models.transformer.position_encoding import build_position_encoding
 
 from models.backbones.ir_CSN_50 import build_CSN
 from models.backbones.ir_CSN_152 import build_CSN as build_CSN_152
-import einops
+from einops import rearrange, repeat
 from models.transformer.transformer_layers import LSTRTransformerDecoder, LSTRTransformerDecoderLayer, layer_norm
 # from detectron2.layers import ShapeSpec
 
