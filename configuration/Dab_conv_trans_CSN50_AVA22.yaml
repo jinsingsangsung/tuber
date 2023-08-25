@@ -76,8 +76,8 @@ CONFIG:
     SAMPLE_RATE: 2
     PRETRAINED: True
     PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_50_ft_kinetics_from_ig65m_f233743920.mat"
-    PRETRAIN_TRANSFORMER_DIR: "/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/AVA_Tuber/Dab_hier_270-65/checkpoints/ckpt_epoch_16.pth"
-    PRETRAINED_PATH: "/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/AVA_Tuber/Dab_DN_D_/checkpoints/ckpt_epoch_0.pth"
+    PRETRAIN_TRANSFORMER_DIR: "/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/Dab_clswise_271.pth"
+    PRETRAINED_PATH: ""
     LOAD: False
     LOAD_FC: False
     LOAD_DETR: True
@@ -112,10 +112,10 @@ CONFIG:
     CLIPS_MAX_NORM: 0.1
 
   LOG:
-    BASE_PATH: '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/AVA_Tuber'
+    BASE_PATH: '/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/AVA_Tuber'
     LOG_DIR: 'tb_log'
     SAVE_DIR: 'checkpoints'
-    EVAL_DIR: '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/AVA_Tuber/eval'
+    EVAL_DIR: '/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/AVA_Tuber/eval'
     SAVE_FREQ: 1
     RES_DIR: Dab_conv_trans_{}-{}/res
     EXP_NAME: Dab_conv_trans_{}-{}
