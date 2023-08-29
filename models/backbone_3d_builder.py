@@ -195,7 +195,7 @@ def make_interpolated_features(features, pos=None, num_frames=32, level=0):
         dw = torch.linspace(-1, 1, W, device=features[0].device)
         dt = torch.linspace(-1, 1, num_frames, device=features[0].device)
         mesht, meshy, meshx= torch.meshgrid((dt, dh, dw))
-        grid = torch.stack((mesht, meshy, meshx), -1)
+        grid = torch.stack((meshx, meshy, mesht), -1)
         grid = grid[None].expand(B, *grid.size())
         for l, feature in enumerate(features):
             interpolated_features.append(
