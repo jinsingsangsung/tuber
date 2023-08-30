@@ -317,7 +317,7 @@ class Transformer(nn.Module):
         # src = src.flatten(2).permute(2, 0, 1) # hw, bst, c
         # pos_embed = pos_embed.permute(0,2,1,3,4).contiguous().flatten(0,1)
         # pos_embed = pos_embed.flatten(2).permute(2, 0, 1)
-        # refpoint_embed = refpoint_embed.repeat(1, bs, 1) #n_q, bs * t, 4
+        refpoint_embed = refpoint_embed.repeat(1, bs, 1) #n_q, bs * t, 4
         # mask = mask.flatten(0,1).flatten(1)
 
         # memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed, src_shape=src_shape) 
