@@ -80,7 +80,7 @@ class Transformer(nn.Module):
                  modulate_hw_attn=True,
                  bbox_embed_diff_each_layer=False,
                  num_feature_levels=4,
-                 enc_n_points=4,
+                 enc_n_points=8,
                  two_stage=False,
                  two_stage_num_proposals=300,
                  high_dim_query_update=False,
@@ -756,9 +756,9 @@ class TransformerDecoderLayer(nn.Module):
         self.ca_kpos_proj = nn.Linear(d_model, d_model)
         self.ca_v_proj = nn.Linear(d_model, d_model)
         self.ca_qpos_sine_proj = nn.Linear(d_model, d_model)
-        self.cross_attn = MultiheadAttention(d_model*2, nhead, dropout=dropout, vdim=d_model, query_specific_key=False)
+        self.cross_attn = MultiheadAttention(d_model*2, nhead, dropout=dropout, vdim=d_model, query_specific_key=True)
 
-        self.query_specific_key = False
+        self.query_specific_key = True
         self.nhead = nhead
         self.rm_self_attn_decoder = rm_self_attn_decoder
 
@@ -819,7 +819,6 @@ class TransformerDecoderLayer(nn.Module):
         # ========== Begin of Cross-Attention =============
         # Apply projections here
         # shape: num_queries x batch_size x 256
-        
         lvl_w = self.lvl_w_embed(tgt) # num_queries, BT, num_levels
         q_memory = torch.einsum("ntl,lhtc->nhtc", lvl_w, memory) # (N_q, BT, L), (L, HW, BT, C),  ->  N_q, HW, BT, C
         if self.query_specific_key:
