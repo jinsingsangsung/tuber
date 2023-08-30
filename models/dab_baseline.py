@@ -14,14 +14,13 @@ from utils.misc import (NestedTensor, nested_tensor_from_tensor_list,
 from utils.utils import print_log
 import os
 
-from models.backbone_builder2 import build_backbone
+from models.backbone_builder import build_backbone
 from models.detr.segmentation import (dice_loss, sigmoid_focal_loss)
 from models.dab_baseline_detr.dab_transformer import build_transformer
-# from models.transformer.transformer_layers import TransformerEncoderLayer, TransformerEncoder
 from models.dab_baseline_detr.criterion import PostProcess, PostProcessAVA, MLP
 from models.dab_baseline_detr.criterion import SetCriterion, SetCriterionAVA, SetCriterionUCF
-from models.dab_baseline_detr.transformer_layers import TransformerEncoderLayer, TransformerEncoder
-from models.dab_baseline_detr.dab_transformer import TransformerDecoderLayer, TransformerDecoder
+from models.transformer.transformer_layers import TransformerEncoderLayer, TransformerEncoder
+# from models.dab_baseline_detr.dab_transformer import TransformerDecoderLayer, TransformerDecoder
 # from models.dn_dab_deformable_detr.dn_components import prepare_for_dn, dn_post_process, compute_dn_loss
 
 import copy
@@ -85,8 +84,9 @@ class DETR(nn.Module):
         nn.init.constant_(self.input_proj.bias, 0)    
         # self.class_proj = nn.Conv3d(backbone.num_channels[-1], hidden_dim, kernel_size=(4,1,1))
 
-        # encoder_layer = TransformerEncoderLayer(hidden_dim, 8, 2048, 0.1, "relu", normalize_before=False)
-        # self.encoder = TransformerEncoder(encoder_layer=encoder_layer, num_layers=2)
+        encoder_layer = TransformerEncoderLayer(hidden_dim, 8, 2048, 0.1, "relu", normalize_before=False)
+        self.encoder = TransformerEncoder(encoder_layer=encoder_layer, num_layers=1, norm=None)
+        self.cross_attn = nn.MultiheadAttention(256, num_heads=8, dropout=0.1)
         # decoder_layer = TransformerDecoderLayer(hidden_dim, 8, 2048, 0.1, "relu", normalize_before=False)        
         # decoder_norm = nn.LayerNorm(hidden_dim)
         # self.decoder = TransformerDecoder(decoder_layer=decoder_layer, num_layers=3, norm=decoder_norm, return_intermediate=True, query_dim=4, modulate_hw_attn=True, bbox_embed_diff_each_layer=True)
@@ -163,16 +163,27 @@ class DETR(nn.Module):
         """
         if not isinstance(samples, NestedTensor):
             samples = nested_tensor_from_tensor_list(samples)
-        features, pos = self.backbone(samples)
+        features, pos, xt = self.backbone(samples)
         src, mask = features[-1].decompose()
         assert mask is not None
         # bs = samples.tensors.shape[0]
-        if not self.efficient:
-            embedweight = self.refpoint_embed.weight.view(self.num_queries, self.temporal_length, 4)      # nq, t, 4
-        else:
-            embedweight = self.refpoint_embed.weight.view(self.num_queries, 1, 4)  
+        embedweight = self.refpoint_embed.weight.view(self.num_queries, 1, 4)        
+
         hs, reference, mask = self.transformer(self.input_proj(src), mask, embedweight, pos[-1])
         outputs_class_b = self.class_embed_b(hs)
+        lay_n, bs, nb, dim = hs.shape
+
+        src_c = self.class_proj(xt)
+
+        hs_t_agg = hs.contiguous().view(lay_n, bs, 1, nb, dim)
+
+        src_flatten = src_c.view(1, bs, self.hidden_dim, -1).repeat(lay_n, 1, 1, 1).view(lay_n * bs, self.hidden_dim, -1).permute(2, 0, 1).contiguous()
+        if not self.is_swin:
+            src_flatten, _ = self.encoder(src_flatten, orig_shape=src_c.shape)
+
+        hs_query = hs_t_agg.view(lay_n * bs, nb, dim).permute(1, 0, 2).contiguous()
+        q_class = self.cross_attn(hs_query, src_flatten, src_flatten)[0]
+        q_class = q_class.permute(1, 0, 2).contiguous().view(lay_n, bs, nb, self.hidden_dim)        
         ######## localization head
         if not self.bbox_embed_diff_each_layer:
             reference_before_sigmoid = inverse_sigmoid(reference)
@@ -201,23 +212,20 @@ class DETR(nn.Module):
         # hs_c, ref_c = self.decoder(tgt, memory, memory_key_padding_mask=mask, pos=pos_embed, refpoints_unsigmoid=embedweight)
         lay_n = self.transformer.decoder.num_layers
         # outputs_class = self.class_embed(self.dropout(hs)).reshape(lay_n, bs*t, self.num_patterns, self.num_queries, -1).max(dim = 2)[0]
-        if not self.efficient:
-            outputs_class = self.class_embed(self.dropout(hs)).reshape(lay_n, bs*t, self.num_queries, -1)
-        else:
-            outputs_class = self.class_embed(self.dropout(hs)).reshape(lay_n, bs, self.num_queries, -1)        
-        if self.dataset_mode == "ava":
-            if not self.efficient:
-                outputs_class = outputs_class.reshape(-1, bs, t, self.num_queries, self.num_classes)[:,:,self.temporal_length//2,:,:]
-                outputs_coord = outputs_coord.reshape(-1, bs, t, self.num_queries, 4)[:,:,self.temporal_length//2,:,:]
-                outputs_class_b = outputs_class_b.reshape(-1, bs, t, self.num_queries, 3)[:,:,self.temporal_length//2,:,:]
-            else:
-                outputs_class = outputs_class.reshape(-1, bs, self.num_queries, self.num_classes)
-                outputs_coord = outputs_coord.reshape(-1, bs, self.num_queries, 4)
-                outputs_class_b = outputs_class_b.reshape(-1, bs, self.num_queries, 3)
-        else:
-            outputs_class = outputs_class.reshape(-1, bs, t, self.num_queries, self.num_classes+1)
-            outputs_coord = outputs_coord.reshape(-1, bs, t, self.num_queries, 4)
-            outputs_class_b = outputs_class_b.reshape(-1, bs, t, self.num_queries, 3)
+        outputs_class = self.class_embed(self.dropout(q_class)).reshape(lay_n, bs, self.num_queries, -1)        
+        # if self.dataset_mode == "ava":
+        #     if not self.efficient:
+        #         outputs_class = outputs_class.reshape(-1, bs, t, self.num_queries, self.num_classes)[:,:,self.temporal_length//2,:,:]
+        #         outputs_coord = outputs_coord.reshape(-1, bs, t, self.num_queries, 4)[:,:,self.temporal_length//2,:,:]
+        #         outputs_class_b = outputs_class_b.reshape(-1, bs, t, self.num_queries, 3)[:,:,self.temporal_length//2,:,:]
+        #     else:
+        #         outputs_class = outputs_class.reshape(-1, bs, self.num_queries, self.num_classes)
+        #         outputs_coord = outputs_coord.reshape(-1, bs, self.num_queries, 4)
+        #         outputs_class_b = outputs_class_b.reshape(-1, bs, self.num_queries, 3)
+        # else:
+        #     outputs_class = outputs_class.reshape(-1, bs, t, self.num_queries, self.num_classes+1)
+        #     outputs_coord = outputs_coord.reshape(-1, bs, t, self.num_queries, 4)
+        #     outputs_class_b = outputs_class_b.reshape(-1, bs, t, self.num_queries, 3)
             
         out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1], 'pred_logits_b': outputs_class_b[-1],}
         if self.aux_loss:
