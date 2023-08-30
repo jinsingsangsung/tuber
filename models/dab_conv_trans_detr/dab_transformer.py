@@ -350,7 +350,7 @@ class Transformer(nn.Module):
         # prepare input for the decoder
         memory = rearrange(memory, "B C T H W L -> L (H W) (B T) C")
         pos_embed = rearrange(pos_embed, "B C T H W L -> L (H W) (B T) C")
-        mask = rearrange(mask, "B T H W L -> (B T) (H W) L")
+        mask = rearrange(mask, "B T H W L -> (B T) (H W) L")[..., 0]
 
         hs, cls_hs, references = self.decoder(tgt, memory, memory_key_padding_mask=mask,
                           pos=pos_embed, refpoints_unsigmoid=refpoint_embed, orig_res=(h,w))
@@ -582,7 +582,6 @@ class TransformerDecoder(nn.Module):
                 query_sine_embed[..., self.d_model // 2:] *= (refHW_cond[..., 0] / obj_center[..., 2]).unsqueeze(-1)
                 query_sine_embed[..., :self.d_model // 2] *= (refHW_cond[..., 1] / obj_center[..., 3]).unsqueeze(-1)
 
-
             output, actor_feature, q_memory = layer(output, memory, tgt_mask=tgt_mask,
                            memory_mask=memory_mask,
                            tgt_key_padding_mask=tgt_key_padding_mask,
@@ -601,7 +600,7 @@ class TransformerDecoder(nn.Module):
             actor_feature_expanded = actor_feature.flatten(0,1)[..., None, None].expand(-1, -1, h, w) # N_q*B, D, H, W
             # q_memory: N_q, HW, BT, C
             encoded_feature_expanded = rearrange(q_memory, "N (H W) B C -> (N B) C H W", H=h, W=w)
-            # encoded_feature_expanded = memory[:, None].expand(-1, len(tgt), -1, -1).flatten(1,2).view(h,w,-1,actor_feature.shape[-1]).permute(2,3,0,1) # N_q*B, D, H, W
+            # encoded_feature_expanded = memory.mean(0)[:, None].expand(-1, len(tgt), -1, -1).flatten(1,2).view(h,w,-1,actor_feature.shape[-1]).permute(2,3,0,1) # N_q*B, D, H, W
 
             cls_feature = self.conv_activation(self.conv1(torch.cat([actor_feature_expanded, encoded_feature_expanded], dim=1)))
             cls_feature = self.conv_activation(self.conv2(cls_feature))
@@ -757,8 +756,9 @@ class TransformerDecoderLayer(nn.Module):
         self.ca_kpos_proj = nn.Linear(d_model, d_model)
         self.ca_v_proj = nn.Linear(d_model, d_model)
         self.ca_qpos_sine_proj = nn.Linear(d_model, d_model)
-        self.cross_attn = MultiheadAttention(d_model*2, nhead, dropout=dropout, vdim=d_model, query_specific_key=True)
+        self.cross_attn = MultiheadAttention(d_model*2, nhead, dropout=dropout, vdim=d_model, query_specific_key=False)
 
+        self.query_specific_key = False
         self.nhead = nhead
         self.rm_self_attn_decoder = rm_self_attn_decoder
 
@@ -821,15 +821,21 @@ class TransformerDecoderLayer(nn.Module):
         # shape: num_queries x batch_size x 256
         
         lvl_w = self.lvl_w_embed(tgt) # num_queries, BT, num_levels
-        memory = torch.einsum("ntl,lhtc->nhtc", lvl_w, memory) # (N_q, BT, L), (L, HW, BT, C),  ->  N_q, HW, BT, C
+        q_memory = torch.einsum("ntl,lhtc->nhtc", lvl_w, memory) # (N_q, BT, L), (L, HW, BT, C),  ->  N_q, HW, BT, C
+        if self.query_specific_key:
+            memory = q_memory
+        else:
+            memory = memory.mean(0)
         q_content = self.ca_qcontent_proj(tgt)
         k_content = self.ca_kcontent_proj(memory)
         v = self.ca_v_proj(memory)
 
         num_queries, bs, n_model = q_content.shape
-        _, hw, _, _ = k_content.shape
-
-        k_pos = self.ca_kpos_proj(pos)[0:1].expand(num_queries, -1, -1, -1)
+        hw = k_content.shape[-3]
+        if self.query_specific_key:
+            k_pos = self.ca_kpos_proj(pos)[0:1].expand(num_queries, -1, -1, -1)
+        else:
+            k_pos = self.ca_kpos_proj(pos)[0]
 
         # For the first decoder layer, we concatenate the positional embedding predicted from 
         # the object query (the positional embedding) into the original query (key) in DETR.
@@ -845,10 +851,14 @@ class TransformerDecoderLayer(nn.Module):
         query_sine_embed = self.ca_qpos_sine_proj(query_sine_embed)
         query_sine_embed = query_sine_embed.view(num_queries, bs, self.nhead, n_model//self.nhead)
         q = torch.cat([q, query_sine_embed], dim=3).view(num_queries, bs, n_model * 2)
-        k = k.view(num_queries, hw, bs, self.nhead, n_model//self.nhead)
-        k_pos = k_pos.view(num_queries, hw, bs, self.nhead, n_model//self.nhead)
-        k = torch.cat([k, k_pos], dim=4).view(num_queries, hw, bs, n_model * 2)
-        # k = torch.cat([k, k_pos], dim=3).view(hw, bs, n_model * 2)
+        if self.query_specific_key:
+            k = k.view(num_queries, hw, bs, self.nhead, n_model//self.nhead)
+            k_pos = k_pos.view(num_queries, hw, bs, self.nhead, n_model//self.nhead)
+            k = torch.cat([k, k_pos], dim=4).view(num_queries, hw, bs, n_model * 2)
+        else:
+            k = k.view(hw, bs, self.nhead, n_model//self.nhead)
+            k_pos = k_pos.view(hw, bs, self.nhead, n_model//self.nhead)
+            k = torch.cat([k, k_pos], dim=3).view(hw, bs, n_model * 2)
 
         tgt2 = self.cross_attn(query=q,
                                    key=k,
@@ -862,7 +872,7 @@ class TransformerDecoderLayer(nn.Module):
         tgt2 = self.linear2(self.dropout(self.activation(self.linear1(tgt))))
         tgt = tgt + self.dropout3(tgt2)
         tgt = self.norm3(tgt)
-        return tgt, tgt_temp, memory
+        return tgt, tgt_temp, q_memory
 
 
 def _get_clones(module, N):
