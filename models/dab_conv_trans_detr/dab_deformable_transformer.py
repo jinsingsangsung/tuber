@@ -108,11 +108,11 @@ class DeformableTransformer(nn.Module):
             grid_t, grid_y, grid_x = torch.meshgrid(torch.linspace(0, T_ - 1, T_, dtype=torch.float32, device=memory.device),
                                             torch.linspace(0, H_ - 1, H_, dtype=torch.float32, device=memory.device),
                                             torch.linspace(0, W_ - 1, W_, dtype=torch.float32, device=memory.device))
-            grid = torch.cat([grid_t.unsqueeze(-1), grid_x.unsqueeze(-1), grid_y.unsqueeze(-1)], -1)
-            scale = torch.cat([valid_T.unsqueeze(-1), valid_W.unsqueeze(-1), valid_H.unsqueeze(-1)], 1).view(N_, 1, 1, 3)
+            grid = torch.cat([grid_x.unsqueeze(-1), grid_y.unsqueeze(-1)], grid_t.unsqueeze(-1), -1)
+            scale = torch.cat([valid_W.unsqueeze(-1), valid_H.unsqueeze(-1)], valid_T.unsqueeze(-1), 1).view(N_, 1, 1, 3)
             grid = (grid.unsqueeze(0).expand(N_, -1, -1, -1, -1) + 0.5) / scale
-            twh = torch.ones_like(grid) * 0.05 * (2.0 ** lvl)
-            proposal = torch.cat((grid, twh), -1).view(N_, -1, 6)
+            wht = torch.ones_like(grid) * 0.05 * (2.0 ** lvl)
+            proposal = torch.cat((grid, wht), -1).view(N_, -1, 6)
             proposals.append(proposal)
             _cur += (T_ * H_ * W_)
         output_proposals = torch.cat(proposals, 1)
@@ -135,7 +135,7 @@ class DeformableTransformer(nn.Module):
         valid_ratio_t = valid_T.float() / T
         valid_ratio_h = valid_H.float() / H
         valid_ratio_w = valid_W.float() / W
-        valid_ratio = torch.stack([valid_ratio_t, valid_ratio_w, valid_ratio_h], -1)
+        valid_ratio = torch.stack([valid_ratio_w, valid_ratio_h, valid_ratio_t], -1)
         return valid_ratio
 
     def forward(self, srcs, masks, pos_embeds, query_embed=None):
@@ -279,10 +279,10 @@ class DeformableTransformerEncoder(nn.Module):
                                           torch.linspace(0.5, H_ - 0.5, H_, dtype=torch.float32, device=device),
                                           torch.linspace(0.5, W_ - 0.5, W_, dtype=torch.float32, device=device)
                                           )
-            ref_t = ref_t.reshape(-1)[None] / (valid_ratios[:, None, lvl, 0] * T_)
-            ref_y = ref_y.reshape(-1)[None] / (valid_ratios[:, None, lvl, 2] * H_)
-            ref_x = ref_x.reshape(-1)[None] / (valid_ratios[:, None, lvl, 1] * W_)
-            ref = torch.stack((ref_t, ref_x, ref_y), -1)
+            ref_t = ref_t.reshape(-1)[None] / (valid_ratios[:, None, lvl, 2] * T_)
+            ref_y = ref_y.reshape(-1)[None] / (valid_ratios[:, None, lvl, 1] * H_)
+            ref_x = ref_x.reshape(-1)[None] / (valid_ratios[:, None, lvl, 0] * W_)
+            ref = torch.stack((ref_x, ref_y, ref_t), -1)
             reference_points_list.append(ref)
 
         reference_points = torch.cat(reference_points_list, 1)
