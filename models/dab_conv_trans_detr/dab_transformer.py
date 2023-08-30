@@ -18,8 +18,14 @@ from utils.misc import inverse_sigmoid
 
 import torch
 import torch.nn.functional as F
+from torch.nn.init import xavier_uniform_, constant_, uniform_, normal_
 from torch import nn, Tensor
 from .attention import MultiheadAttention
+
+from models.transformer.util.misc import NestedTensor
+from utils.misc import inverse_sigmoid
+from .ops.modules import MSDeformAttn, MSDeformAttn3D
+from einops import rearrange
 
 class MLP(nn.Module):
     """ Very simple multi-layer perceptron (also called FFN)"""
@@ -73,15 +79,24 @@ class Transformer(nn.Module):
                  num_patterns=0,
                  modulate_hw_attn=True,
                  bbox_embed_diff_each_layer=False,
+                 num_feature_levels=4,
+                 enc_n_points=4,
+                 two_stage=False,
+                 two_stage_num_proposals=300,
+                 high_dim_query_update=False,
+                 no_sine_embed=False
                  ):
 
         super().__init__()
 
-        encoder_layer = TransformerEncoderLayer(d_model, nhead, dim_feedforward,
-                                                dropout, activation, normalize_before)
-        encoder_norm = nn.LayerNorm(d_model) if normalize_before else None
-        self.encoder = TransformerEncoder(encoder_layer, num_encoder_layers, encoder_norm)
-
+        # encoder_layer = TransformerEncoderLayer(d_model, nhead, dim_feedforward,
+        #                                         dropout, activation, normalize_before)
+        # encoder_norm = nn.LayerNorm(d_model) if normalize_before else None
+        # self.encoder = TransformerEncoder(encoder_layer, num_encoder_layers, encoder_norm)
+        encoder_layer = DeformableTransformerEncoderLayer(d_model, dim_feedforward,
+                                                          dropout, activation,
+                                                          num_feature_levels, nhead, enc_n_points)
+        self.encoder = DeformableTransformerEncoder(encoder_layer, num_encoder_layers)
         decoder_layer = TransformerDecoderLayer(d_model, nhead, dim_feedforward,
                                                 dropout, activation, normalize_before, keep_query_pos=keep_query_pos)
         decoder_norm = nn.LayerNorm(d_model)
@@ -90,57 +105,344 @@ class Transformer(nn.Module):
                                           d_model=d_model, query_dim=query_dim, keep_query_pos=keep_query_pos, query_scale_type=query_scale_type,
                                           modulate_hw_attn=modulate_hw_attn,
                                           bbox_embed_diff_each_layer=bbox_embed_diff_each_layer)
+        
+        self.level_embed = nn.Parameter(torch.Tensor(num_feature_levels, d_model))
+        if two_stage:
+            self.enc_output = nn.Linear(d_model, d_model)
+            self.enc_output_norm = nn.LayerNorm(d_model)
+            self.pos_trans = nn.Linear(d_model * 2, d_model * 2)
+            self.pos_trans_norm = nn.LayerNorm(d_model * 2)
 
-        self._reset_parameters()
         assert query_scale_type in ['cond_elewise', 'cond_scalar', 'fix_elewise']
 
         self.d_model = d_model
         self.nhead = nhead
+        self.two_stage = two_stage
+        self.two_stage_num_proposals = two_stage_num_proposals
         self.num_dec_layers = num_decoder_layers
         self.num_queries = num_queries
         self.num_patterns = num_patterns
+        self.num_feature_levels = num_feature_levels
         if not isinstance(num_patterns, int):
             Warning("num_patterns should be int but {}".format(type(num_patterns)))
             self.num_patterns = 0
         if self.num_patterns > 0:
             self.patterns = nn.Embedding(self.num_patterns, d_model)
 
+        self._reset_parameters()
+
     def _reset_parameters(self):
         for p in self.parameters():
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
+        for m in self.modules():
+            if isinstance(m, MSDeformAttn3D):
+                m._reset_parameters()
+        normal_(self.level_embed)
 
-    def forward(self, src, mask, refpoint_embed, pos_embed):
-        # flatten NxCxHxW to HWxNxC
-        bs, c, t, h, w = src.shape
-        src_shape = src.shape
-        src = src.permute(0,2,1,3,4).contiguous()
-        src = src.reshape(bs, t, c, h, w).flatten(0,1) # bs*t, c, h, w
-        src = src.flatten(2).permute(2, 0, 1) # hw, bst, c
-        pos_embed = pos_embed.permute(0,2,1,3,4).contiguous().flatten(0,1)
-        pos_embed = pos_embed.flatten(2).permute(2, 0, 1)
-        refpoint_embed = refpoint_embed.repeat(1, bs, 1) #n_q, bs * t, 4
-        mask = mask.flatten(0,1).flatten(1)
+    def get_proposal_pos_embed(self, proposals):
+        num_pos_feats = 128
+        temperature = 10000
+        scale = 2 * math.pi
 
-        memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed, src_shape=src_shape) 
+        dim_t = torch.arange(num_pos_feats, dtype=torch.float32, device=proposals.device)
+        dim_t = temperature ** (2 * (dim_t // 2) / num_pos_feats)
+        # N, L, 4
+        proposals = proposals.sigmoid() * scale
+        # N, L, 4, 128
+        pos = proposals[:, :, :, None] / dim_t
+        # N, L, 4, 64, 2
+        pos = torch.stack((pos[:, :, :, 0::2].sin(), pos[:, :, :, 1::2].cos()), dim=4).flatten(2)
+        return pos
+
+    def gen_encoder_output_proposals(self, memory, memory_padding_mask, spatio_temporal_shapes):
+        N_, S_, C_ = memory.shape
+        base_scale = 4.0
+        proposals = []
+        _cur = 0
+        for lvl, (T_, H_, W_) in enumerate(spatio_temporal_shapes):
+            mask_flatten_ = memory_padding_mask[:, _cur:(_cur + T_ * H_ * W_)].view(N_, T_, H_, W_, 1)
+            valid_T = torch.sum(~mask_flatten_[:, :, 0, 0, 0], 1)
+            valid_H = torch.sum(~mask_flatten_[:, 0, :, 0, 0], 1)
+            valid_W = torch.sum(~mask_flatten_[:, 0, 0, :, 0], 1)
+
+            grid_t, grid_y, grid_x = torch.meshgrid(torch.linspace(0, T_ - 1, T_, dtype=torch.float32, device=memory.device),
+                                            torch.linspace(0, H_ - 1, H_, dtype=torch.float32, device=memory.device),
+                                            torch.linspace(0, W_ - 1, W_, dtype=torch.float32, device=memory.device))
+            grid = torch.cat([grid_x.unsqueeze(-1), grid_y.unsqueeze(-1)], grid_t.unsqueeze(-1), -1)
+            scale = torch.cat([valid_W.unsqueeze(-1), valid_H.unsqueeze(-1)], valid_T.unsqueeze(-1), 1).view(N_, 1, 1, 3)
+            grid = (grid.unsqueeze(0).expand(N_, -1, -1, -1, -1) + 0.5) / scale
+            wht = torch.ones_like(grid) * 0.05 * (2.0 ** lvl)
+            proposal = torch.cat((grid, wht), -1).view(N_, -1, 6)
+            proposals.append(proposal)
+            _cur += (T_ * H_ * W_)
+        output_proposals = torch.cat(proposals, 1)
+        output_proposals_valid = ((output_proposals > 0.01) & (output_proposals < 0.99)).all(-1, keepdim=True)
+        output_proposals = torch.log(output_proposals / (1 - output_proposals))
+        output_proposals = output_proposals.masked_fill(memory_padding_mask.unsqueeze(-1), float('inf'))
+        output_proposals = output_proposals.masked_fill(~output_proposals_valid, float('inf'))
+
+        output_memory = memory
+        output_memory = output_memory.masked_fill(memory_padding_mask.unsqueeze(-1), float(0))
+        output_memory = output_memory.masked_fill(~output_proposals_valid, float(0))
+        output_memory = self.enc_output_norm(self.enc_output(output_memory))
+        return output_memory, output_proposals
+
+    def get_valid_ratio(self, mask): # using mask, see the valid t,h,w area in flattened space
+        _, T, H, W = mask.shape
+        valid_T = torch.sum(~mask[:, :, 0, 0], 1)
+        valid_H = torch.sum(~mask[:, 0, :, 0], 1)
+        valid_W = torch.sum(~mask[:, 0, 0, :], 1)
+        valid_ratio_t = valid_T.float() / T
+        valid_ratio_h = valid_H.float() / H
+        valid_ratio_w = valid_W.float() / W
+        valid_ratio = torch.stack([valid_ratio_w, valid_ratio_h, valid_ratio_t], -1)
+        return valid_ratio
+
+    def make_interpolated_features(self, features, pos=None, num_frames=32, level=0):
+        '''
+            features: list of tensors [B, C, T, H_l, W_l]
+                    l = 0, 1, ..., num_feats-1
+            return: list of tensors [B, C, T, H_0, W_0]
+        '''
+        interpolated_features = []
+        n_levels = len(features)
+        assert level < n_levels-1, f"target feature level {level} should be less than the number of feature level {len(features)}"
+        use_mask = isinstance(features[0], NestedTensor)
+        if use_mask:
+            tensors = [feature.tensors for feature in features]
+            mask = features[level].mask
+            mask = mask.repeat(1, num_frames//mask.size(1), 1, 1)
+            features = tensors
+
+        B, C, T, H, W = features[level].shape
+        if T == num_frames:
+            dh = torch.linspace(-1, 1, H, device=features[0].device)
+            dw = torch.linspace(-1, 1, W, device=features[0].device)
+            meshy, meshx = torch.meshgrid((dh, dw))
+            grid = torch.stack((meshy, meshx), 2)
+            grid = grid[None].expand(B*T, *grid.size())
+            for l, feature in enumerate(features):
+                feature = rearrange(feature, 'b c t h w -> (b t) c h w')
+                interpolated_features.append(
+                    F.grid_sample(
+                        feature, grid,
+                        mode='bilinear', padding_mode='zeros', align_corners=False,            
+                    ).view(B,T,C,H,W).transpose(1,2).contiguous()
+                )
+        else:
+            dh = torch.linspace(-1, 1, H, device=features[0].device)
+            dw = torch.linspace(-1, 1, W, device=features[0].device)
+            dt = torch.linspace(-1, 1, num_frames, device=features[0].device)
+            mesht, meshy, meshx= torch.meshgrid((dt, dh, dw))
+            grid = torch.stack((meshx, meshy, mesht), -1)
+            grid = grid[None].expand(B, *grid.size())
+            for l, feature in enumerate(features):
+                interpolated_features.append(
+                    F.grid_sample(
+                        feature, grid,
+                        mode='bilinear', padding_mode='zeros', align_corners=False,
+                    )
+                )
+        if use_mask:
+            if not pos is None:
+                pos[level] = pos[level].repeat(1, 1, num_frames//pos[level].size(2), 1, 1)
+                return [NestedTensor(inter_feat, mask) for inter_feat in interpolated_features], [pos[level]]*n_levels
+            else:
+                return [NestedTensor(inter_feat, mask) for inter_feat in interpolated_features], None
+        if not pos is None:
+            pos[level] = pos[level].repeat(1, 1, num_frames//pos[level].size(2), 1, 1)
+            return interpolated_features, [pos[level]]*n_levels
+        else:
+            return interpolated_features, None
+
+    def forward(self, srcs, masks, pos_embeds, refpoint_embed=None):
+        """
+        Input:
+            - srcs: List([bs, c, t, h, w])
+            - masks: List([bs, t, h, w])
+            - pos_embeds: List([bs, c, t, h, w])
+            - refpoint_embed: take either torch.Tensor([nq, d+4]) or torch.Tensor([b, nq, d+4])
+        """ 
+        assert self.two_stage or refpoint_embed is not None
+
+        # prepare input for encoder
+        src_flatten = []
+        mask_flatten = []
+        lvl_pos_embed_flatten = []
+        spatio_temporal_shapes = []
+        for lvl, (src, mask, pos_embed) in enumerate(zip(srcs, masks, pos_embeds)):
+            bs, c, t, h, w = src.shape
+            spatio_temporal_shape = (t, h, w)
+            spatio_temporal_shapes.append(spatio_temporal_shape)
+
+            src = src.flatten(2).transpose(1, 2)                # bs, thw, c
+            mask = mask.flatten(1)                              # bs, thw
+            pos_embed = pos_embed.flatten(2).transpose(1, 2)    # bs, thw, c
+            lvl_pos_embed = pos_embed + self.level_embed[lvl].view(1, 1, -1)
+            lvl_pos_embed_flatten.append(lvl_pos_embed)
+            src_flatten.append(src)
+            mask_flatten.append(mask)
+
+        src_flatten = torch.cat(src_flatten, 1)     # bs, \sum{txhxw}, c 
+        mask_flatten = torch.cat(mask_flatten, 1)   # bs, \sum{txhxw}
+        lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)
+        spatio_temporal_shapes = torch.as_tensor(spatio_temporal_shapes, dtype=torch.long, device=src_flatten.device)
+        level_start_index = torch.cat((spatio_temporal_shapes.new_zeros((1, )), spatio_temporal_shapes.prod(1).cumsum(0)[:-1]))
+        valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
+
+        # encoder
+        memory = self.encoder(src_flatten, spatio_temporal_shapes, level_start_index, valid_ratios, lvl_pos_embed_flatten, mask_flatten)
+        
+        # revert to the original shape
+        srcs_per_lvl = []
+        poses_per_lvl = []
+        for i, (index, shape) in enumerate(zip(level_start_index, spatio_temporal_shapes)):
+            if i < self.num_feature_levels-1:
+                src_l = memory[:, index:level_start_index[i+1], :]
+                pos_l = lvl_pos_embed_flatten[:, index:level_start_index[i+1], :]
+            else:
+                src_l = memory[:, index:, :]
+                pos_l = lvl_pos_embed_flatten[:, index:, :]
+            src_l = src_l.reshape(-1, *shape, self.d_model).permute(0,4,1,2,3)
+            pos_l = pos_l.reshape(-1, *shape, self.d_model).permute(0,4,1,2,3)
+            srcs_per_lvl.append(NestedTensor(src_l, masks[i]))
+            poses_per_lvl.append(pos_l)
+        
+        features_per_lvl, poses_per_lvl = self.make_interpolated_features(srcs_per_lvl, poses_per_lvl, level=-2)
+        # bs, c, t, h, w = src.shape
+        # src_shape = src.shape
+        # src = src.permute(0,2,1,3,4).contiguous()
+        # src = src.reshape(bs, t, c, h, w).flatten(0,1) # bs*t, c, h, w
+        # src = src.flatten(2).permute(2, 0, 1) # hw, bst, c
+        # pos_embed = pos_embed.permute(0,2,1,3,4).contiguous().flatten(0,1)
+        # pos_embed = pos_embed.flatten(2).permute(2, 0, 1)
+        # refpoint_embed = refpoint_embed.repeat(1, bs, 1) #n_q, bs * t, 4
+        # mask = mask.flatten(0,1).flatten(1)
+
+        # memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed, src_shape=src_shape) 
         # temporal dimension is alive
         # query_embed = gen_sineembed_for_position(refpoint_embed)
+        intpltd_srcs_per_lvl = []
+        intpltd_masks_per_lvl = []
+        for feature in features_per_lvl:
+            intpltd_srcs_per_lvl.append(feature.tensors)
+            intpltd_masks_per_lvl.append(feature.mask)
+        
+        srcs_per_lvl = torch.stack(intpltd_srcs_per_lvl, dim=-1) # bs, c, t, h, w, l
+        masks_per_lvl = torch.stack(intpltd_masks_per_lvl, dim=-1)
+        poses_per_lvl = torch.stack(poses_per_lvl, dim=-1) # bs, c, t, h, w, l
+
+        bs, c, t, h, w, l = srcs_per_lvl.shape
         num_queries = refpoint_embed.shape[0]
+        
         if self.eff:
-            memory = memory.reshape(-1, bs, t, c)[:,:,t//2:t//2+1,:].flatten(1,2)
-            pos_embed = pos_embed.reshape(-1, bs, t, c)[:,:,t//2:t//2+1,:].flatten(1,2)
-            mask = mask.reshape(bs, t, -1)[:,t//2:t//2+1,:].flatten(0,1)
+            memory = srcs_per_lvl[:,:,t//2:t//2+1,:,:,:]
+            pos_embed = poses_per_lvl[:,:,t//2:t//2+1,:,:,:]
+            mask = masks_per_lvl[:,t//2:t//2+1,:,:,:]
             tgt = torch.zeros(num_queries, bs, self.d_model, device=refpoint_embed.device)
         else:
+            memory = srcs_per_lvl
+            pos_embed = poses_per_lvl
+            mask = masks_per_lvl
             tgt = torch.zeros(num_queries, bs*t, self.d_model, device=refpoint_embed.device)
-        # tgt, refpoint_embed = pattern_expansion(num_patterns, num_pattern_levels, self.patterns, refpoint_embed)
-        # tgt = self.patterns.weight[:, None, None, :].repeat(1, self.num_queries, bs*t, 1).flatten(0, 1) # n_q*n_pat, bs, d_model
-        # refpoint_embed = refpoint_embed.repeat(self.num_patterns, 1, 1) # n_pat*n_q, bs*t, d_model
-            # import ipdb; ipdb.set_trace()
+        
+        # prepare input for the decoder
+        memory = rearrange(memory, "B C T H W L -> L (H W) (B T) C")
+        pos_embed = rearrange(pos_embed, "B C T H W L -> L (H W) (B T) C")
+        mask = rearrange(mask, "B T H W L -> (B T) (H W) L")
+
         hs, cls_hs, references = self.decoder(tgt, memory, memory_key_padding_mask=mask,
                           pos=pos_embed, refpoints_unsigmoid=refpoint_embed, orig_res=(h,w))
         return hs, cls_hs, references
 
+
+class DeformableTransformerEncoder(nn.Module):
+    def __init__(self, encoder_layer, num_layers):
+        super().__init__()
+        self.layers = _get_clones(encoder_layer, num_layers)
+        self.num_layers = num_layers
+
+    @staticmethod
+    def get_reference_points(spatio_temporal_shapes, valid_ratios, device):
+        reference_points_list = []
+        for lvl, (T_, H_, W_) in enumerate(spatio_temporal_shapes):
+
+            ref_t, ref_y, ref_x = torch.meshgrid(torch.linspace(0.5, T_ - 0.5, T_, dtype=torch.float32, device=device),
+                                          torch.linspace(0.5, H_ - 0.5, H_, dtype=torch.float32, device=device),
+                                          torch.linspace(0.5, W_ - 0.5, W_, dtype=torch.float32, device=device)
+                                          )
+            ref_t = ref_t.reshape(-1)[None] / (valid_ratios[:, None, lvl, 2] * T_)
+            ref_y = ref_y.reshape(-1)[None] / (valid_ratios[:, None, lvl, 1] * H_)
+            ref_x = ref_x.reshape(-1)[None] / (valid_ratios[:, None, lvl, 0] * W_)
+            ref = torch.stack((ref_x, ref_y, ref_t), -1)
+            reference_points_list.append(ref)
+
+        reference_points = torch.cat(reference_points_list, 1)
+        reference_points = reference_points[:, :, None] * valid_ratios[:, None]
+        return reference_points
+
+    def forward(self, src, spatio_temporal_shapes, level_start_index, valid_ratios, pos=None, padding_mask=None):
+        """
+        Input:
+            - src: [bs, sum(ti*hi*wi), 256]
+            - spatio_temporal_shapes: h,w of each level [num_level, 3]
+            - level_start_index: [num_level] start point of level in sum(ti*hi*wi).
+            - valid_ratios: [bs, num_level, 3]
+            - pos: pos embed for src. [bs, sum(ti*hi*wi), 256]
+            - padding_mask: [bs, sum(ti*hi*wi)]
+        Intermedia:
+            - reference_points: [bs, sum(ti*hi*wi), num_level, 2]
+        """
+        output = src
+        # bs, sum(ti*hi*wi), 256
+        # import ipdb; ipdb.set_trace()
+        reference_points = self.get_reference_points(spatio_temporal_shapes, valid_ratios, device=src.device)
+        for _, layer in enumerate(self.layers):
+            output = layer(output, pos, reference_points, spatio_temporal_shapes, level_start_index, padding_mask)
+
+        return output
+
+class DeformableTransformerEncoderLayer(nn.Module):
+    def __init__(self,
+                 d_model=256, d_ffn=1024,
+                 dropout=0.1, activation="relu",
+                 n_levels=4, n_heads=8, n_points=4):
+        super().__init__()
+
+        # self attention
+        self.self_attn = MSDeformAttn3D(d_model, n_levels, n_heads, n_points)
+        self.dropout1 = nn.Dropout(dropout)
+        self.norm1 = nn.LayerNorm(d_model)
+
+        # ffn
+        self.linear1 = nn.Linear(d_model, d_ffn)
+        self.activation = _get_activation_fn(activation)
+        self.dropout2 = nn.Dropout(dropout)
+        self.linear2 = nn.Linear(d_ffn, d_model)
+        self.dropout3 = nn.Dropout(dropout)
+        self.norm2 = nn.LayerNorm(d_model)
+
+    @staticmethod
+    def with_pos_embed(tensor, pos):
+        return tensor if pos is None else tensor + pos
+
+    def forward_ffn(self, src):
+        src2 = self.linear2(self.dropout2(self.activation(self.linear1(src))))
+        src = src + self.dropout3(src2)
+        src = self.norm2(src)
+        return src
+
+    def forward(self, src, pos, reference_points, spatio_temporal_shapes, level_start_index, padding_mask=None):
+        # self attention
+        src2 = self.self_attn(self.with_pos_embed(src, pos), reference_points, src, spatio_temporal_shapes, level_start_index, padding_mask)
+        src = src + self.dropout1(src2)
+        src = self.norm1(src)
+
+        # ffn
+        src = self.forward_ffn(src)
+
+        return src
 
 class TransformerEncoder(nn.Module):
 
@@ -281,7 +583,7 @@ class TransformerDecoder(nn.Module):
                 query_sine_embed[..., :self.d_model // 2] *= (refHW_cond[..., 1] / obj_center[..., 3]).unsqueeze(-1)
 
 
-            output, actor_feature = layer(output, memory, tgt_mask=tgt_mask,
+            output, actor_feature, q_memory = layer(output, memory, tgt_mask=tgt_mask,
                            memory_mask=memory_mask,
                            tgt_key_padding_mask=tgt_key_padding_mask,
                            memory_key_padding_mask=memory_key_padding_mask,
@@ -297,7 +599,9 @@ class TransformerDecoder(nn.Module):
             # apply convolution
             h, w = orig_res
             actor_feature_expanded = actor_feature.flatten(0,1)[..., None, None].expand(-1, -1, h, w) # N_q*B, D, H, W
-            encoded_feature_expanded = memory[:, None].expand(-1, len(tgt), -1, -1).flatten(1,2).view(h,w,-1,actor_feature.shape[-1]).permute(2,3,0,1) # N_q*B, D, H, W
+            # q_memory: N_q, HW, BT, C
+            encoded_feature_expanded = rearrange(q_memory, "N (H W) B C -> (N B) C H W", H=h, W=w)
+            # encoded_feature_expanded = memory[:, None].expand(-1, len(tgt), -1, -1).flatten(1,2).view(h,w,-1,actor_feature.shape[-1]).permute(2,3,0,1) # N_q*B, D, H, W
 
             cls_feature = self.conv_activation(self.conv1(torch.cat([actor_feature_expanded, encoded_feature_expanded], dim=1)))
             cls_feature = self.conv_activation(self.conv2(cls_feature))
@@ -431,7 +735,7 @@ class TransformerDecoderLayer(nn.Module):
 
     def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1,
                  activation="relu", normalize_before=False, keep_query_pos=False,
-                 rm_self_attn_decoder=False):
+                 rm_self_attn_decoder=False, num_levels=4,):
         super().__init__()
         # Decoder Self-Attention
         if not rm_self_attn_decoder:
@@ -446,13 +750,14 @@ class TransformerDecoderLayer(nn.Module):
             self.dropout1 = nn.Dropout(dropout)
 
         # Decoder Cross-Attention
+        self.lvl_w_embed = nn.Linear(d_model, num_levels)
         self.ca_qcontent_proj = nn.Linear(d_model, d_model)
         self.ca_qpos_proj = nn.Linear(d_model, d_model)
         self.ca_kcontent_proj = nn.Linear(d_model, d_model)
         self.ca_kpos_proj = nn.Linear(d_model, d_model)
         self.ca_v_proj = nn.Linear(d_model, d_model)
         self.ca_qpos_sine_proj = nn.Linear(d_model, d_model)
-        self.cross_attn = MultiheadAttention(d_model*2, nhead, dropout=dropout, vdim=d_model)
+        self.cross_attn = MultiheadAttention(d_model*2, nhead, dropout=dropout, vdim=d_model, query_specific_key=True)
 
         self.nhead = nhead
         self.rm_self_attn_decoder = rm_self_attn_decoder
@@ -514,14 +819,17 @@ class TransformerDecoderLayer(nn.Module):
         # ========== Begin of Cross-Attention =============
         # Apply projections here
         # shape: num_queries x batch_size x 256
+        
+        lvl_w = self.lvl_w_embed(tgt) # num_queries, BT, num_levels
+        memory = torch.einsum("ntl,lhtc->nhtc", lvl_w, memory) # (N_q, BT, L), (L, HW, BT, C),  ->  N_q, HW, BT, C
         q_content = self.ca_qcontent_proj(tgt)
         k_content = self.ca_kcontent_proj(memory)
         v = self.ca_v_proj(memory)
 
         num_queries, bs, n_model = q_content.shape
-        hw, _, _ = k_content.shape
+        _, hw, _, _ = k_content.shape
 
-        k_pos = self.ca_kpos_proj(pos)
+        k_pos = self.ca_kpos_proj(pos)[0:1].expand(num_queries, -1, -1, -1)
 
         # For the first decoder layer, we concatenate the positional embedding predicted from 
         # the object query (the positional embedding) into the original query (key) in DETR.
@@ -537,9 +845,10 @@ class TransformerDecoderLayer(nn.Module):
         query_sine_embed = self.ca_qpos_sine_proj(query_sine_embed)
         query_sine_embed = query_sine_embed.view(num_queries, bs, self.nhead, n_model//self.nhead)
         q = torch.cat([q, query_sine_embed], dim=3).view(num_queries, bs, n_model * 2)
-        k = k.view(hw, bs, self.nhead, n_model//self.nhead)
-        k_pos = k_pos.view(hw, bs, self.nhead, n_model//self.nhead)
-        k = torch.cat([k, k_pos], dim=3).view(hw, bs, n_model * 2)
+        k = k.view(num_queries, hw, bs, self.nhead, n_model//self.nhead)
+        k_pos = k_pos.view(num_queries, hw, bs, self.nhead, n_model//self.nhead)
+        k = torch.cat([k, k_pos], dim=4).view(num_queries, hw, bs, n_model * 2)
+        # k = torch.cat([k, k_pos], dim=3).view(hw, bs, n_model * 2)
 
         tgt2 = self.cross_attn(query=q,
                                    key=k,
@@ -553,7 +862,7 @@ class TransformerDecoderLayer(nn.Module):
         tgt2 = self.linear2(self.dropout(self.activation(self.linear1(tgt))))
         tgt = tgt + self.dropout3(tgt2)
         tgt = self.norm3(tgt)
-        return tgt, tgt_temp
+        return tgt, tgt_temp, memory
 
 
 def _get_clones(module, N):

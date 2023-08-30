@@ -14,7 +14,7 @@ from utils.misc import (NestedTensor, nested_tensor_from_tensor_list,
 from utils.utils import print_log
 import os
 
-from models.backbone_builder2 import build_backbone
+from models.backbone_3d_builder2 import build_3d_backbone
 from models.detr.segmentation import (dice_loss, sigmoid_focal_loss)
 from models.dab_conv_trans_detr.dab_transformer import build_transformer
 # from models.transformer.transformer_layers import TransformerEncoderLayer, TransformerEncoder
@@ -70,18 +70,43 @@ class DETR(nn.Module):
             self.refpoint_embed.weight.data[:, :2] = inverse_sigmoid(self.refpoint_embed.weight.data[:, :2])
             self.refpoint_embed.weight.data[:, :2].requires_grad = False          
 
-        if "SWIN" in backbone_name:
-            if gpu_world_rank == 0: print_log(log_path, "using swin")
-            self.input_proj = nn.Conv3d(1024, hidden_dim, kernel_size=1)
-            self.class_proj = nn.Conv3d(1024, hidden_dim, kernel_size=1)
-        elif "SlowFast" in backbone_name:
-            self.input_proj = nn.Conv3d(backbone.num_channels, hidden_dim, kernel_size=1)
-            self.class_proj = nn.Conv3d(2048 + 512, hidden_dim, kernel_size=1)
+        # if "SWIN" in backbone_name:
+        #     if gpu_world_rank == 0: print_log(log_path, "using swin")
+        #     self.input_proj = nn.Conv3d(1024, hidden_dim, kernel_size=1)
+        #     self.class_proj = nn.Conv3d(1024, hidden_dim, kernel_size=1)
+        # elif "SlowFast" in backbone_name:
+        #     self.input_proj = nn.Conv3d(backbone.num_channels, hidden_dim, kernel_size=1)
+        #     self.class_proj = nn.Conv3d(2048 + 512, hidden_dim, kernel_size=1)
+        # else:
+            # self.input_proj = nn.Conv3d(backbone.num_channels, hidden_dim, kernel_size=1)
+        #     self.class_proj = nn.Conv3d(backbone.num_channels, hidden_dim, kernel_size=1)
+        num_feature_levels = 4
+        self.num_feature_levels = num_feature_levels
+        if num_feature_levels > 1:            
+            self.input_proj = nn.ModuleList()
+            num_backbone_outs = len(backbone.strides)
+            for _ in range(num_backbone_outs):
+                in_channels = backbone.num_channels[_]
+                self.input_proj.append(nn.Sequential(
+                    nn.Conv3d(in_channels, hidden_dim, kernel_size=1),
+                    nn.GroupNorm(32, hidden_dim),
+                ))
+            for _ in range(num_feature_levels - num_backbone_outs):
+                self.input_proj.append(nn.Sequential(
+                    nn.Conv3d(in_channels, hidden_dim, kernel_size=3, stride=(1,2,2), padding=1),
+                    nn.GroupNorm(32, hidden_dim),
+                ))
+                in_channels = hidden_dim
         else:
-            self.input_proj = nn.Conv3d(backbone.num_channels, hidden_dim, kernel_size=1)
-            self.class_proj = nn.Conv3d(backbone.num_channels, hidden_dim, kernel_size=1)
-        nn.init.xavier_uniform_(self.input_proj.weight, gain=1)
-        nn.init.constant_(self.input_proj.bias, 0)    
+            self.input_proj = nn.ModuleList([
+                nn.Sequential(
+                    nn.Conv3d(backbone.num_channels[0], hidden_dim, kernel_size=1),
+                    nn.GroupNorm(32, hidden_dim),
+                )])
+        for projection in self.input_proj:                    
+            nn.init.xavier_uniform_(projection[0].weight, gain=1)
+            nn.init.constant_(projection[0].bias, 0)
+
         # self.class_proj = nn.Conv3d(backbone.num_channels[-1], hidden_dim, kernel_size=(4,1,1))
 
         # encoder_layer = TransformerEncoderLayer(hidden_dim, 8, 2048, 0.1, "relu", normalize_before=False)
@@ -167,15 +192,48 @@ class DETR(nn.Module):
         """
         if not isinstance(samples, NestedTensor):
             samples = nested_tensor_from_tensor_list(samples)
-        features, pos = self.backbone(samples)
-        src, mask = features[-1].decompose()
+
+        features, pos = self.backbone(samples) # both are list of length 4
+        srcs = list()
+        masks = list()
+        poses = list()
+        bs = samples.tensors.shape[0]
+
+        for l, feat in enumerate(features[1:]): # 첫 번째 feature는 버림
+            src, mask = feat.decompose()
+            src_proj_l = self.input_proj[l](src) # channel 통일
+            pos_l = pos[l+1]
+            srcs.append(src_proj_l)
+            masks.append(mask)
+            poses.append(pos_l)
+
+        if self.num_feature_levels > (len(features) - 1): # the last feature map is a projection of the previous map
+            _len_srcs = len(features) - 1
+            for l in range(_len_srcs, self.num_feature_levels):
+                if l == _len_srcs:
+                    src = self.input_proj[l](features[-1].tensors)
+                else:
+                    src = self.input_proj[l](srcs[-1])
+
+                m = samples.mask    # [B, H, W]
+                mask = F.interpolate(m[None].float(), size=src.shape[-2:]).to(torch.bool)[0]
+                mask = mask.unsqueeze(1).expand(-1,src.shape[2],-1,-1)
+                # src: bs, c, t, h, w      mask: bs, t, h, w
+                pos_l = self.backbone[1](NestedTensor(src.flatten(0,1), mask)).to(src.dtype)
+
+                srcs.append(src)
+                masks.append(mask)
+                poses.append(pos_l)
+        
+
         assert mask is not None
         # bs = samples.tensors.shape[0]
         if not self.efficient:
             embedweight = self.refpoint_embed.weight.view(self.num_queries, self.temporal_length, 4)      # nq, t, 4
         else:
-            embedweight = self.refpoint_embed.weight.view(self.num_queries, 1, 4)  
-        hs, cls_hs, reference  = self.transformer(self.input_proj(src), mask, embedweight, pos[-1])
+            embedweight = self.refpoint_embed.weight.view(self.num_queries, 1, 4)
+
+        hs, cls_hs, reference  = self.transformer(srcs, masks, poses, embedweight)
         outputs_class_b = self.class_embed_b(hs)
         ######## localization head
         if not self.bbox_embed_diff_each_layer:
@@ -249,7 +307,7 @@ def build_model(cfg):
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
         print_log(log_path, 'num_classes', num_classes)
 
-    backbone = build_backbone(cfg)
+    backbone = build_3d_backbone(cfg)
     transformer = build_transformer(cfg)
 
     model = DETR(backbone,
@@ -266,6 +324,7 @@ def build_model(cfg):
                  last_stride=cfg.CONFIG.MODEL.LAST_STRIDE,
                  dataset_mode=cfg.CONFIG.DATA.DATASET_NAME,
                  bbox_embed_diff_each_layer=cfg.CONFIG.MODEL.BBOX_EMBED_DIFF_EACH_LAYER,
+                 efficient=cfg.CONFIG.EFFICIENT,
                  )
 
     matcher = build_matcher(cfg)

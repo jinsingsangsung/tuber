@@ -15,11 +15,11 @@ from torchvision.models._utils import IntermediateLayerGetter
 from typing import Dict, List
 
 from models.transformer.util.misc import NestedTensor, is_main_process
-from models.seqformer.position_encoding import build_position_encoding
+from models.transformer.position_encoding import build_position_encoding
 
 from models.backbones.ir_CSN_50_variant import build_CSN
 from models.backbones.ir_CSN_152 import build_CSN as build_CSN_152
-from models.transformer.transformer_layers import LSTRTransformerDecoder, LSTRTransformerDecoderLayer, layer_norm
+# from models.transformer.transformer_layers import LSTRTransformerDecoder, LSTRTransformerDecoderLayer, layer_norm
 # from detectron2.layers import ShapeSpec
 
 class Backbone(nn.Module):
@@ -38,18 +38,18 @@ class Backbone(nn.Module):
             if not train_backbone:
                 parameter.requires_grad_(False)
         self.ds = cfg.CONFIG.MODEL.SINGLE_FRAME
-        if cfg.CONFIG.MODEL.SINGLE_FRAME:
-            if cfg.CONFIG.MODEL.TEMPORAL_DS_STRATEGY == 'avg':
-                self.pool = nn.AvgPool3d((cfg.CONFIG.DATA.TEMP_LEN // cfg.CONFIG.MODEL.DS_RATE, 1, 1))
-                # print("avg pool: {}".format(cfg.CONFIG.DATA.TEMP_LEN // cfg.CONFIG.MODEL.DS_RATE))
-            elif cfg.CONFIG.MODEL.TEMPORAL_DS_STRATEGY == 'max':
-                self.pool = nn.MaxPool3d((cfg.CONFIG.DATA.TEMP_LEN // cfg.CONFIG.MODEL.DS_RATE, 1, 1))
-                print("max pool: {}".format(cfg.CONFIG.DATA.TEMP_LEN // cfg.CONFIG.MODEL.DS_RATE))
-            elif cfg.CONFIG.MODEL.TEMPORAL_DS_STRATEGY == 'decode':
-                self.query_pool = nn.Embedding(1, 2048)
-                self.pool_decoder = LSTRTransformerDecoder(
-                    LSTRTransformerDecoderLayer(d_model=2048, nhead=8, dim_feedforward=2048, dropout=0.1), 1,
-                    norm=layer_norm(d_model=2048, condition=True))
+        # if cfg.CONFIG.MODEL.SINGLE_FRAME:
+        #     if cfg.CONFIG.MODEL.TEMPORAL_DS_STRATEGY == 'avg':
+        #         self.pool = nn.AvgPool3d((cfg.CONFIG.DATA.TEMP_LEN // cfg.CONFIG.MODEL.DS_RATE, 1, 1))
+        #         # print("avg pool: {}".format(cfg.CONFIG.DATA.TEMP_LEN // cfg.CONFIG.MODEL.DS_RATE))
+        #     elif cfg.CONFIG.MODEL.TEMPORAL_DS_STRATEGY == 'max':
+        #         self.pool = nn.MaxPool3d((cfg.CONFIG.DATA.TEMP_LEN // cfg.CONFIG.MODEL.DS_RATE, 1, 1))
+        #         print("max pool: {}".format(cfg.CONFIG.DATA.TEMP_LEN // cfg.CONFIG.MODEL.DS_RATE))
+        #     elif cfg.CONFIG.MODEL.TEMPORAL_DS_STRATEGY == 'decode':
+        #         self.query_pool = nn.Embedding(1, 2048)
+        #         self.pool_decoder = LSTRTransformerDecoder(
+        #             LSTRTransformerDecoderLayer(d_model=2048, nhead=8, dim_feedforward=2048, dropout=0.1), 1,
+        #             norm=layer_norm(d_model=2048, condition=True))
 
         if return_interm_layers:
             return_layers = {"layer1": "0", "layer2": "1", "layer3": "2", "layer4": "3"}
@@ -144,7 +144,7 @@ class Joiner(nn.Sequential):
 
 
 def build_3d_backbone(cfg):
-    position_embedding = build_position_encoding(cfg)
+    position_embedding = build_position_encoding(cfg.CONFIG.MODEL.D_MODEL)
     backbone = Backbone(train_backbone=cfg.CONFIG.TRAIN.LR_BACKBONE > 0, 
                      num_channels=cfg.CONFIG.MODEL.DIM_FEEDFORWARD, 
                      position_embedding=position_embedding, 
