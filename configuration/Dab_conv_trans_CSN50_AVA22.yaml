@@ -17,7 +17,7 @@ CONFIG:
   USE_LOCATION: False
   EFFICIENT: False
   TRAIN:
-    EPOCH_NUM: 25
+    EPOCH_NUM: 20
     BATCH_SIZE: 4
     LR: 1e-4
     MIN_LR: 1e-6 # only if cosine scheduler is used
