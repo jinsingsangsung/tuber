@@ -222,7 +222,8 @@ class TransformerDecoder(nn.Module):
 
         self.conv1 = nn.Conv2d(2*d_model, d_model, kernel_size=1)
         self.conv2 = nn.Conv2d(d_model, d_model, kernel_size=1)
-        self.q_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
+        # self.q_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
+        self.q_proj = nn.Linear(d_model, d_model)
         self.k_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
         self.v_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
         self.actor_feature_embed = nn.Linear(d_model, d_model)
@@ -313,9 +314,8 @@ class TransformerDecoder(nn.Module):
             af = self.actor_feature_embed(actor_feature)[..., None, :]
             gf = self.glob_feature_embed(memory.mean(dim=0, keepdim=True)).expand(len(tgt), -1, -1)[..., None, :]
             query = self.class_queries[None, None, :, :].expand(len(tgt), bs, -1, -1)
-            
-            query = self.query_norm(af+gf+query)[..., None, None].expand(-1, -1, -1, -1, h, w).flatten(0,1)
-            
+            query = self.q_proj(af+gf+query)
+            query = self.query_norm(query)[..., None, None].expand(-1, -1, -1, -1, h, w).flatten(0,1)
             # query = self.class_queries[None, :, :, None, None].expand(len(tgt), -1, -1, h, w)
             # query = self.cls_params[None, :, :, None, None].expand(len(tgt), -1, -1, h, w)
             attn = (query*key).sum(dim=2).flatten(2).softmax(dim=2).reshape(len(tgt)*bs, -1, h, w)[:, :, None]

@@ -25,11 +25,13 @@ def load_detr_weights(model, pretrain_dir, cfg):
             if "offset_embed" in k:
                 for i in range(6):
                     pretrained_dict.update({k.replace("offset_embed.layers", "offset_embed.{}.layers".format(i)): v})
-            pretrained_dict.update({k: v})
-        elif "q_proj" in k:
-            pretrained_dict.update({k.replace("q_proj", "k_proj"): v})
-        elif "k_proj" in k:
-            pretrained_dict.update({k.replace("k_proj", "q_proj"): v})
+            elif "q_proj" in k:
+                if model_dict["transformer.decoder.q_proj.weight"].shape == v.shape:
+                    pretrained_dict.update({k: v})
+                else:
+                    pretrained_dict.update({k: v.squeeze()})
+            else:
+                pretrained_dict.update({k: v})
         elif k.split('.')[l] == 'bbox_embed':
             pretrained_dict.update({k: v})
         elif k.split('.')[l] == 'query_embed':
