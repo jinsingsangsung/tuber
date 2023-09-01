@@ -26,6 +26,10 @@ def load_detr_weights(model, pretrain_dir, cfg):
                 for i in range(6):
                     pretrained_dict.update({k.replace("offset_embed.layers", "offset_embed.{}.layers".format(i)): v})
             pretrained_dict.update({k: v})
+        elif "q_proj" in k:
+            pretrained_dict.update({k.replace("q_proj", "k_proj"): v})
+        elif "k_proj" in k:
+            pretrained_dict.update({k.replace("k_proj", "q_proj"): v})
         elif k.split('.')[l] == 'bbox_embed':
             pretrained_dict.update({k: v})
         elif k.split('.')[l] == 'query_embed':
@@ -72,7 +76,7 @@ def load_detr_weights(model, pretrain_dir, cfg):
         print_log(log_path, "number of detr unused model layers:", len(unused_dict.keys()))
         print_log(log_path, "number of detr used model layers:", len(pretrained_dict_.keys()))
     # print("model_dict",[i for i in model_dict.keys()][:10])
-        print_log(log_path, "not found layers:", len([k for k in not_found_dict.keys() if not "backbone" in k]))
+        print_log(log_path, "not found layers:", [k for k in not_found_dict.keys() if not "backbone" in k])
 
     model_dict.update(pretrained_dict_)
     model.load_state_dict(model_dict)

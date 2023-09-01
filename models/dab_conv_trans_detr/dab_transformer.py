@@ -20,6 +20,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn, Tensor
 from .attention import MultiheadAttention
+from einops import rearrange, repeat
 
 class MLP(nn.Module):
     """ Very simple multi-layer perceptron (also called FFN)"""
@@ -224,6 +225,9 @@ class TransformerDecoder(nn.Module):
         self.q_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
         self.k_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
         self.v_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
+        self.actor_feature_embed = nn.Linear(d_model, d_model)
+        self.glob_feature_embed = nn.Linear(d_model, d_model)
+        self.query_norm = nn.LayerNorm(d_model)
         
         # self.cls_params = nn.Linear(d_model, 80).weight
         self.class_queries = nn.Embedding(80, 256).weight
@@ -289,26 +293,34 @@ class TransformerDecoder(nn.Module):
                            is_first=(layer_id == 0))
 
             # separate classification branch from localization
-            actor_feature = actor_feature.clone().detach()
+            actor_feature = actor_feature.clone().detach() # N_q, B, D
             actor_feature2 = self.cls_linear2(self.dropout(self.activation(self.cls_linear1(actor_feature))))
             actor_feature = actor_feature + self.dropout(actor_feature2)
             actor_feature = self.cls_norm(actor_feature)
 
             # apply convolution
             h, w = orig_res
+            bs = actor_feature.size(1)
             actor_feature_expanded = actor_feature.flatten(0,1)[..., None, None].expand(-1, -1, h, w) # N_q*B, D, H, W
             encoded_feature_expanded = memory[:, None].expand(-1, len(tgt), -1, -1).flatten(1,2).view(h,w,-1,actor_feature.shape[-1]).permute(2,3,0,1) # N_q*B, D, H, W
 
             cls_feature = self.conv_activation(self.conv1(torch.cat([actor_feature_expanded, encoded_feature_expanded], dim=1)))
-            cls_feature = self.conv_activation(self.conv2(cls_feature))
+            cls_feature = self.conv_activation(self.conv2(cls_feature)) # N_q*B, D, H, W
             # cls_feature = self.bn1(cls_feature)
-            query = self.q_proj(cls_feature)
-            query = query[:, None].expand(-1, 80, -1, -1, -1)
-            key = self.class_queries[None, :, :, None, None].expand(actor_feature_expanded.shape[0], -1, -1, h, w)
-            # key = self.cls_params[None, :, :, None, None].expand(actor_feature_expanded.shape[0], -1, -1, h, w)
-            attn = (query*key).sum(dim=2).flatten(2).softmax(dim=2).reshape(actor_feature_expanded.shape[0], -1, h, w)[:, :, None]
+            key = self.k_proj(cls_feature)
+            key = key[:, None].expand(-1, 80, -1, -1, -1)
+            
+            af = self.actor_feature_embed(actor_feature)[..., None, :]
+            gf = self.glob_feature_embed(memory.mean(dim=0, keepdim=True)).expand(len(tgt), -1, -1)[..., None, :]
+            query = self.class_queries[None, None, :, :].expand(len(tgt), bs, -1, -1)
+            
+            query = self.query_norm(af+gf+query)[..., None, None].expand(-1, -1, -1, -1, h, w).flatten(0,1)
+            
+            # query = self.class_queries[None, :, :, None, None].expand(len(tgt), -1, -1, h, w)
+            # query = self.cls_params[None, :, :, None, None].expand(len(tgt), -1, -1, h, w)
+            attn = (query*key).sum(dim=2).flatten(2).softmax(dim=2).reshape(len(tgt)*bs, -1, h, w)[:, :, None]
             value = self.v_proj(encoded_feature_expanded)[:, None]
-            cls_output = (attn * value).sum(dim=-1).sum(dim=-1).view(len(tgt), -1, 80, cls_feature.shape[1]) #N_q, B, N_c, D
+            cls_output = (attn * value).sum(dim=-1).sum(dim=-1).view(len(tgt), bs, -1, cls_feature.shape[1]) #N_q, B, N_c, D
             cls_output = self.linear(cls_output)
             cls_output2 = self.cls_linear2_(self.dropout_(self.activation(self.cls_linear1_(cls_output))))
             cls_output = cls_output + self.dropout_(cls_output2)
