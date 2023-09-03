@@ -26,7 +26,7 @@ def load_detr_weights(model, pretrain_dir, cfg):
                 for i in range(6):
                     pretrained_dict.update({k.replace("offset_embed.layers", "offset_embed.{}.layers".format(i)): v})
             elif "q_proj" in k:
-                if model_dict["transformer.decoder.q_proj.weight"].shape == v.shape:
+                if model_dict["module.transformer.decoder.q_proj.weight"].shape == v.shape:
                     pretrained_dict.update({k: v})
                 else:
                     pretrained_dict.update({k: v.squeeze()})
