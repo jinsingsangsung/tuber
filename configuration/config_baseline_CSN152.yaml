@@ -55,7 +55,7 @@ CONFIG:
 
   MODEL:
     SINGLE_FRAME: True
-    BACKBONE_NAME: CSN-50
+    BACKBONE_NAME: CSN-152
     TEMPORAL_DS_STRATEGY: decode
     LAST_STRIDE: False
     GENERATE_LFB: False
@@ -73,7 +73,7 @@ CONFIG:
     TEMP_LEN: 32
     SAMPLE_RATE: 2
     PRETRAINED: True
-    PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_50_ft_kinetics_from_ig65m_f233743920.mat"
+    PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_152_ft_kinetics_from_ig65m_f126851907.mat"
     PRETRAIN_TRANSFORMER_DIR: "/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/baseline.pth"
     PRETRAINED_PATH: ""
     LOAD: False
@@ -108,11 +108,11 @@ CONFIG:
     CLIPS_MAX_NORM: 0.1
 
   LOG:
-    BASE_PATH: '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/AVA_Tuber'
+    BASE_PATH: '/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/AVA_Tuber'
     LOG_DIR: 'tb_log'
     SAVE_DIR: 'checkpoints'
-    EVAL_DIR: '/mnt/video-nfs5/users/jinsung/results/tubelet-transformer/AVA_Tuber/eval'
+    EVAL_DIR: '/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/AVA_Tuber/eval'
     SAVE_FREQ: 1
-    RES_DIR: Dab_baseline_{}-{}/res
-    EXP_NAME: Dab_baseline_{}-{}
+    RES_DIR: Dab_baseline_CSN152_{}-{}/res
+    EXP_NAME: Dab_baseline__CSN152_{}-{}
     DISPLAY_FREQ: 1000
