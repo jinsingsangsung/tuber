@@ -113,5 +113,5 @@ CONFIG:
     EVAL_DIR: '/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/AVA_Tuber/eval'
     SAVE_FREQ: 1
     RES_DIR: 'Dab_TubeR_CSN152_{}-{}'
-    EXP_NAME: Dab_TubeR_CSN152_{}-{}'
+    EXP_NAME: 'Dab_TubeR_CSN152_{}-{}'
     DISPLAY_FREQ: 1000
