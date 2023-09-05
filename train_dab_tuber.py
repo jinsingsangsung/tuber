@@ -6,7 +6,7 @@ import torch
 import torch.optim
 # from tensorboardX import SummaryWriter
 from models.dab_tuber import build_model
-from utils.model_utils_0903 import deploy_model, load_model, save_checkpoint
+from utils.model_utils_0903 import deploy_model, load_model, save_checkpoint, load_model_and_states
 from utils.video_action_recognition import train_tuber_detection, validate_tuber_detection
 from pipelines.video_action_recognition_config import get_cfg_defaults
 from pipelines.launch import spawn_workers
@@ -26,6 +26,11 @@ def main_worker(cfg):
     else:
         writer = None
     # cfg.freeze()
+
+    if int(os.getenv('NSML_SESSION', '0')) <= 0:
+        cfg.CONFIG.MODEL.LOAD = True
+        cfg.CONFIG.MODEL.LOAD_FC = True
+        cfg.CONFIG.MODEL.LOAD_DETR = False
 
     # create model
     print('Creating TubeR model: %s' % cfg.CONFIG.MODEL.NAME)
@@ -66,6 +71,21 @@ def main_worker(cfg):
         raise AssertionError("optimizer is one of SGD or ADAMW")
     # create lr scheduler
     lr_scheduler = build_scheduler(cfg, optimizer, len(train_loader))
+
+    if int(os.getenv('NSML_SESSION', '0')) <= 0:
+        # 실험 이어하기의 경우
+        study = os.environ["NSML_STUDY"]
+        run = os.environ["NSML_RUN_NAME"].split("/")[-1]
+        exp_name = cfg.CONFIG.LOG.EXP_NAME.format(study, run)
+        epochs_folder = os.listdir(os.path.join(cfg.CONFIG.LOG.BASE_PATH, exp_name, cfg.CONFIG.LOG.SAVE_DIR))
+        epochs_folder.sort()
+        latest_epoch = epochs_folder[-1]
+        cfg.CONFIG.MODEL.PRETRAINED_PATH = os.path.join(cfg.CONFIG.LOG.BASE_PATH, exp_name, cfg.CONFIG.LOG.SAVE_DIR, latest_epoch) # find the pretrained_path
+        model, optimizer, lr_scheduler, start_epoch = load_model_and_states(model, optimizer, lr_scheduler, cfg)
+        cfg.CONFIG.TRAIN.START_EPOCH = start_epoch
+    else:
+        if cfg.CONFIG.MODEL.LOAD:
+            model, _ = load_model(model, cfg, load_fc=cfg.CONFIG.MODEL.LOAD_FC)
 
     # docs: add resume option
     if cfg.CONFIG.MODEL.LOAD:
