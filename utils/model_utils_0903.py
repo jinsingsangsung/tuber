@@ -16,10 +16,11 @@ def load_detr_weights(model, pretrain_dir, cfg):
     log_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
     pretrained_dict = {}
     distributed = cfg.DDP_CONFIG.DISTRIBUTED
-    if "dab-d-tuber-detr" in cfg.CONFIG.MODEL.PRETRAIN_TRANSFORMER_DIR:
-        l = 0
-    else:
-        l = 1        
+    # if "dab-d-tuber-detr" in cfg.CONFIG.MODEL.PRETRAIN_TRANSFORMER_DIR:
+    #     l = 0
+    # else:
+    #     l = 1  
+    l = 0      
     for k, v in checkpoint['model'].items():
         if k.split('.')[l] == 'transformer':
             if "offset_embed" in k:
@@ -53,20 +54,20 @@ def load_detr_weights(model, pretrain_dir, cfg):
             t = cfg.CONFIG.MODEL.TEMP_LEN
             nq = cfg.CONFIG.MODEL.QUERY_NUM
             try:
-                if model_dict[k].shape[0] > checkpoint["model"][k].shape[0]:
-                    v = v[:nq].repeat(t, 1)
+                if model_dict[k].shape[0] < checkpoint["model"][k].shape[0]:
+                    v = v[:nq]
             except:
-                if model_dict["module."+k].shape[0] > checkpoint["model"][k].shape[0]:
-                    v = v[:nq].repeat(t, 1)                
+                if model_dict["module."+k].shape[0] < checkpoint["model"][k].shape[0]:
+                    v = v[:nq]
             pretrained_dict.update({k: v})
     if distributed:
+        pretrained_dict_ = {"module."+k: v for k, v in pretrained_dict.items() if "module."+k in model_dict}
+        unused_dict = {"module."+k: v for k, v in pretrained_dict.items() if not "module."+k in model_dict}
+        not_found_dict = {k: v for k, v in model_dict.items() if not k[7:] in pretrained_dict}
+    else:
         pretrained_dict_ = {k: v for k, v in pretrained_dict.items() if k in model_dict}
         unused_dict = {k: v for k, v in pretrained_dict.items() if not k in model_dict}
         not_found_dict = {k: v for k, v in model_dict.items() if not k in pretrained_dict}
-    else:
-        pretrained_dict_ = {k[7:]: v for k, v in pretrained_dict.items() if k[7:] in model_dict}
-        unused_dict = {k[7:]: v for k, v in pretrained_dict.items() if not k[7:] in model_dict}
-        not_found_dict = {k: v for k, v in model_dict.items() if not "module."+k in pretrained_dict}
 
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
         print_log(log_path, "number of detr unused model layers:", len(unused_dict.keys()))
