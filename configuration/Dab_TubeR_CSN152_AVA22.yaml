@@ -35,7 +35,6 @@ CONFIG:
     AUX_LOSS: True
     LR_SCHEDULER:
       NAME: 'multistep'
-      NAME: 'multistep'
 
   VAL:
     BATCH_SIZE: 1
