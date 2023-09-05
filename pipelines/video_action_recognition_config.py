@@ -217,6 +217,7 @@ _C.CONFIG.LOG.SAVE_FREQ = 1
 _C.CONFIG.LOG.DISPLAY_FREQ = 1
 
 _C.CONFIG.GRADIENT_CHECKPOINTING = False
+_C.CONFIG.MODEL.CLS_MODE = "conv-trans"
 
 def get_cfg_defaults():
     """Get a yacs CfgNode object with default values for your project."""
