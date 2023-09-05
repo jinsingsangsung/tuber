@@ -107,7 +107,7 @@ if __name__ == '__main__':
     parser.add_argument('--debug', action='store_true', help="debug, and ddp is disabled")    
     parser.add_argument('--num_gpu', default=2, type=int)
     parser.add_argument('--eff', action='store_true', help="only for AVA, efficiently output only keyframe")
-    parser.add_argument('--cls_mode', default='conv-trans', type=str, help="classification mode")
+    parser.add_argument('--cls_mode', default='conv-trans', type=str, help="classification mode: either one of conv-trans or cls-queries")
     parser.add_argument('--grad_ckpt', action='store_true', help="use gradient checkpoint")
     
     args = parser.parse_args()
