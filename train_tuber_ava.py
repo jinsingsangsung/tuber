@@ -6,14 +6,14 @@ import torch
 import torch.optim
 # from tensorboardX import SummaryWriter
 from models.tuber_ava import build_model
-from utils.model_utils import deploy_model, load_model, save_checkpoint
+from utils.model_utils import deploy_model, load_model, save_checkpoint, load_model_and_states
 from utils.video_action_recognition import train_tuber_detection, validate_tuber_detection
 from pipelines.video_action_recognition_config import get_cfg_defaults
 from pipelines.launch import spawn_workers
 from utils.utils import build_log_dir
 from datasets.ava_frame import build_dataloader
 from utils.lr_scheduler import build_scheduler
-
+import os
 
 def main_worker(cfg):
     # create tensorboard and logs
@@ -24,6 +24,11 @@ def main_worker(cfg):
     else:
         writer = None
     # cfg.freeze()
+
+    if int(os.getenv('NSML_SESSION', '0')) > 0:
+        cfg.CONFIG.MODEL.LOAD = True
+        cfg.CONFIG.MODEL.LOAD_FC = True
+        cfg.CONFIG.MODEL.LOAD_DETR = False
 
     # create model
     print('Creating TubeR model: %s' % cfg.CONFIG.MODEL.NAME)
@@ -68,6 +73,18 @@ def main_worker(cfg):
     # else:
     lr_scheduler = build_scheduler(cfg, optimizer, len(train_loader))
 
+    if int(os.getenv('NSML_SESSION', '0')) > 0:
+        # 실험 이어하기의 경우
+        study = os.environ["NSML_STUDY"]
+        run = os.environ["NSML_RUN_NAME"].split("/")[-1]
+        exp_name = cfg.CONFIG.LOG.EXP_NAME.format(study, run)
+        epochs_folder = os.listdir(os.path.join(cfg.CONFIG.LOG.BASE_PATH, exp_name, cfg.CONFIG.LOG.SAVE_DIR))
+        epochs_folder.sort()
+        latest_epoch = epochs_folder[-1]
+        cfg.CONFIG.MODEL.PRETRAINED_PATH = os.path.join(cfg.CONFIG.LOG.BASE_PATH, exp_name, cfg.CONFIG.LOG.SAVE_DIR, latest_epoch) # find the pretrained_path
+        model, optimizer, lr_scheduler, start_epoch = load_model_and_states(model, optimizer, lr_scheduler, cfg)
+        cfg.CONFIG.TRAIN.START_EPOCH = start_epoch
+
     # docs: add resume option
     if cfg.CONFIG.MODEL.LOAD:
         model, _ = load_model(model, cfg, load_fc=cfg.CONFIG.MODEL.LOAD_FC)
@@ -107,6 +124,10 @@ if __name__ == '__main__':
 
     cfg = get_cfg_defaults()
     cfg.merge_from_file(args.config_file)
+    study = os.environ["NSML_STUDY"]
+    run = os.environ["NSML_RUN_NAME"].split("/")[-1]
+    cfg.CONFIG.LOG.RES_DIR = cfg.CONFIG.LOG.RES_DIR.format(study, run)
+    cfg.CONFIG.LOG.EXP_NAME = cfg.CONFIG.LOG.EXP_NAME.format(study, run)    
     cfg.DDP_CONFIG.GPU_WORLD_SIZE = args.num_gpu
     import socket 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

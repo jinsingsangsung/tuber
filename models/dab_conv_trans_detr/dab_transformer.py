@@ -184,7 +184,6 @@ class TransformerDecoder(nn.Module):
         self.return_intermediate = return_intermediate
         assert return_intermediate
         self.query_dim = query_dim
-
         assert query_scale_type in ['cond_elewise', 'cond_scalar', 'fix_elewise']
         self.query_scale_type = query_scale_type
         if query_scale_type == 'cond_elewise':
@@ -202,14 +201,11 @@ class TransformerDecoder(nn.Module):
         self.d_model = d_model
         self.modulate_hw_attn = modulate_hw_attn
         self.bbox_embed_diff_each_layer = bbox_embed_diff_each_layer
-
         if modulate_hw_attn:
             self.ref_anchor_head = MLP(d_model, d_model, 2, 2)
-
         if not keep_query_pos:
             for layer_id in range(num_layers - 1):
                 self.layers[layer_id + 1].ca_qpos_proj = None
-
         dim_feedforward = decoder_layer.dim_feedforward
         dropout = decoder_layer.dropout_rate
         self.activation = decoder_layer.activation
@@ -217,27 +213,21 @@ class TransformerDecoder(nn.Module):
         self.cls_linear1 = nn.Linear(d_model, dim_feedforward)
         self.cls_linear2 = nn.Linear(dim_feedforward, d_model)
         self.dropout = nn.Dropout(dropout)
-        self.conv_activation = _get_activation_fn("gelu")
+        self.conv_activation = _get_activation_fn("relu")
 
-        self.conv1 = nn.Conv2d(2*d_model, d_model, kernel_size=1)
-        self.conv2 = nn.Conv2d(d_model, d_model, kernel_size=1)
+        self.conv1 = nn.Conv2d(512, d_model, kernel_size=1)
         self.q_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
         self.k_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
         self.v_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
-        
-        # self.cls_params = nn.Linear(d_model, 80).weight
-        self.class_queries = nn.Embedding(80, 256).weight
         # self.conv2 = nn.Conv2d(d_model, 2*d_model, kernel_size=3, stride=2)
         # self.conv3 = nn.Conv2d(2*d_model, 2*d_model, kernel_size=3, stride=2)
         self.linear = nn.Linear(d_model, d_model)
         self.cls_norm_ = nn.LayerNorm(d_model)
-        self.cls_norm__ = nn.LayerNorm(d_model)
         self.cls_linear1_ = nn.Linear(d_model, dim_feedforward)
         self.cls_linear2_ = nn.Linear(dim_feedforward, d_model)
         self.dropout_ = nn.Dropout(dropout)
         
         self.cls_norm2 = nn.LayerNorm(d_model)
-
     def forward(self, tgt, memory,
                 tgt_mask: Optional[Tensor] = None,
                 memory_mask: Optional[Tensor] = None,
@@ -248,20 +238,16 @@ class TransformerDecoder(nn.Module):
                 orig_res = None,
                 ):
         output = tgt
-
         intermediate = []
         cls_intermediate = []
         reference_points = refpoints_unsigmoid.sigmoid()
         ref_points = [reference_points]
-
         # import ipdb; ipdb.set_trace()        
-
         for layer_id, layer in enumerate(self.layers):
             obj_center = reference_points[..., :self.query_dim]     # [num_queries, batch_size, 2]
             # get sine embedding for the query vector
             query_sine_embed = gen_sineembed_for_position(obj_center)  
             query_pos = self.ref_point_head(query_sine_embed) 
-
             # For the first decoder layer, we do not apply transformation over p_s
             if self.query_scale_type != 'fix_elewise':
                 if layer_id == 0:
@@ -270,24 +256,19 @@ class TransformerDecoder(nn.Module):
                     pos_transformation = self.query_scale(output)
             else:
                 pos_transformation = self.query_scale.weight[layer_id]
-
             # apply transformation
             query_sine_embed = query_sine_embed[...,:self.d_model] * pos_transformation
-
             # modulated HW attentions
             if self.modulate_hw_attn:
                 refHW_cond = self.ref_anchor_head(output).sigmoid() # nq, bs*t, 2
                 query_sine_embed[..., self.d_model // 2:] *= (refHW_cond[..., 0] / obj_center[..., 2]).unsqueeze(-1)
                 query_sine_embed[..., :self.d_model // 2] *= (refHW_cond[..., 1] / obj_center[..., 3]).unsqueeze(-1)
-
-
             output, actor_feature = layer(output, memory, tgt_mask=tgt_mask,
                            memory_mask=memory_mask,
                            tgt_key_padding_mask=tgt_key_padding_mask,
                            memory_key_padding_mask=memory_key_padding_mask,
                            pos=pos, query_pos=query_pos, query_sine_embed=query_sine_embed,
                            is_first=(layer_id == 0))
-
             # separate classification branch from localization
             actor_feature = actor_feature.clone().detach()
             actor_feature2 = self.cls_linear2(self.dropout(self.activation(self.cls_linear1(actor_feature))))
@@ -296,26 +277,21 @@ class TransformerDecoder(nn.Module):
 
             # apply convolution
             h, w = orig_res
-            actor_feature_expanded = actor_feature.flatten(0,1)[..., None, None].expand(-1, -1, h, w) # N_q*B, D, H, W
-            encoded_feature_expanded = memory[:, None].expand(-1, len(tgt), -1, -1).flatten(1,2).view(h,w,-1,actor_feature.shape[-1]).permute(2,3,0,1) # N_q*B, D, H, W
+            actor_feature_expanded = actor_feature.flatten(0,1)[..., None, None].repeat(1, 1, h, w) # N_q*B, D, H, W
+            encoded_feature_expanded = memory[:, None].repeat(1, len(tgt), 1, 1).flatten(1,2).view(h,w,-1,actor_feature.shape[-1]).permute(2,3,0,1) # N_q*B, D, H, W
 
-            cls_feature = self.conv_activation(self.conv1(torch.cat([actor_feature_expanded, encoded_feature_expanded], dim=1)))
-            cls_feature = self.conv_activation(self.conv2(cls_feature))
+            cls_feature = self.conv1(torch.cat([actor_feature_expanded, encoded_feature_expanded], dim=1))
             # cls_feature = self.bn1(cls_feature)
-            query = self.q_proj(cls_feature)
-            query = query[:, None].expand(-1, 80, -1, -1, -1)
-            key = self.class_queries[None, :, :, None, None].expand(actor_feature_expanded.shape[0], -1, -1, h, w)
-            # key = self.cls_params[None, :, :, None, None].expand(actor_feature_expanded.shape[0], -1, -1, h, w)
-            attn = (query*key).sum(dim=2).flatten(2).softmax(dim=2).reshape(actor_feature_expanded.shape[0], -1, h, w)[:, :, None]
-            value = self.v_proj(encoded_feature_expanded)[:, None]
-            cls_output = (attn * value).sum(dim=-1).sum(dim=-1).view(len(tgt), -1, 80, cls_feature.shape[1]) #N_q, B, N_c, D
+            query = self.q_proj(self.conv_activation(cls_feature))
+            key = self.k_proj(encoded_feature_expanded)
+            value = self.v_proj(encoded_feature_expanded)
+            attn = (query*key).sum(dim=1).flatten(1).softmax(dim=1).reshape(-1, 1, h, w)
+            cls_output = (attn * value).sum(dim=-1).sum(dim=-1).view(len(tgt), -1, cls_feature.shape[1]) #N_q, B, D
             cls_output = self.linear(cls_output)
+
             cls_output2 = self.cls_linear2_(self.dropout_(self.activation(self.cls_linear1_(cls_output))))
             cls_output = cls_output + self.dropout_(cls_output2)
-            cls_output = self.cls_norm_(cls_output)
-            if layer_id != 0:
-                cls_output = self.cls_norm__(cls_output + prev_output)
-            prev_output = cls_output
+            cls_output = self.cls_norm_(cls_output)    
             
             # iter update
             if self.bbox_embed is not None:
