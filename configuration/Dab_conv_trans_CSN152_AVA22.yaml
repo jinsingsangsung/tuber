@@ -27,7 +27,7 @@ CONFIG:
     # LR_POLICY: 'cosine'
     USE_WARMUP: True # does nothing
     WARMUP_START_LR: 1e-5
-    WARMUP_EPOCHS: 3 # this determines whether to use Warmup unless using "step"
+    WARMUP_EPOCHS: 0 # this determines whether to use Warmup unless using "step"
     LR_MILESTONE: [12, 18] #only for multistep
     STEP: 0.1 # gamma for lr decay
     OPTIMIZER:
