@@ -20,6 +20,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn, Tensor
 from .attention import MultiheadAttention
+from timm.models.layers import DropPath
 
 class MLP(nn.Module):
     """ Very simple multi-layer perceptron (also called FFN)"""
@@ -62,6 +63,28 @@ def gen_sineembed_for_position(pos_tensor):
     else:
         raise ValueError("Unknown pos_tensor shape(-1):{}".format(pos_tensor.size(-1)))
     return pos
+
+class ConvBlock(nn.Module):
+    def __init__(self, dim, drop_path=0):
+        super().__init__()
+        self.conv1 = nn.Conv2d(dim, dim, kernel_size=(3,3), padding=1)
+        self.norm = nn.LayerNorm(dim, eps=1e-6)
+        self.conv2 = nn.Linear(dim, 4*dim)
+        self.act = nn.GELU()
+        self.conv3 = nn.Linear(4*dim, dim)
+        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()    
+    
+    def forward(self, x):
+        input = x
+        x = self.conv1(x)
+        x = x.permute(0,2,3,1)
+        x = self.norm(x)
+        x = self.conv2(x)
+        x = self.act(x)
+        x = self.conv3(x)
+        x = x.permute(0,3,1,2)
+        x = input + self.drop_path(x)
+        return x
 
 class Transformer(nn.Module):
 
@@ -229,6 +252,10 @@ class TransformerDecoder(nn.Module):
         self.class_queries = nn.Embedding(80, 256).weight
         # self.conv2 = nn.Conv2d(d_model, 2*d_model, kernel_size=3, stride=2)
         # self.conv3 = nn.Conv2d(2*d_model, 2*d_model, kernel_size=3, stride=2)
+        num_conv_blocks = 3
+        conv_block = ConvBlock(d_model, 0)
+        self.conv_blocks = nn.ModuleList([conv_block for _ in range(num_conv_blocks)])        
+        
         self.linear = nn.Linear(d_model, d_model)
         self.cls_norm_ = nn.LayerNorm(d_model)
         self.cls_norm__ = nn.LayerNorm(d_model)
@@ -300,8 +327,8 @@ class TransformerDecoder(nn.Module):
             encoded_feature_expanded = memory[:, None].expand(-1, len(tgt), -1, -1).flatten(1,2).view(h,w,-1,actor_feature.shape[-1]).permute(2,3,0,1) # N_q*B, D, H, W
 
             cls_feature = self.conv_activation(self.conv1(torch.cat([actor_feature_expanded, encoded_feature_expanded], dim=1)))
-            cls_feature = self.conv_activation(self.conv2(cls_feature))
-            # cls_feature = self.bn1(cls_feature)
+            for block in self.conv_blocks:
+                cls_feature = block(cls_feature)
             query = self.q_proj(cls_feature)
             query = query[:, None].expand(-1, 80, -1, -1, -1)
             key = self.class_queries[None, :, :, None, None].expand(actor_feature_expanded.shape[0], -1, -1, h, w)
