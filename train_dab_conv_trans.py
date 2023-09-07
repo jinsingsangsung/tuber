@@ -39,7 +39,7 @@ def main_worker(cfg):
         print_log(save_path, "use single frame:", cfg.CONFIG.MODEL.SINGLE_FRAME)
     model, criterion, postprocessors = build_model(cfg)
     model = deploy_model(model, cfg, is_tuber=True)
-    model = torch.compile(model)
+    # model = torch.compile(model)
     num_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:    
         print_log(save_path, 'Number of parameters in the model: %6.2fM' % (num_parameters / 1000000))
@@ -142,6 +142,7 @@ if __name__ == '__main__':
     parser.add_argument('--random_seed', default=1, type=int, help='random_seed')
     parser.add_argument('--debug', action='store_true', help="debug, and ddp is disabled")
     parser.add_argument('--eff', action='store_true', help="only for AVA, efficiently output only keyframe")
+    parser.add_argument('--grad_ckpt', action='store_true', help="use gradient checkpoint")
     args = parser.parse_args()
     random.seed(args.random_seed)
     np.random.seed(args.random_seed)
@@ -166,7 +167,9 @@ if __name__ == '__main__':
         cfg.CONFIG.EFFICIENT = True
     else:
         cfg.CONFIG.EFFICIENT = False
-    
+    if args.grad_ckpt:
+        cfg.CONFIG.GRADIENT_CHECKPOINTING = True
+
     import socket 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.connect(("8.8.8.8", 80))
