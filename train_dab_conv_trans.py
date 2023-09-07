@@ -39,7 +39,7 @@ def main_worker(cfg):
         print_log(save_path, "use single frame:", cfg.CONFIG.MODEL.SINGLE_FRAME)
     model, criterion, postprocessors = build_model(cfg)
     model = deploy_model(model, cfg, is_tuber=True)
-    model = torch.compile(model)
+    # model = torch.compile(model)
     num_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:    
         print_log(save_path, 'Number of parameters in the model: %6.2fM' % (num_parameters / 1000000))
@@ -151,7 +151,7 @@ if __name__ == '__main__':
     torch.cuda.manual_seed_all(args.random_seed)
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
-    torch._inductor.config.fallback_random = True
+    # torch._inductor.config.fallback_random = True
 
 
     cfg = get_cfg_defaults()
