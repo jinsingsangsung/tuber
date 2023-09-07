@@ -56,8 +56,8 @@ class DETR(nn.Module):
     """ This is the DETR module that performs object detection """
     def __init__(self, backbone, transformer, num_classes, num_queries, num_frames,
                  hidden_dim, temporal_length, aux_loss=False, generate_lfb=False, two_stage=False, random_refpoints_xy=False, query_dim=4,
-                 backbone_name='CSN-152', ds_rate=1, last_stride=True, dataset_mode='ava', bbox_embed_diff_each_layer=False, training=True, iter_update=True, num_conv_blocks=2, drop_path=0, cls_mode="conv-trans",
-                 grad_ckpt=False):
+                 backbone_name='CSN-152', ds_rate=1, last_stride=True, dataset_mode='ava', bbox_embed_diff_each_layer=False, training=True, iter_update=True, num_conv_blocks=2, drop_path=0, cls_mode="conv-trans"):
+                #, grad_ckpt=False):
         """ Initializes the model.
         Parameters:
             backbone: torch module of the backbone to be used. See backbone.py
@@ -161,7 +161,7 @@ class DETR(nn.Module):
         self.dropout_ = nn.Dropout(0.1)        
         self.activation = nn.ReLU()
         
-        self.grad_ckpt = grad_ckpt
+        # self.grad_ckpt = grad_ckpt
 
 
     def freeze_params(self):
@@ -203,15 +203,15 @@ class DETR(nn.Module):
 
         embedweight = self.refpoint_embed.weight      # nq, 4
         
-        if self.grad_ckpt:
-            def custom_fn(module):
-                def custom_forward(*inputs):
-                    output1, output2 = module(inputs[0], inputs[1], inputs[2], inputs[3])
-                    return output1, output2
-                return custom_forward                
-            hs, reference = checkpoint.checkpoint(custom_fn(self.transformer), self.input_proj(src), mask, embedweight, pos[-1])
-        else:
-            hs, reference = self.transformer(self.input_proj(src), mask, embedweight, pos[-1])
+        # if self.grad_ckpt:
+        #     def custom_fn(module):
+        #         def custom_forward(*inputs):
+        #             output1, output2 = module(inputs[0], inputs[1], inputs[2], inputs[3])
+        #             return output1, output2
+        #         return custom_forward                
+        #     hs, reference = checkpoint.checkpoint(custom_fn(self.transformer), self.input_proj(src), mask, embedweight, pos[-1])
+        # else:
+        hs, reference = self.transformer(self.input_proj(src), mask, embedweight, pos[-1])
         # hs, reference = self.transformer(self.input_proj(src), mask, embedweight, pos[-1])
 
         if self.dataset_mode == 'ava':
@@ -245,15 +245,15 @@ class DETR(nn.Module):
         hs_t_agg = hs.contiguous().view(lay_n, bs, 1, nq, dim)
         src_flatten = src_c.view(1, bs, self.hidden_dim, -1).repeat(lay_n, 1, 1, 1).view(lay_n * bs, self.hidden_dim, -1).permute(2, 0, 1).contiguous()
         if not self.is_swin:
-            if self.grad_ckpt:
-                def custom(module):
-                    def custom_forward(*inputs):
-                        inputs = module(inputs[0], inputs[1].shape) #, orig_shape=inputs[1].shape)
-                        return inputs[0]
-                    return custom_forward                
-                src_flatten = checkpoint.checkpoint(custom(self.encoder), src_flatten, src_c)
-            else:
-                src_flatten, _ = self.encoder(src_flatten, orig_shape=src_c.shape)
+            # if self.grad_ckpt:
+            #     def custom(module):
+            #         def custom_forward(*inputs):
+            #             inputs = module(inputs[0], inputs[1].shape) #, orig_shape=inputs[1].shape)
+            #             return inputs[0]
+            #         return custom_forward                
+            #     src_flatten = checkpoint.checkpoint(custom(self.encoder), src_flatten, src_c)
+            # else:
+            src_flatten, _ = self.encoder(src_flatten, orig_shape=src_c.shape)
 
         
         hs_query = hs_t_agg.view(lay_n * bs, nq, dim).permute(1, 0, 2).contiguous() # nq, lay_n*bs, dim
@@ -340,7 +340,7 @@ def build_model(cfg):
                  last_stride=cfg.CONFIG.MODEL.LAST_STRIDE,
                  dataset_mode=cfg.CONFIG.DATA.DATASET_NAME,
                  cls_mode=cfg.CONFIG.MODEL.CLS_MODE,
-                 grad_ckpt = cfg.CONFIG.GRADIENT_CHECKPOINTING 
+                #  grad_ckpt = cfg.CONFIG.GRADIENT_CHECKPOINTING 
                  )
 
     matcher = build_matcher(cfg)

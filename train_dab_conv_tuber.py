@@ -32,7 +32,7 @@ def main_worker(cfg):
     print("use sinlge frame:", cfg.CONFIG.MODEL.SINGLE_FRAME)
     model, criterion, postprocessors = build_model(cfg)
     model = deploy_model(model, cfg, is_tuber=True)
-    model = torch.compile(model)
+    # model = torch.compile(model)
     num_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print('Number of parameters in the model: %6.2fM' % (num_parameters / 1000000))
 

@@ -20,6 +20,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn, Tensor
 from .attention import MultiheadAttention
+import torch.utils.checkpoint as checkpoint
 
 class MLP(nn.Module):
     """ Very simple multi-layer perceptron (also called FFN)"""
@@ -74,6 +75,7 @@ class Transformer(nn.Module):
                  num_patterns=0,
                  modulate_hw_attn=True,
                  bbox_embed_diff_each_layer=False,
+                 gradient_checkpointing=False,                 
                  ):
 
         super().__init__()
@@ -105,6 +107,8 @@ class Transformer(nn.Module):
             self.num_patterns = 0
         if self.num_patterns > 0:
             self.patterns = nn.Embedding(self.num_patterns, d_model)
+            
+        self.gradient_checkpointing = gradient_checkpointing
 
     def _reset_parameters(self):
         for p in self.parameters():
@@ -120,8 +124,17 @@ class Transformer(nn.Module):
         pos_embed = pos_embed.flatten(2).permute(2, 0, 1)
         refpoint_embed = refpoint_embed.unsqueeze(1).repeat(1, bs, 1)
         mask = mask.flatten(1)        
-        memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed)
-
+        # memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed)
+        if self.gradient_checkpointing:
+            def custom_encoder(module, mask, pos_embed):
+                def custom_forward(inputs):
+                    inputs = module(inputs, src_key_padding_mask=mask, pos=pos_embed)
+                    return inputs
+                return custom_forward
+            memory = checkpoint.checkpoint(custom_encoder(self.encoder, mask, pos_embed), src)
+            
+        else:
+            memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed)
         # query_embed = gen_sineembed_for_position(refpoint_embed)
         num_queries = refpoint_embed.shape[0]
         if self.num_patterns == 0:
@@ -130,8 +143,19 @@ class Transformer(nn.Module):
             tgt = self.patterns.weight[:, None, None, :].repeat(1, self.num_queries, bs, 1).flatten(0, 1) # n_q*n_pat, bs, d_model
             refpoint_embed = refpoint_embed.repeat(self.num_patterns, 1, 1) # n_q*n_pat, bs, d_model
             # import ipdb; ipdb.set_trace()
-        hs, references = self.decoder(tgt, memory, memory_key_padding_mask=mask,
-                          pos=pos_embed, refpoints_unsigmoid=refpoint_embed)
+        if self.gradient_checkpointing:
+            def custom_decoder(module, mask, pos_embed, refpoint_embed):
+                def custom_forward(*inputs):
+                    inputs = module(*inputs, memory_key_padding_mask=mask, pos=pos_embed, refpoints_unsigmoid=refpoint_embed)
+                    return inputs
+                return custom_forward
+            hs, references = checkpoint.checkpoint(custom_decoder(self.decoder, mask, pos_embed, refpoint_embed), tgt, memory)
+        else:
+            hs, references = self.decoder(tgt, memory, memory_key_padding_mask=mask,
+                                        pos=pos_embed, refpoints_unsigmoid=refpoint_embed)
+
+        # hs, references = self.decoder(tgt, memory, memory_key_padding_mask=mask,
+        #                   pos=pos_embed, refpoints_unsigmoid=refpoint_embed)
         return hs, references
 
 
@@ -471,6 +495,7 @@ def build_transformer(cfg):
         query_dim=4,
         activation="relu",
         num_patterns=cfg.CONFIG.MODEL.NUM_PATTERNS,
+        gradient_checkpointing=cfg.CONFIG.GRADIENT_CHECKPOINTING,
     )
 
 
