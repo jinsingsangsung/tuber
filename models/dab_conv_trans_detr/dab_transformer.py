@@ -390,7 +390,16 @@ class TransformerDecoder(nn.Module):
 
             cls_feature = self.conv_activation(self.conv1(torch.cat([actor_feature_expanded, encoded_feature_expanded], dim=1)))
             for block in self.conv_blocks:
-                cls_feature = block(cls_feature)
+                
+                if self.gradient_checkpointing:
+                    def custom_conv(module):
+                        def custom_conv_fwd(inputs):
+                            return module(inputs)
+                        return custom_conv_fwd
+                    cls_feature = checkpoint.checkpoint(custom_conv(block), cls_feature)
+                else:
+                    cls_feature = block(cls_feature)
+
             query = self.q_proj(cls_feature)
             query = query[:, None].expand(-1, 80, -1, -1, -1)
             key = self.class_queries[None, :, :, None, None].expand(actor_feature_expanded.shape[0], -1, -1, h, w)
