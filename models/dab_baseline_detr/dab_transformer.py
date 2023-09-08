@@ -82,7 +82,7 @@ class Transformer(nn.Module):
         encoder_layer = TransformerEncoderLayer(d_model, nhead, dim_feedforward,
                                                 dropout, activation, normalize_before)
         encoder_norm = nn.LayerNorm(d_model) if normalize_before else None
-        self.encoder = TransformerEncoder(encoder_layer, num_encoder_layers, encoder_norm)
+        self.encoder = TransformerEncoder(encoder_layer, num_encoder_layers, encoder_norm, d_model, gradient_checkpointing)
 
         decoder_layer = TransformerDecoderLayer(d_model, nhead, dim_feedforward,
                                                 dropout, activation, normalize_before, keep_query_pos=keep_query_pos)
@@ -91,7 +91,8 @@ class Transformer(nn.Module):
                                           return_intermediate=return_intermediate_dec,
                                           d_model=d_model, query_dim=query_dim, keep_query_pos=keep_query_pos, query_scale_type=query_scale_type,
                                           modulate_hw_attn=modulate_hw_attn,
-                                          bbox_embed_diff_each_layer=bbox_embed_diff_each_layer)
+                                          bbox_embed_diff_each_layer=bbox_embed_diff_each_layer,
+                                          gradient_checkpointing=gradient_checkpointing,)
 
         self._reset_parameters()
         assert query_scale_type in ['cond_elewise', 'cond_scalar', 'fix_elewise']
@@ -126,16 +127,16 @@ class Transformer(nn.Module):
         refpoint_embed = refpoint_embed.repeat(1, bs, 1) #n_q, bs * t, 4
         mask = mask.flatten(0,1).flatten(1)
 
-        if self.gradient_checkpointing:
-            def custom_encoder(module, mask, pos_embed, src_shape):
-                def custom_forward(inputs):
-                    inputs = module(inputs, src_key_padding_mask=mask, pos=pos_embed, src_shape=src_shape)
-                    return inputs
-                return custom_forward
-            memory = checkpoint.checkpoint(custom_encoder(self.encoder, mask, pos_embed, src_shape), src)
+        # if self.gradient_checkpointing:
+        #     def custom_encoder(module, mask, pos_embed, src_shape):
+        #         def custom_forward(inputs):
+        #             inputs = module(inputs, src_key_padding_mask=mask, pos=pos_embed, src_shape=src_shape)
+        #             return inputs
+        #         return custom_forward
+        #     memory = checkpoint.checkpoint(custom_encoder(self.encoder, mask, pos_embed, src_shape), src)
             
-        else:
-            memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed, src_shape=src_shape)
+        # else:
+        memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed, src_shape=src_shape)
 
         # temporal dimension is alive
         # query_embed = gen_sineembed_for_position(refpoint_embed)
@@ -152,28 +153,29 @@ class Transformer(nn.Module):
         # refpoint_embed = refpoint_embed.repeat(self.num_patterns, 1, 1) # n_pat*n_q, bs*t, d_model
             # import ipdb; ipdb.set_trace()
             
-        if self.gradient_checkpointing:
-            def custom_decoder(module, mask, pos_embed, refpoint_embed):
-                def custom_forward(*inputs):
-                    inputs = module(*inputs, memory_key_padding_mask=mask, pos=pos_embed, refpoints_unsigmoid=refpoint_embed)
-                    return inputs
-                return custom_forward
-            hs, references = checkpoint.checkpoint(custom_decoder(self.decoder, mask, pos_embed, refpoint_embed), tgt, memory)
-        else:
-            hs, references = self.decoder(tgt, memory, memory_key_padding_mask=mask,
-                                        pos=pos_embed, refpoints_unsigmoid=refpoint_embed)
+        # if self.gradient_checkpointing:
+        #     def custom_decoder(module, mask, pos_embed, refpoint_embed):
+        #         def custom_forward(*inputs):
+        #             inputs = module(*inputs, memory_key_padding_mask=mask, pos=pos_embed, refpoints_unsigmoid=refpoint_embed)
+        #             return inputs
+        #         return custom_forward
+        #     hs, references = checkpoint.checkpoint(custom_decoder(self.decoder, mask, pos_embed, refpoint_embed), tgt, memory)
+        # else:
+        hs, references = self.decoder(tgt, memory, memory_key_padding_mask=mask,
+                                    pos=pos_embed, refpoints_unsigmoid=refpoint_embed)
 
         return hs, references, mask
 
 
 class TransformerEncoder(nn.Module):
 
-    def __init__(self, encoder_layer, num_layers, norm=None, d_model=256):
+    def __init__(self, encoder_layer, num_layers, norm=None, d_model=256, gradient_checkpointing=False):
         super().__init__()
         self.layers = _get_clones(encoder_layer, num_layers)
         self.num_layers = num_layers
         self.query_scale = MLP(d_model, d_model, d_model, 2)
         self.norm = norm
+        self.gradient_checkpointing = gradient_checkpointing        
 
     def forward(self, src,
                 mask: Optional[Tensor] = None,
@@ -185,8 +187,19 @@ class TransformerEncoder(nn.Module):
         for layer_id, layer in enumerate(self.layers):
             # rescale the content and pos sim
             pos_scales = self.query_scale(output)
-            output = layer(output, src_mask=mask,
-                           src_key_padding_mask=src_key_padding_mask, pos=pos*pos_scales, src_shape=src_shape)
+            if self.gradient_checkpointing:
+                def custom_layer(module):
+                    def custom_forward(*inputs):
+                        return module(inputs[0],
+                                      src_mask = inputs[1],
+                                      src_key_padding_mask = inputs[2],
+                                      pos = inputs[3],
+                                      src_shape = inputs[4])
+                    return custom_forward
+                output = checkpoint.checkpoint(custom_layer(layer), output, mask, src_key_padding_mask, pos*pos_scales, src_shape)
+            else:
+                output = layer(output, src_mask=mask,
+                            src_key_padding_mask=src_key_padding_mask, pos=pos*pos_scales, src_shape=src_shape)
 
         if self.norm is not None:
             output = self.norm(output)
@@ -200,6 +213,7 @@ class TransformerDecoder(nn.Module):
                     d_model=256, query_dim=2, keep_query_pos=False, query_scale_type='cond_elewise',
                     modulate_hw_attn=False,
                     bbox_embed_diff_each_layer=False,
+                    gradient_checkpointing=False                    
                     ):
         super().__init__()
         self.layers = _get_clones(decoder_layer, num_layers)
@@ -226,6 +240,7 @@ class TransformerDecoder(nn.Module):
         self.d_model = d_model
         self.modulate_hw_attn = modulate_hw_attn
         self.bbox_embed_diff_each_layer = bbox_embed_diff_each_layer
+        self.gradient_checkpointing = gradient_checkpointing
 
 
         if modulate_hw_attn:
@@ -276,13 +291,38 @@ class TransformerDecoder(nn.Module):
                 query_sine_embed[..., self.d_model // 2:] *= (refHW_cond[..., 0] / obj_center[..., 2]).unsqueeze(-1)
                 query_sine_embed[..., :self.d_model // 2] *= (refHW_cond[..., 1] / obj_center[..., 3]).unsqueeze(-1)
 
-
-            output = layer(output, memory, tgt_mask=tgt_mask,
-                           memory_mask=memory_mask,
-                           tgt_key_padding_mask=tgt_key_padding_mask,
-                           memory_key_padding_mask=memory_key_padding_mask,
-                           pos=pos, query_pos=query_pos, query_sine_embed=query_sine_embed,
-                           is_first=(layer_id == 0))
+            if self.gradient_checkpointing:
+                def custom_layer(module):
+                    def custom_forward(*inputs):
+                        return module(inputs[0],
+                                      inputs[1],
+                                      tgt_mask = inputs[2],
+                                      memory_mask = inputs[3],
+                                      tgt_key_padding_mask = inputs[4],
+                                      memory_key_padding_mask = inputs[5],
+                                      pos = inputs[6],
+                                      query_pos = inputs[7],
+                                      query_sine_embed = inputs[8],
+                                      is_first = inputs[9])
+                    return custom_forward
+                output = checkpoint.checkpoint(custom_layer(layer),
+                                               output,
+                                               memory,
+                                               tgt_mask,
+                                               memory_mask,
+                                               tgt_key_padding_mask,
+                                               memory_key_padding_mask,
+                                               pos,
+                                               query_pos,
+                                               query_sine_embed,
+                                               (layer_id==0))
+            else:
+                output = layer(output, memory, tgt_mask=tgt_mask,
+                            memory_mask=memory_mask,
+                            tgt_key_padding_mask=tgt_key_padding_mask,
+                            memory_key_padding_mask=memory_key_padding_mask,
+                            pos=pos, query_pos=query_pos, query_sine_embed=query_sine_embed,
+                            is_first=(layer_id == 0))
 
             # iter update
             if self.bbox_embed is not None:
