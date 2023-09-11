@@ -299,6 +299,7 @@ class TransformerDecoder(nn.Module):
         self.dropout_ = nn.Dropout(dropout)
         
         self.cls_norm2 = nn.LayerNorm(d_model)
+        self.cross_attn = MultiheadAttention(d_model, 8, dropout=dropout, vdim=d_model)
         self.gradient_checkpointing = gradient_checkpointing
 
     def forward(self, tgt, memory,
@@ -400,13 +401,15 @@ class TransformerDecoder(nn.Module):
                 else:
                     cls_feature = block(cls_feature)
 
-            query = self.q_proj(cls_feature)
-            query = query[:, None].expand(-1, 80, -1, -1, -1)
-            key = self.class_queries[None, :, :, None, None].expand(actor_feature_expanded.shape[0], -1, -1, h, w)
-            # key = self.cls_params[None, :, :, None, None].expand(actor_feature_expanded.shape[0], -1, -1, h, w)
-            attn = (query*key).sum(dim=2).flatten(2).softmax(dim=2).reshape(actor_feature_expanded.shape[0], -1, h, w)[:, :, None]
-            value = self.v_proj(encoded_feature_expanded)[:, None]
-            cls_output = (attn * value).sum(dim=-1).sum(dim=-1).view(len(tgt), -1, 80, cls_feature.shape[1]) #N_q, B, N_c, D
+            k = self.q_proj(cls_feature).flatten(2).permute(2,0,1) # HW, N_q*B, D
+            q = self.class_queries[:, None].expand(-1, actor_feature_expanded.shape[0], -1)
+            v = self.v_proj(encoded_feature_expanded).flatten(2).permute(2,0,1)
+            
+            cls_output = self.cross_attn(query=q, key=k, value=v, attn_mask=memory_mask, key_padding_mask=memory_key_padding_mask[None].expand(actor_feature.size(0), -1, -1).flatten(0,1))[0]
+            # attn = (query*key).sum(dim=2).flatten(2).softmax(dim=2).reshape(actor_feature_expanded.shape[0], -1, h, w)[:, :, None]
+            
+            # cls_output = (attn * value).sum(dim=-1).sum(dim=-1).view(len(tgt), -1, 80, cls_feature.shape[1]) #N_q, B, N_c, D
+            cls_output = cls_output.transpose(0,1).view(len(tgt), -1, 80, cls_feature.shape[1])
             cls_output = self.linear(cls_output)
             cls_output2 = self.cls_linear2_(self.dropout_(self.activation(self.cls_linear1_(cls_output))))
             cls_output = cls_output + self.dropout_(cls_output2)
