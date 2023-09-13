@@ -425,7 +425,7 @@ class TransformerDecoder(nn.Module):
                                       value = inputs[2]
                                       )
                     return custom_forward
-                cls_output = checkpoint.checkpoint(custom_layer(layer), query, key, value)
+                cls_output = checkpoint.checkpoint(custom_layer(self.cross_attn), query, key, value)[0].reshape(len(self.class_queries), len(tgt), -1, self.d_model).permute(1,2,0,3)
             else:
                 cls_output = self.cross_attn(query=query, key=key, value=value)[0].reshape(len(self.class_queries), len(tgt), -1, self.d_model).permute(1,2,0,3)
 
