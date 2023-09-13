@@ -417,7 +417,17 @@ class TransformerDecoder(nn.Module):
             cls_query_pos = self.cls_qpos_sine_proj(query_sine_embed).flatten(0,1)[None].expand(len(self.class_queries), -1 ,-1)
             query = torch.cat([query, cls_query_pos], dim=-1)
             value = self.v_proj(encoded_feature_expanded).flatten(2).permute(2,0,1)
-            cls_output = self.cross_attn(query=query, key=key, value=value)[0].reshape(len(self.class_queries), len(tgt), -1, self.d_model).permute(1,2,0,3)
+            if self.gradient_checkpointing:
+                def custom_layer(module):
+                    def custom_forward(*inputs):
+                        return module(query = inputs[0],
+                                      key = inputs[1],
+                                      value = inputs[2]
+                                      )
+                    return custom_forward
+                cls_output = checkpoint.checkpoint(custom_layer(layer), query, key, value)
+            else:
+                cls_output = self.cross_attn(query=query, key=key, value=value)[0].reshape(len(self.class_queries), len(tgt), -1, self.d_model).permute(1,2,0,3)
 
             cls_output = self.linear(cls_output)
             cls_output2 = self.cls_linear2_(self.dropout_(self.activation(self.cls_linear1_(cls_output))))
