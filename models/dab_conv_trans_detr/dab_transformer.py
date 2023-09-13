@@ -298,6 +298,7 @@ class TransformerDecoder(nn.Module):
         self.cls_linear1_ = nn.Linear(d_model, dim_feedforward)
         self.cls_linear2_ = nn.Linear(dim_feedforward, d_model)
         self.dropout_ = nn.Dropout(dropout)
+        self.cross_attn = MultiheadAttention(d_model*2, 8, dropout=dropout, vdim=d_model)
         
         self.cls_norm2 = nn.LayerNorm(d_model)
         self.gradient_checkpointing = gradient_checkpointing
@@ -401,15 +402,23 @@ class TransformerDecoder(nn.Module):
                 else:
                     cls_feature = block(cls_feature)
 
-            key = torch.cat([self.k_proj(cls_feature), pos.permute(1,2,0)[None].expand(len(tgt), -1, -1, -1).reshape(-1, self.d_model, h, w)], dim=1)
-            key = key[:, None].expand(-1, 80, -1, -1, -1)
-            query = self.class_queries[None, :, :, None, None].expand(actor_feature_expanded.shape[0], -1, -1, h, w)
-            # query = self.cls_params[None, :, :, None, None].expand(actor_feature_expanded.shape[0], -1, -1, h, w)
-            cls_query_pos = self.cls_qpos_sine_proj(query_sine_embed).flatten(0,1)[:, None, :, None, None].expand(-1, len(self.class_queries), -1, h, w)
-            query = torch.cat([query, cls_query_pos], dim=2)
-            attn = (query*key).sum(dim=2).flatten(2).softmax(dim=2).reshape(actor_feature_expanded.shape[0], -1, h, w)[:, :, None]
-            value = self.v_proj(encoded_feature_expanded)[:, None]
-            cls_output = (attn * value).sum(dim=-1).sum(dim=-1).view(len(tgt), -1, 80, self.d_model) #N_q, B, N_c, D
+            # key = torch.cat([self.k_proj(cls_feature), pos.permute(1,2,0)[None].expand(len(tgt), -1, -1, -1).reshape(-1, self.d_model, h, w)], dim=1)
+            # key = key[:, None].expand(-1, 80, -1, -1, -1)
+            # query = self.class_queries[None, :, :, None, None].expand(actor_feature_expanded.shape[0], -1, -1, h, w)
+            # # query = self.cls_params[None, :, :, None, None].expand(actor_feature_expanded.shape[0], -1, -1, h, w)
+            # cls_query_pos = self.cls_qpos_sine_proj(query_sine_embed).flatten(0,1)[:, None, :, None, None].expand(-1, len(self.class_queries), -1, h, w)
+            # query = torch.cat([query, cls_query_pos], dim=2)
+            # attn = (query*key).sum(dim=2).flatten(2).softmax(dim=2).reshape(actor_feature_expanded.shape[0], -1, h, w)[:, :, None]
+            # value = self.v_proj(encoded_feature_expanded)[:, None]
+            # cls_output = (attn * value).sum(dim=-1).sum(dim=-1).view(len(tgt), -1, 80, self.d_model) #N_q, B, N_c, D
+            
+            key = torch.cat([self.k_proj(cls_feature).flatten(2).permute(2,0,1), pos[:,None].expand(-1, len(tgt), -1, -1).flatten(1,2)], dim=-1)
+            query = self.class_queries[:, None].expand(-1, actor_feature_expanded.shape[0], -1)
+            cls_query_pos = self.cls_qpos_sine_proj(query_sine_embed).flatten(0,1)[None].expand(len(self.class_queries), -1 ,-1)
+            query = torch.cat([query, cls_query_pos], dim=-1)
+            value = self.v_proj(encoded_feature_expanded).flatten(2).permute(2,0,1)
+            cls_output = self.cross_attn(query=query, key=key, value=value)[0].reshape(len(self.class_queries), len(tgt), -1, self.d_model).permute(1,2,0,3)
+
             cls_output = self.linear(cls_output)
             cls_output2 = self.cls_linear2_(self.dropout_(self.activation(self.cls_linear1_(cls_output))))
             cls_output = cls_output + self.dropout_(cls_output2)
