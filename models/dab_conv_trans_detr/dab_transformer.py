@@ -283,6 +283,7 @@ class TransformerDecoder(nn.Module):
         self.k_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
         self.v_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
         
+        self.cls_qpos_sine_proj = nn.Linear(d_model, d_model)
         # self.cls_params = nn.Linear(d_model, 80).weight
         self.class_queries = nn.Embedding(80, 256).weight
         # self.conv2 = nn.Conv2d(d_model, 2*d_model, kernel_size=3, stride=2)
@@ -400,13 +401,15 @@ class TransformerDecoder(nn.Module):
                 else:
                     cls_feature = block(cls_feature)
 
-            query = self.q_proj(cls_feature)
-            query = query[:, None].expand(-1, 80, -1, -1, -1)
-            key = self.class_queries[None, :, :, None, None].expand(actor_feature_expanded.shape[0], -1, -1, h, w)
-            # key = self.cls_params[None, :, :, None, None].expand(actor_feature_expanded.shape[0], -1, -1, h, w)
+            key = torch.cat([self.k_proj(cls_feature), pos.permute(1,2,0)[None].expand(len(tgt), -1, -1, -1).reshape(-1, self.d_model, h, w)], dim=1)
+            key = key[:, None].expand(-1, 80, -1, -1, -1)
+            query = self.class_queries[None, :, :, None, None].expand(actor_feature_expanded.shape[0], -1, -1, h, w)
+            # query = self.cls_params[None, :, :, None, None].expand(actor_feature_expanded.shape[0], -1, -1, h, w)
+            cls_query_pos = self.cls_qpos_sine_proj(query_sine_embed).flatten(0,1)[:, None, :, None, None].expand(-1, len(self.class_queries), -1, h, w)
+            query = torch.cat([query, cls_query_pos], dim=2)
             attn = (query*key).sum(dim=2).flatten(2).softmax(dim=2).reshape(actor_feature_expanded.shape[0], -1, h, w)[:, :, None]
             value = self.v_proj(encoded_feature_expanded)[:, None]
-            cls_output = (attn * value).sum(dim=-1).sum(dim=-1).view(len(tgt), -1, 80, cls_feature.shape[1]) #N_q, B, N_c, D
+            cls_output = (attn * value).sum(dim=-1).sum(dim=-1).view(len(tgt), -1, 80, self.d_model) #N_q, B, N_c, D
             cls_output = self.linear(cls_output)
             cls_output2 = self.cls_linear2_(self.dropout_(self.activation(self.cls_linear1_(cls_output))))
             cls_output = cls_output + self.dropout_(cls_output2)
