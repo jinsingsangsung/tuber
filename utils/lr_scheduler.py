@@ -30,6 +30,7 @@ def build_scheduler(cfg, optimizer, n_iter_per_epoch):
             warmup_t=warmup_steps,
             cycle_limit=1,
             t_in_epochs=False,
+            warmup_prefix=True,
         )
     elif cfg.CONFIG.TRAIN.LR_SCHEDULER.NAME == 'linear':
         lr_scheduler = LinearLRScheduler(
