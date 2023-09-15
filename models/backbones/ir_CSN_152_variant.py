@@ -13,6 +13,7 @@ import scipy.io as sio
 from torchvision.models.video.resnet import VideoResNet
 from utils.utils import print_log
 import os
+import torch.utils.checkpoint as checkpoint
 
 eps = 1e-3
 bn_mmt = 0.1
@@ -100,9 +101,12 @@ class ResNeXt(nn.Module):
                  block_nums,
                  num_classes=400,
                  use_affine=True,
-                 last_stride=True):
+                 last_stride=True,
+                 gradient_checkpointing=False,
+                 ):
 
         self.use_affine = use_affine
+        self.gradient_checkpointing = gradient_checkpointing
         self.in_planes = 64
         self.num_classes = num_classes
 
@@ -183,7 +187,14 @@ class ResNeXt(nn.Module):
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
-        x = self.layer4(x)
+        if self.gradient_checkpointing:
+            def custom_layer(module):
+                def custom_forward(*inputs):
+                    return module(*inputs)
+                return custom_forward
+            x = checkpoint.checkpoint(custom_layer(self.layer4), x)
+        else:
+            x = self.layer4(x)
 
         return x, None
 
@@ -198,7 +209,8 @@ def build_model(n_classes=400,
                 tune_point=5,
                 last_stride=True,
                 gpu_world_rank=0,
-                log_path=None):
+                log_path=None,
+                gradient_checkpointing=False):
 
     model = ResNeXt(ResNeXtBottleneck,
                     num_classes=n_classes,
@@ -206,7 +218,8 @@ def build_model(n_classes=400,
                     block_nums=[3, 8, 36, 3],
                     sample_duration=sample_duration,
                     use_affine=use_affine,
-                    last_stride=last_stride)
+                    last_stride=last_stride,
+                    gradient_checkpointing=gradient_checkpointing,)
 
     if load_pretrain:
         load_weights(model, pretrain_path=pretrain_path, load_fc=False, use_affine=use_affine, tune_point=tune_point, gpu_world_rank=gpu_world_rank, log_path=log_path)
@@ -337,7 +350,8 @@ def build_CSN(cfg):
                         tune_point=tune_point,
                         last_stride=cfg.CONFIG.MODEL.LAST_STRIDE,
                         gpu_world_rank=cfg.DDP_CONFIG.GPU_WORLD_RANK,
-                        log_path=log_path)
+                        log_path=log_path,
+                        gradient_checkpointing=cfg.CONFIG.GRADIENT_CHECKPOINTING,)
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
         print_log(log_path, "build CSN-152, tune point: {}".format(tune_point))
     return model
