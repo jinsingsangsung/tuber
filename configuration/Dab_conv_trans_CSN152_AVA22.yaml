@@ -19,7 +19,7 @@ CONFIG:
   TRAIN:
     EPOCH_NUM: 20
     BATCH_SIZE: 2
-    LR: 1e-4
+    LR: 3e-4
     MIN_LR: 1e-6 # only if cosine scheduler is used
     LR_BACKBONE: 1e-5 # if <=0, freezes the backbone
     MOMENTUM: 0.9
@@ -34,7 +34,7 @@ CONFIG:
       NAME: ADAMW
     AUX_LOSS: True
     LR_SCHEDULER:
-      NAME: 'multistep'
+      NAME: 'cosine'
     CUT_GRADIENT: FALSE
 
   VAL:
@@ -76,7 +76,7 @@ CONFIG:
     SAMPLE_RATE: 2
     PRETRAINED: True
     PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_152_ft_kinetics_from_ig65m_f126851907.mat"
-    PRETRAIN_TRANSFORMER_DIR: "/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/Dab_clswise_271.pth"
+    PRETRAIN_TRANSFORMER_DIR: "/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/AVA_Tuber/Dab_conv_trans_summed270-194/checkpoints/ckpt_epoch_19.pth"
     PRETRAINED_PATH: ""
     LOAD: False
     LOAD_FC: False

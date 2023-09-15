@@ -98,6 +98,7 @@ class Transformer(nn.Module):
                  modulate_hw_attn=True,
                  bbox_embed_diff_each_layer=False,
                  gradient_checkpointing=False,
+                 use_extra_mem=True,
                  ):
 
         super().__init__()
@@ -132,6 +133,11 @@ class Transformer(nn.Module):
             self.patterns = nn.Embedding(self.num_patterns, d_model)
 
         self.gradient_checkpointing = gradient_checkpointing            
+        self.use_extra_mem = use_extra_mem
+        if use_extra_mem:
+            extra_encoder_layer = TransformerSpatialEncoderLayer(d_model, nhead, dim_feedforward, dropout, activation, normalize_before)
+            extra_encoder_norm = nn.LayerNorm(d_model) if normalize_before else None
+            self.extra_encoder = TransformerEncoder(extra_encoder_layer, 1, extra_encoder_norm, d_model, gradient_checkpointing)
 
     def _reset_parameters(self):
         for p in self.parameters():
@@ -150,15 +156,6 @@ class Transformer(nn.Module):
         refpoint_embed = refpoint_embed.repeat(1, bs, 1) #n_q, bs * t, 4
         mask = mask.flatten(0,1).flatten(1)
 
-        # if self.gradient_checkpointing:
-        #     def custom_encoder(module, mask, pos_embed, src_shape):
-        #         def custom_forward(inputs):
-        #             inputs = module(inputs, src_key_padding_mask=mask, pos=pos_embed, src_shape=src_shape)
-        #             return inputs
-        #         return custom_forward
-        #     memory = checkpoint.checkpoint(custom_encoder(self.encoder, mask, pos_embed, src_shape), src)
-            
-        # else:
         memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed, src_shape=src_shape)       
         # temporal dimension is alive
         # query_embed = gen_sineembed_for_position(refpoint_embed)
@@ -173,17 +170,11 @@ class Transformer(nn.Module):
         # tgt, refpoint_embed = pattern_expansion(num_patterns, num_pattern_levels, self.patterns, refpoint_embed)
         # tgt = self.patterns.weight[:, None, None, :].repeat(1, self.num_queries, bs*t, 1).flatten(0, 1) # n_q*n_pat, bs, d_model
         # refpoint_embed = refpoint_embed.repeat(self.num_patterns, 1, 1) # n_pat*n_q, bs*t, d_model
-            # import ipdb; ipdb.set_trace()
-        # if self.gradient_checkpointing:
-        #     def custom_decoder(module, mask, pos_embed, refpoint_embed, orig_res):
-        #         def custom_forward(*inputs):
-        #             inputs = module(*inputs, memory_key_padding_mask=mask, pos=pos_embed, refpoints_unsigmoid=refpoint_embed, orig_res=orig_res)
-        #             return inputs
-        #         return custom_forward
-        #     hs, cls_hs, references = checkpoint.checkpoint(custom_decoder(self.decoder, mask, pos_embed, refpoint_embed, (h,w)), tgt, memory)
-        # else:
+        if self.use_extra_mem:
+            extra_mem = self.extra_encoder(memory.clone().detach(), src_key_padding_mask=mask, pos=pos_embed, src_shape=src_shape)
+        
         hs, cls_hs, references = self.decoder(tgt, memory, memory_key_padding_mask=mask,
-                                    pos=pos_embed, refpoints_unsigmoid=refpoint_embed, orig_res=(h,w))
+                                    pos=pos_embed, refpoints_unsigmoid=refpoint_embed, orig_res=(h,w), extra_mem=extra_mem)
         return hs, cls_hs, references
 
 
@@ -277,9 +268,10 @@ class TransformerDecoder(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.conv_activation = _get_activation_fn("gelu")
 
-        self.conv1 = nn.Conv2d(2*d_model, d_model, kernel_size=1)
-        self.conv2 = nn.Conv2d(d_model, d_model, kernel_size=1)
-        self.q_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
+        # self.conv1 = nn.Conv2d(2*d_model, d_model, kernel_size=1)
+        # self.conv2 = nn.Conv2d(d_model, d_model, kernel_size=1)
+        self.conv_norm = nn.LayerNorm(d_model)
+        # self.q_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
         self.k_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
         self.v_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
         
@@ -311,6 +303,7 @@ class TransformerDecoder(nn.Module):
                 pos: Optional[Tensor] = None,
                 refpoints_unsigmoid: Optional[Tensor] = None, # num_queries, bs, 2
                 orig_res = None,
+                extra_mem = None,
                 ):
         output = tgt
 
@@ -345,7 +338,10 @@ class TransformerDecoder(nn.Module):
                 query_sine_embed[..., self.d_model // 2:] *= (refHW_cond[..., 0] / obj_center[..., 2]).unsqueeze(-1)
                 query_sine_embed[..., :self.d_model // 2] *= (refHW_cond[..., 1] / obj_center[..., 3]).unsqueeze(-1)
 
-
+            if not extra_mem is None:
+                cls_memory = memory
+                memory = extra_mem
+            
             if self.gradient_checkpointing:
                 def custom_layer(module):
                     def custom_forward(*inputs):
@@ -388,11 +384,13 @@ class TransformerDecoder(nn.Module):
             # apply convolution
             h, w = orig_res
             actor_feature_expanded = actor_feature.flatten(0,1)[..., None, None].expand(-1, -1, h, w) # N_q*B, D, H, W
-            encoded_feature_expanded = memory[:, None].expand(-1, len(tgt), -1, -1).flatten(1,2).view(h,w,-1,actor_feature.shape[-1]).permute(2,3,0,1) # N_q*B, D, H, W
+            encoded_feature_expanded = cls_memory[:, None].expand(-1, len(tgt), -1, -1).flatten(1,2).view(h,w,-1,actor_feature.shape[-1]).permute(2,3,0,1) # N_q*B, D, H, W
 
-            cls_feature = self.conv_activation(self.conv1(torch.cat([actor_feature_expanded, encoded_feature_expanded], dim=1)))
+            cls_feature = actor_feature_expanded + encoded_feature_expanded
+            cls_feature = self.conv_norm(cls_feature.transpose(-1, 1).contiguous()).transpose(-1, 1).contiguous()
+
+            # cls_feature = self.conv_activation(self.conv1(torch.cat([actor_feature_expanded, encoded_feature_expanded], dim=1)))
             for block in self.conv_blocks:
-                
                 if self.gradient_checkpointing:
                     def custom_conv(module):
                         def custom_conv_fwd(inputs):
@@ -546,6 +544,56 @@ class TransformerEncoderLayer(nn.Module): # spatially, temporally
         src = src.reshape(t, b, h*w, c).permute(2,1,0,3).contiguous().flatten(1,2)
         return src
 
+class TransformerSpatialEncoderLayer(nn.Module): # spatially, temporally
+
+    def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1,
+                 activation="relu", normalize_before=False):
+        super().__init__()
+        self.self_attn_s = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
+        self.self_attn_t = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
+        # Implementation of Feedforward model
+        self.linear1_s = nn.Linear(d_model, dim_feedforward)
+        self.dropout_s = nn.Dropout(dropout)
+        self.linear2_s = nn.Linear(dim_feedforward, d_model)
+
+        self.norm1_s = nn.LayerNorm(d_model)
+        self.norm2_s = nn.LayerNorm(d_model)
+        self.dropout1_s = nn.Dropout(dropout)
+        self.dropout2_s = nn.Dropout(dropout)
+
+        self.linear1_t = nn.Linear(d_model, dim_feedforward)
+        self.dropout_t = nn.Dropout(dropout)
+        self.linear2_t = nn.Linear(dim_feedforward, d_model)
+
+        self.norm1_t = nn.LayerNorm(d_model)
+        self.norm2_t = nn.LayerNorm(d_model)
+        self.dropout1_t = nn.Dropout(dropout)
+        self.dropout2_t = nn.Dropout(dropout)
+
+        self.activation = _get_activation_fn(activation)
+        self.normalize_before = normalize_before
+
+    def with_pos_embed(self, tensor, pos: Optional[Tensor]):
+        return tensor if pos is None else tensor + pos
+
+    def forward(self,
+                     src,
+                     src_mask: Optional[Tensor] = None,
+                     src_key_padding_mask: Optional[Tensor] = None,
+                     pos: Optional[Tensor] = None,
+                     src_shape = None):
+        b, c, t, h, w = src_shape # original src shape
+        # current src shape: hw, bt, c
+        q = k = self.with_pos_embed(src, pos)
+        src2 = self.self_attn_s(q, k, value=src, attn_mask=src_mask,
+                              key_padding_mask=src_key_padding_mask)[0]
+        src = src + self.dropout1_s(src2)
+        src = self.norm1_s(src)
+        src2 = self.linear2_s(self.dropout_s(self.activation(self.linear1_s(src))))
+        src = src + self.dropout2_s(src2)
+        src = self.norm2_s(src) # spatially encoded
+
+        return src
 
 class TransformerDecoderLayer(nn.Module):
 

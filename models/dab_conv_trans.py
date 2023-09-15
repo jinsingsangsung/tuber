@@ -15,13 +15,13 @@ from utils.utils import print_log
 import os
 
 from models.backbone_builder2 import build_backbone
-from models.detr.segmentation import (dice_loss, sigmoid_focal_loss)
+# from models.detr.segmentation import (dice_loss, sigmoid_focal_loss)
 from models.dab_conv_trans_detr.dab_transformer import build_transformer
 # from models.transformer.transformer_layers import TransformerEncoderLayer, TransformerEncoder
 from models.dab_conv_trans_detr.criterion import PostProcess, PostProcessAVA, MLP
 from models.dab_conv_trans_detr.criterion import SetCriterion, SetCriterionAVA, SetCriterionUCF
-from models.dab_conv_trans_detr.transformer_layers import TransformerEncoderLayer, TransformerEncoder
-from models.dab_conv_trans_detr.dab_transformer import TransformerDecoderLayer, TransformerDecoder
+# from models.dab_conv_trans_detr.transformer_layers import TransformerEncoderLayer, TransformerEncoder
+# from models.dab_conv_trans_detr.dab_transformer import TransformerDecoderLayer, TransformerDecoder
 
 import copy
 import math
@@ -266,6 +266,7 @@ def build_model(cfg):
                  last_stride=cfg.CONFIG.MODEL.LAST_STRIDE,
                  dataset_mode=cfg.CONFIG.DATA.DATASET_NAME,
                  bbox_embed_diff_each_layer=cfg.CONFIG.MODEL.BBOX_EMBED_DIFF_EACH_LAYER,
+                 efficient=cfg.CONFIG.EFFICIENT,
                  )
 
     matcher = build_matcher(cfg)
