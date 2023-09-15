@@ -19,11 +19,11 @@ CONFIG:
   TRAIN:
     EPOCH_NUM: 20
     BATCH_SIZE: 2
-    LR: 1e-4
+    LR: 3e-4
     MIN_LR: 1e-6 # only if cosine scheduler is used
     LR_BACKBONE: 1e-5 # if <=0, freezes the backbone
     MOMENTUM: 0.9
-    W_DECAY: 1e-4
+    W_DECAY: 5e-4
     LR_POLICY: 'cosine'
     USE_WARMUP: True # does nothing
     WARMUP_START_LR: 1e-5
@@ -102,7 +102,7 @@ CONFIG:
 
   LOSS_COFS:
     MASK_COF: 1
-    DICE_COF: 20
+    DICE_COF: 5
     BBOX_COF: 5
     GIOU_COF: 2
     EOS_COF: 0.1
