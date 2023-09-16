@@ -186,14 +186,16 @@ class ResNeXt(nn.Module):
 
         x = self.layer1(x)
         x = self.layer2(x)
-        x = self.layer3(x)
+        x = self.layer3[0](x)
         if self.gradient_checkpointing:
-            def custom_layer(module):
-                def custom_forward(*inputs):
-                    return module(*inputs)
-                return custom_forward
-            x = checkpoint.checkpoint(custom_layer(self.layer4), x)
+            # def custom_layer(module):
+                # def custom_forward(*inputs):
+                    # return module(*inputs)
+                # return custom_forward
+            x = checkpoint.checkpoint_sequential(self.layer3[1:], len(self.layer3[1:]), x)
+            x = checkpoint.checkpoint_sequential(self.layer4, len(self.layer4), x)
         else:
+            x = self.layer3[1:](x)
             x = self.layer4(x)
 
         return x, None
