@@ -176,8 +176,6 @@ if __name__ == '__main__':
         cfg.CONFIG.LOG.EXP_NAME = "debug_{}-{}".format(study,run)
     if args.eff:
         cfg.CONFIG.EFFICIENT = True
-    else:
-        cfg.CONFIG.EFFICIENT = False
     if args.grad_ckpt:
         cfg.CONFIG.GRADIENT_CHECKPOINTING = True        
     
