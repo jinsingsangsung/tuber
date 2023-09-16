@@ -275,11 +275,12 @@ class TransformerDecoder(nn.Module):
         self.cls_linear1 = nn.Linear(d_model, dim_feedforward)
         self.cls_linear2 = nn.Linear(dim_feedforward, d_model)
         self.dropout = nn.Dropout(dropout)
-        self.conv_activation = _get_activation_fn("gelu")
+        # self.conv_activation = _get_activation_fn("gelu")
 
-        self.conv1 = nn.Conv2d(2*d_model, d_model, kernel_size=1)
-        self.conv2 = nn.Conv2d(d_model, d_model, kernel_size=1)
-        self.q_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
+        # self.conv1 = nn.Conv2d(2*d_model, d_model, kernel_size=1)
+        self.conv_norm = nn.LayerNorm(d_model)
+        # self.conv2 = nn.Conv2d(d_model, d_model, kernel_size=1)
+        # self.q_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
         self.k_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
         self.v_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
         
@@ -390,7 +391,9 @@ class TransformerDecoder(nn.Module):
             actor_feature_expanded = actor_feature.flatten(0,1)[..., None, None].expand(-1, -1, h, w) # N_q*B, D, H, W
             encoded_feature_expanded = memory[:, None].expand(-1, len(tgt), -1, -1).flatten(1,2).view(h,w,-1,actor_feature.shape[-1]).permute(2,3,0,1) # N_q*B, D, H, W
 
-            cls_feature = self.conv_activation(self.conv1(torch.cat([actor_feature_expanded, encoded_feature_expanded], dim=1)))
+            # cls_feature = self.conv_activation(self.conv1(torch.cat([actor_feature_expanded, encoded_feature_expanded], dim=1)))
+            cls_feature = actor_feature_expanded + encoded_feature_expanded
+            cls_feature = self.conv_norm(cls_feature.transpose(-1, 1).contiguous()).transpose(-1, 1).contiguous()            
             for block in self.conv_blocks:
                 
                 if self.gradient_checkpointing:
