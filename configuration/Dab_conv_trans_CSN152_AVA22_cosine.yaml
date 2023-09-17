@@ -102,7 +102,7 @@ CONFIG:
 
   LOSS_COFS:
     MASK_COF: 1
-    DICE_COF: 10
+    DICE_COF: 7
     BBOX_COF: 5
     GIOU_COF: 2
     EOS_COF: 0.1
