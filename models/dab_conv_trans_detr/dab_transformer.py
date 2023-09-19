@@ -298,7 +298,10 @@ class TransformerDecoder(nn.Module):
         self.cls_norm__ = nn.LayerNorm(d_model)
         self.cls_linear1_ = nn.Linear(d_model, dim_feedforward)
         self.cls_linear2_ = nn.Linear(dim_feedforward, d_model)
+        self.dropout1 = nn.Dropout(dropout)
+        self.norm1 = nn.LayerNorm(d_model)
         self.dropout_ = nn.Dropout(dropout)
+        self.self_attn = MultiheadAttention(d_model, 8, dropout=dropout, vdim=d_model)
         self.cross_attn = MultiheadAttention(d_model*2, 8, dropout=dropout, vdim=d_model)
         
         self.cls_norm2 = nn.LayerNorm(d_model)
@@ -417,6 +420,11 @@ class TransformerDecoder(nn.Module):
             
             key = torch.cat([self.k_proj(cls_feature).flatten(2).permute(2,0,1), pos[:,None].expand(-1, len(tgt), -1, -1).flatten(1,2)], dim=-1)
             query = self.class_queries[:, None].expand(-1, actor_feature_expanded.shape[0], -1)
+            
+            query2 = self.self_attn(query, query, query)[0]
+            query = query + self.dropout1(query2)
+            query = self.norm1(query)
+            
             cls_query_pos = self.cls_qpos_sine_proj(query_sine_embed).flatten(0,1)[None].expand(len(self.class_queries), -1 ,-1)
             query = torch.cat([query, cls_query_pos], dim=-1)
             value = self.v_proj(encoded_feature_expanded).flatten(2).permute(2,0,1)
