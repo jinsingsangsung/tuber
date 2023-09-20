@@ -99,6 +99,7 @@ class Transformer(nn.Module):
                  bbox_embed_diff_each_layer=False,
                  gradient_checkpointing=False,
                  num_conv_blocks=3,
+                 use_extra_mem=True
                  ):
 
         super().__init__()
@@ -134,6 +135,12 @@ class Transformer(nn.Module):
             self.patterns = nn.Embedding(self.num_patterns, d_model)
 
         self.gradient_checkpointing = gradient_checkpointing            
+        self.use_extra_mem = use_extra_mem
+        if use_extra_mem:
+            extra_encoder_layer = TransformerSpatialEncoderLayer(d_model, nhead, dim_feedforward, dropout, activation, normalize_before)
+            extra_encoder_norm = nn.LayerNorm(d_model) if normalize_before else None
+            self.extra_encoder = TransformerEncoder(extra_encoder_layer, 1, extra_encoder_norm, d_model, gradient_checkpointing)
+
 
     def _reset_parameters(self):
         for p in self.parameters():
@@ -153,6 +160,8 @@ class Transformer(nn.Module):
         mask = mask.flatten(0,1).flatten(1)
 
         memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed, src_shape=src_shape)       
+        if self.use_extra_mem:
+             extra_mem = self.extra_encoder(memory.clone().detach(), src_key_padding_mask=mask, pos=pos_embed, src_shape=src_shape)
         
         # temporal dimension is alive
         num_queries = refpoint_embed.shape[0]
@@ -165,7 +174,7 @@ class Transformer(nn.Module):
             tgt = torch.zeros(num_queries, bs*t, self.d_model, device=refpoint_embed.device)
 
         hs, cls_hs, references = self.decoder(tgt, memory, memory_key_padding_mask=mask,
-                                    pos=pos_embed, refpoints_unsigmoid=refpoint_embed, orig_res=(h,w))
+                                    pos=pos_embed, refpoints_unsigmoid=refpoint_embed, orig_res=(h,w), extra_mem=extra_mem)
         return hs, cls_hs, references
 
 
@@ -289,6 +298,7 @@ class TransformerDecoder(nn.Module):
                 pos: Optional[Tensor] = None,
                 refpoints_unsigmoid: Optional[Tensor] = None, # num_queries, bs, 2
                 orig_res = None,
+                extra_mem = None,
                 ):
         output = tgt
 
@@ -321,7 +331,10 @@ class TransformerDecoder(nn.Module):
                 query_sine_embed[..., self.d_model // 2:] *= (refHW_cond[..., 0] / obj_center[..., 2]).unsqueeze(-1)
                 query_sine_embed[..., :self.d_model // 2] *= (refHW_cond[..., 1] / obj_center[..., 3]).unsqueeze(-1)
 
-
+            if not extra_mem is None:
+                cls_memory = memory
+                memory = extra_mem
+                 
             if self.gradient_checkpointing:
                 def custom_layer(module):
                     def custom_forward(*inputs):
@@ -353,7 +366,7 @@ class TransformerDecoder(nn.Module):
                                                (layer_id==0))
                 cls_output = checkpoint.checkpoint(custom_layer2(cls_layer),
                                                    actor_feature.clone().detach(),
-                                                   memory,
+                                                   cls_memory,
                                                    pos,
                                                    query_sine_embed,
                                                    self.class_queries,
@@ -367,7 +380,7 @@ class TransformerDecoder(nn.Module):
                             pos=pos, query_pos=query_pos, query_sine_embed=query_sine_embed,
                             is_first=(layer_id == 0))
 
-                cls_output = cls_layer(actor_feature.clone().detach(), memory, pos, query_sine_embed, self.class_queries, orig_res, len(tgt))
+                cls_output = cls_layer(actor_feature.clone().detach(), cls_memory, pos, query_sine_embed, self.class_queries, orig_res, len(tgt))
             
             if layer_id != 0:
                 cls_output = self.cls_norm(cls_output + prev_output)
@@ -481,6 +494,57 @@ class TransformerEncoderLayer(nn.Module): # spatially, temporally
         src = src.reshape(t, b, h*w, c).permute(2,1,0,3).contiguous().flatten(1,2)
         return src
 
+
+class TransformerSpatialEncoderLayer(nn.Module): # spatially, temporally
+
+    def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1,
+                activation="relu", normalize_before=False):
+        super().__init__()
+        self.self_attn_s = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
+    #  self.self_attn_t = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
+        # Implementation of Feedforward model
+        self.linear1_s = nn.Linear(d_model, dim_feedforward)
+        self.dropout_s = nn.Dropout(dropout)
+        self.linear2_s = nn.Linear(dim_feedforward, d_model)
+
+        self.norm1_s = nn.LayerNorm(d_model)
+        self.norm2_s = nn.LayerNorm(d_model)
+        self.dropout1_s = nn.Dropout(dropout)
+        self.dropout2_s = nn.Dropout(dropout)
+
+    #  self.linear1_t = nn.Linear(d_model, dim_feedforward)
+    #  self.dropout_t = nn.Dropout(dropout)
+    #  self.linear2_t = nn.Linear(dim_feedforward, d_model)
+
+    #  self.norm1_t = nn.LayerNorm(d_model)
+    #  self.norm2_t = nn.LayerNorm(d_model)
+    #  self.dropout1_t = nn.Dropout(dropout)
+    #  self.dropout2_t = nn.Dropout(dropout)
+
+    #  self.activation = _get_activation_fn(activation)
+    #  self.normalize_before = normalize_before
+
+    def with_pos_embed(self, tensor, pos: Optional[Tensor]):
+        return tensor if pos is None else tensor + pos
+
+    def forward(self,
+                    src,
+                    src_mask: Optional[Tensor] = None,
+                    src_key_padding_mask: Optional[Tensor] = None,
+                    pos: Optional[Tensor] = None,
+                    src_shape = None):
+        b, c, t, h, w = src_shape # original src shape
+        # current src shape: hw, bt, c
+        q = k = self.with_pos_embed(src, pos)
+        src2 = self.self_attn_s(q, k, value=src, attn_mask=src_mask,
+                            key_padding_mask=src_key_padding_mask)[0]
+        src = src + self.dropout1_s(src2)
+        src = self.norm1_s(src)
+        src2 = self.linear2_s(self.dropout_s(self.activation(self.linear1_s(src))))
+        src = src + self.dropout2_s(src2)
+        src = self.norm2_s(src) # spatially encoded
+
+        return src
 
 class TransformerDecoderLayer(nn.Module):
 

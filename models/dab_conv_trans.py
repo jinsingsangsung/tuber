@@ -266,6 +266,7 @@ def build_model(cfg):
                  last_stride=cfg.CONFIG.MODEL.LAST_STRIDE,
                  dataset_mode=cfg.CONFIG.DATA.DATASET_NAME,
                  bbox_embed_diff_each_layer=cfg.CONFIG.MODEL.BBOX_EMBED_DIFF_EACH_LAYER,
+                 efficient=cfg.CONFIG.EFFICIENT,
                  )
 
     matcher = build_matcher(cfg)
