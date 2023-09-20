@@ -82,16 +82,7 @@ class DETR(nn.Module):
             self.class_proj = nn.Conv3d(backbone.num_channels, hidden_dim, kernel_size=1)
         nn.init.xavier_uniform_(self.input_proj.weight, gain=1)
         nn.init.constant_(self.input_proj.bias, 0)    
-        # self.class_proj = nn.Conv3d(backbone.num_channels[-1], hidden_dim, kernel_size=(4,1,1))
 
-        # encoder_layer = TransformerEncoderLayer(hidden_dim, 8, 2048, 0.1, "relu", normalize_before=False)
-        # self.encoder = TransformerEncoder(encoder_layer=encoder_layer, num_layers=2)
-        # decoder_layer = TransformerDecoderLayer(hidden_dim, 8, 2048, 0.1, "relu", normalize_before=False)        
-        # decoder_norm = nn.LayerNorm(hidden_dim)
-        # self.decoder = TransformerDecoder(decoder_layer=decoder_layer, num_layers=3, norm=decoder_norm, return_intermediate=True, query_dim=4, modulate_hw_attn=True, bbox_embed_diff_each_layer=True)
-        # self.num_patterns = 3
-        # self.num_pattern_message:%3CTQB5fQ7CQ_2uZmev7pIQjA@geopod-ismtpd-5%3Elevel = 4
-        # self.patterns = nn.Embedding(self.num_patterns*self.num_pattern_level, hidden_dim)
         prior_prob = 0.01
         bias_value = -math.log((1 - prior_prob) / prior_prob)
         if self.dataset_mode == 'ava':

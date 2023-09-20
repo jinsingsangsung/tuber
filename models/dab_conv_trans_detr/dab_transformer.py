@@ -161,7 +161,7 @@ class Transformer(nn.Module):
 
         memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed, src_shape=src_shape)       
         if self.use_extra_mem:
-             extra_mem = self.extra_encoder(memory.clone().detach(), src_key_padding_mask=mask, pos=pos_embed, src_shape=src_shape)
+            extra_mem = self.extra_encoder(memory.clone().detach(), src_key_padding_mask=mask, pos=pos_embed, src_shape=src_shape)
         
         # temporal dimension is alive
         num_queries = refpoint_embed.shape[0]
@@ -170,6 +170,8 @@ class Transformer(nn.Module):
             pos_embed = pos_embed.reshape(-1, bs, t, c)[:,:,t//2:t//2+1,:].flatten(1,2)
             mask = mask.reshape(bs, t, -1)[:,t//2:t//2+1,:].flatten(0,1)
             tgt = torch.zeros(num_queries, bs, self.d_model, device=refpoint_embed.device)
+            if self.use_extra_mem:
+                extra_mem = extra_mem.reshape(-1, bs, t, c)[:,:,t//2:t//2+1,:].flatten(1,2)
         else:
             tgt = torch.zeros(num_queries, bs*t, self.d_model, device=refpoint_embed.device)
 
@@ -501,7 +503,7 @@ class TransformerSpatialEncoderLayer(nn.Module): # spatially, temporally
                 activation="relu", normalize_before=False):
         super().__init__()
         self.self_attn_s = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
-    #  self.self_attn_t = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
+        #  self.self_attn_t = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
         # Implementation of Feedforward model
         self.linear1_s = nn.Linear(d_model, dim_feedforward)
         self.dropout_s = nn.Dropout(dropout)
@@ -512,17 +514,17 @@ class TransformerSpatialEncoderLayer(nn.Module): # spatially, temporally
         self.dropout1_s = nn.Dropout(dropout)
         self.dropout2_s = nn.Dropout(dropout)
 
-    #  self.linear1_t = nn.Linear(d_model, dim_feedforward)
-    #  self.dropout_t = nn.Dropout(dropout)
-    #  self.linear2_t = nn.Linear(dim_feedforward, d_model)
+        #  self.linear1_t = nn.Linear(d_model, dim_feedforward)
+        #  self.dropout_t = nn.Dropout(dropout)
+        #  self.linear2_t = nn.Linear(dim_feedforward, d_model)
 
-    #  self.norm1_t = nn.LayerNorm(d_model)
-    #  self.norm2_t = nn.LayerNorm(d_model)
-    #  self.dropout1_t = nn.Dropout(dropout)
-    #  self.dropout2_t = nn.Dropout(dropout)
+        #  self.norm1_t = nn.LayerNorm(d_model)
+        #  self.norm2_t = nn.LayerNorm(d_model)
+        #  self.dropout1_t = nn.Dropout(dropout)
+        #  self.dropout2_t = nn.Dropout(dropout)
 
-    #  self.activation = _get_activation_fn(activation)
-    #  self.normalize_before = normalize_before
+        self.activation = _get_activation_fn(activation)
+        self.normalize_before = normalize_before
 
     def with_pos_embed(self, tensor, pos: Optional[Tensor]):
         return tensor if pos is None else tensor + pos
