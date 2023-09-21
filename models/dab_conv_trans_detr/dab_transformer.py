@@ -127,7 +127,7 @@ class Transformer(nn.Module):
                                                 dropout, activation, normalize_before, keep_query_pos=keep_query_pos)
         cls_decoder_layer = TransformerClassDecoderLayer(d_model, nhead, dim_feedforward, dropout, activation, num_conv_blocks)        
         decoder_norm = nn.LayerNorm(d_model)
-        self.decoder = TransformerDecoder(decoder_layer, num_decoder_layers, decoder_norm,
+        self.decoder = TransformerDecoder(decoder_layer, cls_decoder_layer, num_decoder_layers, decoder_norm,
                                           return_intermediate=return_intermediate_dec,
                                           d_model=d_model, query_dim=query_dim, keep_query_pos=keep_query_pos, query_scale_type=query_scale_type,
                                           modulate_hw_attn=modulate_hw_attn,
@@ -623,7 +623,7 @@ class TransformerDecoder(nn.Module):
                     def custom_forward2(*inputs):
                         return module(*inputs)
                     return custom_forward2
-                output, actor_feature = checkpoint.checkpoint(custom_layer(layer),
+                output, actor_feature, q_memory = checkpoint.checkpoint(custom_layer(layer),
                                                output,
                                                memory,
                                                tgt_mask,
@@ -643,14 +643,14 @@ class TransformerDecoder(nn.Module):
                                                    orig_res,
                                                    len(tgt))
             else:
-                output, actor_feature = layer(output, memory, tgt_mask=tgt_mask,
+                output, actor_feature, q_memory = layer(output, memory, tgt_mask=tgt_mask,
                             memory_mask=memory_mask,
                             tgt_key_padding_mask=tgt_key_padding_mask,
                             memory_key_padding_mask=memory_key_padding_mask,
                             pos=pos, query_pos=query_pos, query_sine_embed=query_sine_embed,
                             is_first=(layer_id == 0))
 
-                cls_output = cls_layer(actor_feature.clone().detach(), memory, pos, query_sine_embed, self.class_queries, orig_res, len(tgt))
+                cls_output = cls_layer(actor_feature.clone().detach(), q_memory, pos[0], query_sine_embed, self.class_queries, orig_res, len(tgt))
             
             if layer_id != 0:
                 cls_output = self.cls_norm(cls_output + prev_output)
@@ -949,7 +949,7 @@ class TransformerClassDecoderLayer(nn.Module):
         self.dropout2_ = nn.Dropout(dropout) # self.dropout_
         self.cls_norm_ = nn.LayerNorm(d_model)
 
-    def forward(self, actor_feature, memory, pos, query_sine_embed, class_queries, orig_res, num_queries):
+    def forward(self, actor_feature, q_memory, pos, query_sine_embed, class_queries, orig_res, num_queries):
                     
         # separate classification branch from localization
         actor_feature2 = self.cls_linear2(self.dropout1(self.activation(self.cls_linear1(actor_feature))))
@@ -958,8 +958,11 @@ class TransformerClassDecoderLayer(nn.Module):
 
         # apply actor-centric convolution
         h, w = orig_res
-        actor_feature_expanded = actor_feature.flatten(0,1)[..., None, None].expand(-1, -1, h, w) # N_q*B, D, H, W
-        encoded_feature_expanded = memory[:, None].expand(-1, num_queries, -1, -1).flatten(1,2).view(h,w,-1,actor_feature.shape[-1]).permute(2,3,0,1) # N_q*B, D, H, W
+        actor_feature_expanded = actor_feature.flatten(0,1)[..., None, None].expand(-1, -1, h, w) # N_q*B*t, D, H, W
+        # memory needs to be hw, bs*t, d
+        # q_memory: n_q, hw, bs*t, d
+        # encoded_feature_expanded = q_memory.transpose(0,1).flatten(1,2).view(h,w,-1,actor_feature.shape[-1]).permute(2,3,0,1) # N_q*B(*t), D, H, W
+        encoded_feature_expanded = rearrange(q_memory, "N (H W) BT D -> (N BT) D H W", H=h, W=w)
         cls_feature = actor_feature_expanded + encoded_feature_expanded
         cls_feature = self.conv_norm(cls_feature.transpose(-1, 1).contiguous()).transpose(-1, 1).contiguous()            
         for block in self.conv_blocks:    
@@ -979,7 +982,7 @@ class TransformerClassDecoderLayer(nn.Module):
         query = query + self.dropout1(query2)
         query = self.norm1(query)
         
-        # class decoder cross-attention
+
         key = torch.cat([self.k_proj(cls_feature).flatten(2).permute(2,0,1), pos[:,None].expand(-1, num_queries, -1, -1).flatten(1,2)], dim=-1)
         cls_query_pos = self.cls_qpos_sine_proj(query_sine_embed).flatten(0,1)[None].expand(len(class_queries), -1 ,-1)
         query = torch.cat([query, cls_query_pos], dim=-1)

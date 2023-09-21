@@ -11,6 +11,9 @@ import math
 from functools import partial
 import scipy.io as sio
 from torchvision.models.video.resnet import VideoResNet
+from utils.utils import print_log
+import os
+import torch.utils.checkpoint as checkpoint
 
 eps = 1e-3
 bn_mmt = 0.1
@@ -98,9 +101,12 @@ class ResNeXt(nn.Module):
                  block_nums,
                  num_classes=400,
                  use_affine=True,
-                 last_stride=True):
+                 last_stride=True,
+                 gradient_checkpointing=False,
+                 ):
 
         self.use_affine = use_affine
+        self.gradient_checkpointing = gradient_checkpointing
         self.in_planes = 64
         self.num_classes = num_classes
 
@@ -133,7 +139,7 @@ class ResNeXt(nn.Module):
         last_stride = 2 if last_stride else 1
         self.layer4 = self._make_layer(block, in_planes=1024, planes=512, blocks=block_nums[3],
                                        stride=last_stride, temporal_stride=2, expansion=4)
-        print("last stride: {}".format(last_stride))
+        # print("last stride: {}".format(last_stride))
 
         self.avgpool = nn.AdaptiveAvgPool3d(output_size=(1, 1, 1))
 
@@ -180,8 +186,17 @@ class ResNeXt(nn.Module):
 
         x = self.layer1(x)
         x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
+        x = self.layer3[0](x)
+        if self.gradient_checkpointing:
+            # def custom_layer(module):
+                # def custom_forward(*inputs):
+                    # return module(*inputs)
+                # return custom_forward
+            x = checkpoint.checkpoint_sequential(self.layer3[1:], len(self.layer3[1:]), x)
+            x = checkpoint.checkpoint_sequential(self.layer4, len(self.layer4), x)
+        else:
+            x = self.layer3[1:](x)
+            x = self.layer4(x)
 
         return x, None
 
@@ -194,7 +209,10 @@ def build_model(n_classes=400,
                 load_pretrain=True,
                 use_affine=True,
                 tune_point=5,
-                last_stride=True):
+                last_stride=True,
+                gpu_world_rank=0,
+                log_path=None,
+                gradient_checkpointing=False):
 
     model = ResNeXt(ResNeXtBottleneck,
                     num_classes=n_classes,
@@ -202,10 +220,12 @@ def build_model(n_classes=400,
                     block_nums=[3, 8, 36, 3],
                     sample_duration=sample_duration,
                     use_affine=use_affine,
-                    last_stride=last_stride)
+                    last_stride=last_stride,
+                    gradient_checkpointing=gradient_checkpointing,
+                    )
 
     if load_pretrain:
-        load_weights(model, pretrain_path=pretrain_path, load_fc=False, use_affine=use_affine, tune_point=tune_point)
+        load_weights(model, pretrain_path=pretrain_path, load_fc=False, use_affine=use_affine, tune_point=tune_point, gpu_world_rank=gpu_world_rank, log_path=log_path)
 
     return model
 
@@ -239,9 +259,10 @@ def copy_bn(layer, layer_name, weights, weights_dict_copy, use_affine=True):
                      weights_dict_copy=weights_dict_copy)
 
 
-def load_weights(model, pretrain_path, load_fc=True, use_affine=False, tune_point=5):
+def load_weights(model, pretrain_path, load_fc=True, use_affine=False, tune_point=5, gpu_world_rank=0, log_path=None):
     import scipy.io as sio
-    print("load weights plus")
+    if gpu_world_rank == 0:
+        print_log(log_path, "load weights plus")    
     r_weights = sio.loadmat(pretrain_path)
     r_weights_copy = sio.loadmat(pretrain_path)
 
@@ -311,15 +332,17 @@ def load_weights(model, pretrain_path, load_fc=True, use_affine=False, tune_poin
                      weights=r_weights['last_out_L400_b'][0],
                      weights_dict_copy=r_weights_copy)
 
-    print("load pretrain model from " + pretrain_path)
-    print("load fc", load_fc)
+    if gpu_world_rank == 0:
+        print_log(log_path, "load pretrain model from " + pretrain_path)
+        print_log(log_path, "load fc", load_fc)
     for k, v in r_weights_copy.items():
         if "momentum" not in k and "model_iter" not in k and "__globals__" not in k and "__header__" not in k and "lr" not in k and "__version__" not in k:
-            print(k, v.shape)
+            if gpu_world_rank == 0: print_log(log_path, k, v.shape)
 
 
 def build_CSN(cfg):
     tune_point = 4
+    log_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
     model = build_model(n_classes=cfg.CONFIG.DATA.NUM_CLASSES,
                         sample_size=cfg.CONFIG.DATA.IMG_SIZE,
                         sample_duration=cfg.CONFIG.MODEL.TEMP_LEN,
@@ -328,8 +351,11 @@ def build_CSN(cfg):
                         load_pretrain=cfg.CONFIG.MODEL.PRETRAINED,
                         use_affine=False,
                         tune_point=tune_point,
-                        last_stride=cfg.CONFIG.MODEL.LAST_STRIDE)
-    print("build CSN-152, tune point: {}".format(tune_point))
+                        last_stride=cfg.CONFIG.MODEL.LAST_STRIDE,
+                        log_path=log_path,
+                        gradient_checkpointing=cfg.CONFIG.GRADIENT_CHECKPOINTING,)
+    if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
+        print_log(log_path, "build CSN-152, tune point: {}".format(tune_point))
     return model
 
 
