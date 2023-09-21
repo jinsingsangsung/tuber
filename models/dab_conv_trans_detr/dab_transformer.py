@@ -25,7 +25,9 @@ from .attention import MultiheadAttention
 from models.transformer.util.misc import NestedTensor
 from utils.misc import inverse_sigmoid
 from .ops.modules import MSDeformAttn, MSDeformAttn3D
+from timm.models.layers import DropPath
 from einops import rearrange
+import torch.utils.checkpoint as checkpoint
 
 class MLP(nn.Module):
     """ Very simple multi-layer perceptron (also called FFN)"""
@@ -69,6 +71,28 @@ def gen_sineembed_for_position(pos_tensor):
         raise ValueError("Unknown pos_tensor shape(-1):{}".format(pos_tensor.size(-1)))
     return pos
 
+class ConvBlock(nn.Module):
+    def __init__(self, dim, drop_path=0):
+        super().__init__()
+        self.conv1 = nn.Conv2d(dim, dim, kernel_size=(3,3), padding=1)
+        self.norm = nn.LayerNorm(dim, eps=1e-6)
+        self.conv2 = nn.Linear(dim, 4*dim)
+        self.act = nn.GELU()
+        self.conv3 = nn.Linear(4*dim, dim)
+        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()    
+    
+    def forward(self, x):
+        input = x
+        x = self.conv1(x)
+        x = x.permute(0,2,3,1)
+        x = self.norm(x)
+        x = self.conv2(x)
+        x = self.act(x)
+        x = self.conv3(x)
+        x = x.permute(0,3,1,2)
+        x = input + self.drop_path(x)
+        return x
+
 class Transformer(nn.Module):
 
     def __init__(self, d_model=512, nhead=8, num_queries=300, num_encoder_layers=6,
@@ -84,7 +108,9 @@ class Transformer(nn.Module):
                  two_stage=False,
                  two_stage_num_proposals=300,
                  high_dim_query_update=False,
-                 no_sine_embed=False
+                 no_sine_embed=False,
+                 gradient_checkpointing=False,
+                 num_conv_blocks=3,
                  ):
 
         super().__init__()
@@ -96,15 +122,18 @@ class Transformer(nn.Module):
         encoder_layer = DeformableTransformerEncoderLayer(d_model, dim_feedforward,
                                                           dropout, activation,
                                                           num_feature_levels, nhead, enc_n_points)
-        self.encoder = DeformableTransformerEncoder(encoder_layer, num_encoder_layers)
+        self.encoder = DeformableTransformerEncoder(encoder_layer, num_encoder_layers, gradient_checkpointing)
         decoder_layer = TransformerDecoderLayer(d_model, nhead, dim_feedforward,
                                                 dropout, activation, normalize_before, keep_query_pos=keep_query_pos)
+        cls_decoder_layer = TransformerClassDecoderLayer(d_model, nhead, dim_feedforward, dropout, activation, num_conv_blocks)        
         decoder_norm = nn.LayerNorm(d_model)
         self.decoder = TransformerDecoder(decoder_layer, num_decoder_layers, decoder_norm,
                                           return_intermediate=return_intermediate_dec,
                                           d_model=d_model, query_dim=query_dim, keep_query_pos=keep_query_pos, query_scale_type=query_scale_type,
                                           modulate_hw_attn=modulate_hw_attn,
-                                          bbox_embed_diff_each_layer=bbox_embed_diff_each_layer)
+                                          bbox_embed_diff_each_layer=bbox_embed_diff_each_layer,
+                                          gradient_checkpointing=gradient_checkpointing,
+                                          )
         
         self.level_embed = nn.Parameter(torch.Tensor(num_feature_levels, d_model))
         if two_stage:
@@ -128,7 +157,8 @@ class Transformer(nn.Module):
             self.num_patterns = 0
         if self.num_patterns > 0:
             self.patterns = nn.Embedding(self.num_patterns, d_model)
-
+            
+        self.gradient_checkpointing = gradient_checkpointing
         self._reset_parameters()
 
     def _reset_parameters(self):
@@ -358,10 +388,11 @@ class Transformer(nn.Module):
 
 
 class DeformableTransformerEncoder(nn.Module):
-    def __init__(self, encoder_layer, num_layers):
+    def __init__(self, encoder_layer, num_layers, gradient_checkpointing=False):
         super().__init__()
         self.layers = _get_clones(encoder_layer, num_layers)
         self.num_layers = num_layers
+        self.gradient_checkpointing=gradient_checkpointing
 
     @staticmethod
     def get_reference_points(spatio_temporal_shapes, valid_ratios, device):
@@ -399,7 +430,19 @@ class DeformableTransformerEncoder(nn.Module):
         # import ipdb; ipdb.set_trace()
         reference_points = self.get_reference_points(spatio_temporal_shapes, valid_ratios, device=src.device)
         for _, layer in enumerate(self.layers):
-            output = layer(output, pos, reference_points, spatio_temporal_shapes, level_start_index, padding_mask)
+            if self.gradient_checkpointing:
+                def custom_layer(module):
+                    def custom_forward(*inputs):
+                        return module(inputs[0],
+                                      pos = inputs[1],
+                                      reference_points = inputs[2],
+                                      spatio_temporal_shapes = inputs[3],
+                                      level_start_index = inputs[4],
+                                      padding_mask = inputs[5])
+                    return custom_forward
+                output = checkpoint.checkpoint(custom_layer(layer), output, pos, reference_points, spatio_temporal_shapes, level_start_index, padding_mask)
+            else:
+                output = layer(output, pos, reference_points, spatio_temporal_shapes, level_start_index, padding_mask)
 
         return output
 
@@ -474,13 +517,15 @@ class TransformerEncoder(nn.Module):
 
 class TransformerDecoder(nn.Module):
 
-    def __init__(self, decoder_layer, num_layers, norm=None, return_intermediate=False, 
+    def __init__(self, decoder_layer, cls_decoder_layer, num_layers, norm=None, return_intermediate=False, 
                     d_model=256, query_dim=2, keep_query_pos=False, query_scale_type='cond_elewise',
                     modulate_hw_attn=False,
                     bbox_embed_diff_each_layer=False,
+                    gradient_checkpointing=False,
                     ):
         super().__init__()
         self.layers = _get_clones(decoder_layer, num_layers)
+        self.cls_layers = _get_clones(cls_decoder_layer, num_layers)
         self.num_layers = num_layers
         self.norm = norm
         self.return_intermediate = return_intermediate
@@ -512,33 +557,11 @@ class TransformerDecoder(nn.Module):
             for layer_id in range(num_layers - 1):
                 self.layers[layer_id + 1].ca_qpos_proj = None
 
-        dim_feedforward = decoder_layer.dim_feedforward
-        dropout = decoder_layer.dropout_rate
-        self.activation = decoder_layer.activation
         self.cls_norm = nn.LayerNorm(d_model)
-        self.cls_linear1 = nn.Linear(d_model, dim_feedforward)
-        self.cls_linear2 = nn.Linear(dim_feedforward, d_model)
-        self.dropout = nn.Dropout(dropout)
-        self.conv_activation = _get_activation_fn("gelu")
-
-        self.conv1 = nn.Conv2d(2*d_model, d_model, kernel_size=1)
-        self.conv2 = nn.Conv2d(d_model, d_model, kernel_size=1)
-        self.q_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
-        self.k_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
-        self.v_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
-        
-        # self.cls_params = nn.Linear(d_model, 80).weight
         self.class_queries = nn.Embedding(80, 256).weight
-        # self.conv2 = nn.Conv2d(d_model, 2*d_model, kernel_size=3, stride=2)
-        # self.conv3 = nn.Conv2d(2*d_model, 2*d_model, kernel_size=3, stride=2)
-        self.linear = nn.Linear(d_model, d_model)
-        self.cls_norm_ = nn.LayerNorm(d_model)
-        self.cls_norm__ = nn.LayerNorm(d_model)
-        self.cls_linear1_ = nn.Linear(d_model, dim_feedforward)
-        self.cls_linear2_ = nn.Linear(dim_feedforward, d_model)
-        self.dropout_ = nn.Dropout(dropout)
         
         self.cls_norm2 = nn.LayerNorm(d_model)
+        self.gradient_checkpointing = gradient_checkpointing
 
     def forward(self, tgt, memory,
                 tgt_mask: Optional[Tensor] = None,
@@ -558,7 +581,7 @@ class TransformerDecoder(nn.Module):
 
         # import ipdb; ipdb.set_trace()        
 
-        for layer_id, layer in enumerate(self.layers):
+        for layer_id, (layer, cls_layer) in enumerate(zip(self.layers, self.cls_layers)):
             obj_center = reference_points[..., :self.query_dim]     # [num_queries, batch_size, 2]
             # get sine embedding for the query vector
             query_sine_embed = gen_sineembed_for_position(obj_center)  
@@ -582,42 +605,55 @@ class TransformerDecoder(nn.Module):
                 query_sine_embed[..., self.d_model // 2:] *= (refHW_cond[..., 0] / obj_center[..., 2]).unsqueeze(-1)
                 query_sine_embed[..., :self.d_model // 2] *= (refHW_cond[..., 1] / obj_center[..., 3]).unsqueeze(-1)
 
-            output, actor_feature, q_memory = layer(output, memory, tgt_mask=tgt_mask,
-                           memory_mask=memory_mask,
-                           tgt_key_padding_mask=tgt_key_padding_mask,
-                           memory_key_padding_mask=memory_key_padding_mask,
-                           pos=pos, query_pos=query_pos, query_sine_embed=query_sine_embed,
-                           is_first=(layer_id == 0))
+            if self.gradient_checkpointing:
+                def custom_layer(module):
+                    def custom_forward(*inputs):
+                        return module(inputs[0],
+                                      inputs[1],
+                                      tgt_mask = inputs[2],
+                                      memory_mask = inputs[3],
+                                      tgt_key_padding_mask = inputs[4],
+                                      memory_key_padding_mask = inputs[5],
+                                      pos = inputs[6],
+                                      query_pos = inputs[7],
+                                      query_sine_embed = inputs[8],
+                                      is_first = inputs[9])
+                    return custom_forward
+                def custom_layer2(module):
+                    def custom_forward2(*inputs):
+                        return module(*inputs)
+                    return custom_forward2
+                output, actor_feature = checkpoint.checkpoint(custom_layer(layer),
+                                               output,
+                                               memory,
+                                               tgt_mask,
+                                               memory_mask,
+                                               tgt_key_padding_mask,
+                                               memory_key_padding_mask,
+                                               pos,
+                                               query_pos,
+                                               query_sine_embed,
+                                               (layer_id==0))
+                cls_output = checkpoint.checkpoint(custom_layer2(cls_layer),
+                                                   actor_feature.clone().detach(),
+                                                   memory,
+                                                   pos,
+                                                   query_sine_embed,
+                                                   self.class_queries,
+                                                   orig_res,
+                                                   len(tgt))
+            else:
+                output, actor_feature = layer(output, memory, tgt_mask=tgt_mask,
+                            memory_mask=memory_mask,
+                            tgt_key_padding_mask=tgt_key_padding_mask,
+                            memory_key_padding_mask=memory_key_padding_mask,
+                            pos=pos, query_pos=query_pos, query_sine_embed=query_sine_embed,
+                            is_first=(layer_id == 0))
 
-            # separate classification branch from localization
-            actor_feature = actor_feature.clone().detach()
-            actor_feature2 = self.cls_linear2(self.dropout(self.activation(self.cls_linear1(actor_feature))))
-            actor_feature = actor_feature + self.dropout(actor_feature2)
-            actor_feature = self.cls_norm(actor_feature)
-
-            # apply convolution
-            h, w = orig_res
-            actor_feature_expanded = actor_feature.flatten(0,1)[..., None, None].expand(-1, -1, h, w) # N_q*B, D, H, W
-            # q_memory: N_q, HW, BT, C
-            encoded_feature_expanded = rearrange(q_memory, "N (H W) B C -> (N B) C H W", H=h, W=w)
-            # encoded_feature_expanded = memory.mean(0)[:, None].expand(-1, len(tgt), -1, -1).flatten(1,2).view(h,w,-1,actor_feature.shape[-1]).permute(2,3,0,1) # N_q*B, D, H, W
-
-            cls_feature = self.conv_activation(self.conv1(torch.cat([actor_feature_expanded, encoded_feature_expanded], dim=1)))
-            cls_feature = self.conv_activation(self.conv2(cls_feature))
-            # cls_feature = self.bn1(cls_feature)
-            query = self.q_proj(cls_feature)
-            query = query[:, None].expand(-1, 80, -1, -1, -1)
-            key = self.class_queries[None, :, :, None, None].expand(actor_feature_expanded.shape[0], -1, -1, h, w)
-            # key = self.cls_params[None, :, :, None, None].expand(actor_feature_expanded.shape[0], -1, -1, h, w)
-            attn = (query*key).sum(dim=2).flatten(2).softmax(dim=2).reshape(actor_feature_expanded.shape[0], -1, h, w)[:, :, None]
-            value = self.v_proj(encoded_feature_expanded)[:, None]
-            cls_output = (attn * value).sum(dim=-1).sum(dim=-1).view(len(tgt), -1, 80, cls_feature.shape[1]) #N_q, B, N_c, D
-            cls_output = self.linear(cls_output)
-            cls_output2 = self.cls_linear2_(self.dropout_(self.activation(self.cls_linear1_(cls_output))))
-            cls_output = cls_output + self.dropout_(cls_output2)
-            cls_output = self.cls_norm_(cls_output)
+                cls_output = cls_layer(actor_feature.clone().detach(), memory, pos, query_sine_embed, self.class_queries, orig_res, len(tgt))
+            
             if layer_id != 0:
-                cls_output = self.cls_norm__(cls_output + prev_output)
+                cls_output = self.cls_norm(cls_output + prev_output)
             prev_output = cls_output
             
             # iter update
@@ -872,6 +908,101 @@ class TransformerDecoderLayer(nn.Module):
         tgt = tgt + self.dropout3(tgt2)
         tgt = self.norm3(tgt)
         return tgt, tgt_temp, q_memory
+
+class TransformerClassDecoderLayer(nn.Module):
+
+    def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1,
+                 activation="relu", num_conv_blocks=3):
+        super().__init__()
+        
+        self.d_model = d_model
+        
+        # Separate FFN layer
+        self.cls_linear1 = nn.Linear(d_model, dim_feedforward)
+        self.activation = _get_activation_fn(activation)
+        self.dropout1 = nn.Dropout(dropout) # self.dropout
+        self.cls_linear2 = nn.Linear(dim_feedforward, d_model)
+        self.dropout2 = nn.Dropout(dropout) # self.dropout
+        self.cls_norm = nn.LayerNorm(d_model)
+
+        # Actor-centric convolution layers
+        self.conv_norm = nn.LayerNorm(d_model)
+        conv_block = ConvBlock(d_model, 0)
+        self.conv_blocks = nn.ModuleList([conv_block for _ in range(num_conv_blocks)])   
+        
+        # Query self-attention
+        self.self_attn = MultiheadAttention(d_model, nhead, dropout=dropout, vdim=d_model)
+        self.dropout3 = nn.Dropout(dropout) # self.dropout1
+        self.norm1 = nn.LayerNorm(d_model)
+        
+        # Class decoder cross-attention
+        self.k_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
+        self.v_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
+        self.cls_qpos_sine_proj = nn.Linear(d_model, d_model)
+        self.cross_attn = MultiheadAttention(d_model*2, nhead, dropout=dropout, vdim=d_model)
+        
+        # FFN layer
+        # self.linear = nn.Linear(d_model, d_model)
+        self.cls_linear1_ = nn.Linear(d_model, dim_feedforward)
+        self.dropout1_ = nn.Dropout(dropout) # self.dropout_
+        self.cls_linear2_ = nn.Linear(dim_feedforward, d_model)
+        self.dropout2_ = nn.Dropout(dropout) # self.dropout_
+        self.cls_norm_ = nn.LayerNorm(d_model)
+
+    def forward(self, actor_feature, memory, pos, query_sine_embed, class_queries, orig_res, num_queries):
+                    
+        # separate classification branch from localization
+        actor_feature2 = self.cls_linear2(self.dropout1(self.activation(self.cls_linear1(actor_feature))))
+        actor_feature = actor_feature + self.dropout2(actor_feature2)
+        actor_feature = self.cls_norm(actor_feature)
+
+        # apply actor-centric convolution
+        h, w = orig_res
+        actor_feature_expanded = actor_feature.flatten(0,1)[..., None, None].expand(-1, -1, h, w) # N_q*B, D, H, W
+        encoded_feature_expanded = memory[:, None].expand(-1, num_queries, -1, -1).flatten(1,2).view(h,w,-1,actor_feature.shape[-1]).permute(2,3,0,1) # N_q*B, D, H, W
+        cls_feature = actor_feature_expanded + encoded_feature_expanded
+        cls_feature = self.conv_norm(cls_feature.transpose(-1, 1).contiguous()).transpose(-1, 1).contiguous()            
+        for block in self.conv_blocks:    
+        #     if self.gradient_checkpointing:
+        #         def custom_conv(module):
+        #             def custom_conv_fwd(inputs):
+        #                 return module(inputs)
+        #             return custom_conv_fwd
+        #         cls_feature = checkpoint.checkpoint(custom_conv(block), cls_feature)
+        #     else:
+        #         cls_feature = block(cls_feature)
+            cls_feature = block(cls_feature)
+        
+        # class query self-attention
+        query = class_queries[:, None].expand(-1, actor_feature_expanded.shape[0], -1)
+        query2 = self.self_attn(query, query, query)[0]
+        query = query + self.dropout1(query2)
+        query = self.norm1(query)
+        
+        # class decoder cross-attention
+        key = torch.cat([self.k_proj(cls_feature).flatten(2).permute(2,0,1), pos[:,None].expand(-1, num_queries, -1, -1).flatten(1,2)], dim=-1)
+        cls_query_pos = self.cls_qpos_sine_proj(query_sine_embed).flatten(0,1)[None].expand(len(class_queries), -1 ,-1)
+        query = torch.cat([query, cls_query_pos], dim=-1)
+        value = self.v_proj(encoded_feature_expanded).flatten(2).permute(2,0,1)
+        # if self.gradient_checkpointing:
+        #     def custom_layer(module):
+        #         def custom_forward(*inputs):
+        #             return module(query = inputs[0],
+        #                             key = inputs[1],
+        #                             value = inputs[2]
+        #                             )
+        #         return custom_forward
+        #     cls_output = checkpoint.checkpoint(custom_layer(self.cross_attn), query, key, value)[0].reshape(len(class_queries), num_queries, -1, self.d_model).permute(1,2,0,3)
+        # else:
+        #     cls_output = self.cross_attn(query=query, key=key, value=value)[0].reshape(len(class_queries), num_queries, -1, self.d_model).permute(1,2,0,3)
+        cls_output = self.cross_attn(query=query, key=key, value=value)[0].reshape(len(class_queries), num_queries, -1, self.d_model).permute(1,2,0,3)
+        
+        # FFN
+        cls_output2 = self.cls_linear2_(self.dropout1_(self.activation(self.cls_linear1_(cls_output))))
+        cls_output = cls_output + self.dropout2_(cls_output2)
+        cls_output = self.cls_norm_(cls_output)
+        
+        return cls_output
 
 
 def _get_clones(module, N):

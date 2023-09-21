@@ -5,7 +5,7 @@ import time
 import torch
 import torch.optim
 from models.dab_conv_trans import build_model
-from utils.model_utils import deploy_model, load_model, save_checkpoint, load_model_and_states
+from utils.model_utils_0919 import deploy_model, load_model, save_checkpoint, load_model_and_states
 from utils.video_action_recognition import train_tuber_detection, validate_tuber_detection, validate_tuber_ucf_detection, validate_tuber_jhmdb_detection
 from pipelines.video_action_recognition_config import get_cfg_defaults
 from pipelines.launch import spawn_workers
@@ -141,6 +141,7 @@ if __name__ == '__main__':
     parser.add_argument('--random_seed', default=1, type=int, help='random_seed')
     parser.add_argument('--debug', action='store_true', help="debug, and ddp is disabled")
     parser.add_argument('--eff', action='store_true', help="only for AVA, efficiently output only keyframe")
+    parser.add_argument('--grad_ckpt', action='store_true', help="use gradient checkpoint")
     args = parser.parse_args()
     random.seed(args.random_seed)
     np.random.seed(args.random_seed)
@@ -155,6 +156,7 @@ if __name__ == '__main__':
     cfg.merge_from_file(args.config_file)
     study = os.environ["NSML_STUDY"]
     run = os.environ["NSML_RUN_NAME"].split("/")[-1]
+
     cfg.CONFIG.LOG.RES_DIR = cfg.CONFIG.LOG.RES_DIR.format(study, run)
     cfg.CONFIG.LOG.EXP_NAME = cfg.CONFIG.LOG.EXP_NAME.format(study, run)
     if args.debug:
@@ -165,12 +167,38 @@ if __name__ == '__main__':
         cfg.CONFIG.EFFICIENT = True
     else:
         cfg.CONFIG.EFFICIENT = False
+    if args.grad_ckpt:
+        cfg.CONFIG.GRADIENT_CHECKPOINTING = True       
     
     import socket 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.connect(("8.8.8.8", 80))
     this_ip = s.getsockname()[0] # put this to world_url
-    cfg.DDP_CONFIG.DIST_URL = cfg.DDP_CONFIG.DIST_URL.format(this_ip)
-    cfg.DDP_CONFIG.WOLRD_URLS[0] = cfg.DDP_CONFIG.WOLRD_URLS[0].format(this_ip)
+    
+    cfg.DDP_CONFIG.WORLD_SIZE = int(os.environ["NSML_WORLD_SIZE"])
+    
+    if cfg.DDP_CONFIG.WORLD_SIZE > 1:
+        tmp_path = '{}/ip_lists/{}-{}.txt'
+        file_path = tmp_path.format(cfg.CONFIG.LOG.BASE_PATH, study, run)
+        if not os.path.exists(file_path):    
+            with open(file_path, 'w') as f:
+                f.write(this_ip + '\n')
+        else:
+            write_this_ip_to_file(file_path, this_ip)
+            
+        while True:
+            ip_lines = read_file_to_list(file_path)
+            if len(ip_lines) == cfg.DDP_CONFIG.WORLD_SIZE:
+                break
+            time.sleep(0.5)
+        
+        ip_list = read_file_to_list(file_path)
+        cfg.DDP_CONFIG.WOLRD_URLS = ip_list
+        cfg.DDP_CONFIG.DIST_URL = cfg.DDP_CONFIG.DIST_URL.format(ip_list[0])        
+        
+    else:    
+        cfg.DDP_CONFIG.DIST_URL = cfg.DDP_CONFIG.DIST_URL.format(this_ip)
+        cfg.DDP_CONFIG.WOLRD_URLS[0] = cfg.DDP_CONFIG.WOLRD_URLS[0].format(this_ip)
+
     s.close()
     spawn_workers(main_worker, cfg)
