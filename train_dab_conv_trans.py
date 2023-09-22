@@ -16,6 +16,17 @@ import numpy as np
 import random
 import os
 
+# Function to write or append the this_ip to the file
+def write_this_ip_to_file(file_path, this_ip):
+    with open(file_path, 'a') as file:
+        file.write(this_ip + '\n')
+
+# Function to read the file and return a list of IPs
+def read_file_to_list(file_path):
+    with open(file_path, 'r') as file:
+        ip_list = file.read().splitlines()
+    return ip_list
+
 def main_worker(cfg):
 
     # create tensorboard and logs
@@ -84,6 +95,11 @@ def main_worker(cfg):
         raise AssertionError("optimizer is one of SGD or ADAMW")
     # create lr scheduler
     lr_scheduler = build_scheduler(cfg, optimizer, len(train_loader))
+    
+    if cfg.CONFIG.AMP:
+        scaler = torch.cuda.amp.GradScaler()
+    else:
+        scaler = None  
 
     if int(os.getenv('NSML_SESSION', '0')) > 0:
         # 실험 이어하기의 경우
@@ -94,7 +110,7 @@ def main_worker(cfg):
         epochs_folder.sort()
         latest_epoch = epochs_folder[-1]
         cfg.CONFIG.MODEL.PRETRAINED_PATH = os.path.join(cfg.CONFIG.LOG.BASE_PATH, exp_name, cfg.CONFIG.LOG.SAVE_DIR, latest_epoch) # find the pretrained_path
-        model, optimizer, lr_scheduler, start_epoch = load_model_and_states(model, optimizer, lr_scheduler, cfg)
+        model, optimizer, lr_scheduler, start_epoch = load_model_and_states(model, optimizer, lr_scheduler, scaler, cfg)
         cfg.CONFIG.TRAIN.START_EPOCH = start_epoch
 
     else:
@@ -103,15 +119,15 @@ def main_worker(cfg):
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0: 
         print_log(save_path, 'Start training...')
     start_time = time.time()
-    max_accuracy = 0.0
+    max_accuracy = 0.0  
     for epoch in range(cfg.CONFIG.TRAIN.START_EPOCH, cfg.CONFIG.TRAIN.EPOCH_NUM):
         if cfg.DDP_CONFIG.DISTRIBUTED:
             train_sampler.set_epoch(epoch)
-        train_tuber_detection(cfg, model, criterion, train_loader, optimizer, epoch, cfg.CONFIG.LOSS_COFS.CLIPS_MAX_NORM, lr_scheduler, writer)
+        train_tuber_detection(cfg, model, criterion, train_loader, optimizer, epoch, cfg.CONFIG.LOSS_COFS.CLIPS_MAX_NORM, lr_scheduler, scaler, writer)
 
         if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0 and (
                 epoch % cfg.CONFIG.LOG.SAVE_FREQ == 0 or epoch == cfg.CONFIG.TRAIN.EPOCH_NUM - 1):
-            save_checkpoint(cfg, epoch, model, max_accuracy, optimizer, lr_scheduler)
+            save_checkpoint(cfg, epoch, model, max_accuracy, optimizer, lr_scheduler, scaler)
 
         if (epoch % cfg.CONFIG.VAL.FREQ == 0 or epoch == cfg.CONFIG.TRAIN.EPOCH_NUM - 1):
             if cfg.CONFIG.DATA.DATASET_NAME == 'ava':
@@ -142,6 +158,7 @@ if __name__ == '__main__':
     parser.add_argument('--debug', action='store_true', help="debug, and ddp is disabled")
     parser.add_argument('--eff', action='store_true', help="only for AVA, efficiently output only keyframe")
     parser.add_argument('--grad_ckpt', action='store_true', help="use gradient checkpoint")
+    parser.add_argument('--amp', action='store_true', help="use average mixed precision")
     args = parser.parse_args()
     random.seed(args.random_seed)
     np.random.seed(args.random_seed)
@@ -168,7 +185,9 @@ if __name__ == '__main__':
     else:
         cfg.CONFIG.EFFICIENT = False
     if args.grad_ckpt:
-        cfg.CONFIG.GRADIENT_CHECKPOINTING = True       
+        cfg.CONFIG.GRADIENT_CHECKPOINTING = True     
+    if args.amp:
+        cfg.CONFIG.AMP = True          
     
     import socket 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

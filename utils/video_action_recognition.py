@@ -87,7 +87,7 @@ def train_classification(base_iter, model, dataloader, epoch, criterion,
     # batch_bar.close()
     return base_iter
 
-def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, max_norm, lr_scheduler, writer=None):
+def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, max_norm, lr_scheduler, scaler=None, writer=None):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     class_err = AverageMeter()
@@ -131,28 +131,53 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
 
         samples = samples.to(device)
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
-        if cfg.CONFIG.TWO_STREAM:
-            if cfg.CONFIG.USE_LFB:
-                if cfg.CONFIG.USE_LOCATION:
-                    outputs = model(samples, samples2, lfb_features, lfb_location_features)
+        if cfg.CONFIG.AMP:
+            with torch.autocast("cuda", dtype=torch.float16):
+                if cfg.CONFIG.TWO_STREAM:
+                    if cfg.CONFIG.USE_LFB:
+                        if cfg.CONFIG.USE_LOCATION:
+                            outputs = model(samples, samples2, lfb_features, lfb_location_features)
+                        else:
+                            outputs = model(samples, samples2, lfb_features)
+                    else:
+                        outputs = model(samples, samples2)
                 else:
-                    outputs = model(samples, samples2, lfb_features)
-            else:
-                outputs = model(samples, samples2)
+                    if cfg.CONFIG.USE_LFB:
+                        if cfg.CONFIG.USE_LOCATION:
+                            outputs = model(samples, lfb_features, lfb_location_features)
+                        else:
+                            outputs = model(samples, lfb_features)
+                    else:
+                        if not "DN" in cfg.CONFIG.LOG.RES_DIR:
+                            outputs = model(samples)
+                            loss_dict = criterion(outputs, targets)
+                        else:
+                            dn_args = targets, cfg.CONFIG.MODEL.SCALAR, cfg.CONFIG.MODEL.LABEL_NOISE_SCALE, cfg.CONFIG.MODEL.BOX_NOISE_SCALE, cfg.CONFIG.MODEL.NUM_PATTERNS
+                            outputs, mask_dict = model(samples, dn_args)
+                            loss_dict = criterion(outputs, targets, mask_dict)
         else:
-            if cfg.CONFIG.USE_LFB:
-                if cfg.CONFIG.USE_LOCATION:
-                    outputs = model(samples, lfb_features, lfb_location_features)
+            if cfg.CONFIG.TWO_STREAM:
+                if cfg.CONFIG.USE_LFB:
+                    if cfg.CONFIG.USE_LOCATION:
+                        outputs = model(samples, samples2, lfb_features, lfb_location_features)
+                    else:
+                        outputs = model(samples, samples2, lfb_features)
                 else:
-                    outputs = model(samples, lfb_features)
+                    outputs = model(samples, samples2)
             else:
-                if not "DN" in cfg.CONFIG.LOG.RES_DIR:
-                    outputs = model(samples)
-                    loss_dict = criterion(outputs, targets)
+                if cfg.CONFIG.USE_LFB:
+                    if cfg.CONFIG.USE_LOCATION:
+                        outputs = model(samples, lfb_features, lfb_location_features)
+                    else:
+                        outputs = model(samples, lfb_features)
                 else:
-                    dn_args = targets, cfg.CONFIG.MODEL.SCALAR, cfg.CONFIG.MODEL.LABEL_NOISE_SCALE, cfg.CONFIG.MODEL.BOX_NOISE_SCALE, cfg.CONFIG.MODEL.NUM_PATTERNS
-                    outputs, mask_dict = model(samples, dn_args)
-                    loss_dict = criterion(outputs, targets, mask_dict)
+                    if not "DN" in cfg.CONFIG.LOG.RES_DIR:
+                        outputs = model(samples)
+                        loss_dict = criterion(outputs, targets)
+                    else:
+                        dn_args = targets, cfg.CONFIG.MODEL.SCALAR, cfg.CONFIG.MODEL.LABEL_NOISE_SCALE, cfg.CONFIG.MODEL.BOX_NOISE_SCALE, cfg.CONFIG.MODEL.NUM_PATTERNS
+                        outputs, mask_dict = model(samples, dn_args)
+                        loss_dict = criterion(outputs, targets, mask_dict)            
 
         # if not math.isfinite(outputs["pred_logits"][0].data.cpu().numpy()[0,0]):
         #     print(outputs["pred_logits"][0].data.cpu().numpy())
@@ -164,12 +189,19 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
         losses = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
         # losses = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if (k in weight_dict and "bbox" not in k and "giou" not in k))
         # loss_dict.keys(): dict_keys(['loss_ce', 'loss_ce_b', 'class_error', 'loss_bbox', 'loss_giou'])  
-
-        optimizer.zero_grad()
-        # optimizer_c.zero_grad()
-        losses.backward()
-        if max_norm > 0: torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
-        optimizer.step()
+        if not scaler is None:
+            optimizer.zero_grad()
+            # optimizer_c.zero_grad()
+            losses.backward()
+            if max_norm > 0: torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
+            optimizer.step()
+        else:
+            optimizer.zero_grad()
+            scaler.scale(losses).backward()
+            scaler.unscale_(optimizer)
+            if max_norm > 0: torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
+            scaler.step(optimizer)
+            scaler.update()
         # optimizer_c.step()
         lr_scheduler.step_update(epoch * len(data_loader) + idx)
         batch_time.update(time.time() - end)
