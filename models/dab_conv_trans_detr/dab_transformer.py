@@ -363,7 +363,7 @@ class Transformer(nn.Module):
         # src = src.flatten(2).permute(2, 0, 1) # hw, bst, c
         # pos_embed = pos_embed.permute(0,2,1,3,4).contiguous().flatten(0,1)
         # pos_embed = pos_embed.flatten(2).permute(2, 0, 1)
-        refpoint_embed = refpoint_embed.repeat(1, bs, 1) #n_q, bs * t, 4
+        refpoint_embed = refpoint_embed[:,None].expand(-1, bs, -1, -1).flatten(1,2) #n_q, bs * t, 4
         # mask = mask.flatten(0,1).flatten(1)
 
         # memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed, src_shape=src_shape) 
@@ -391,10 +391,7 @@ class Transformer(nn.Module):
         cls_memory = srcs_per_lvl
         cls_pos_embed = poses_per_lvl
         cls_mask = masks_per_lvl
-        if self.eff:
-            tgt = torch.zeros(num_queries, bs, self.d_model, device=refpoint_embed.device)
-        else:
-            tgt = torch.zeros(num_queries, bs*t, self.d_model, device=refpoint_embed.device)
+        tgt = torch.zeros(num_queries, bs*t, self.d_model, device=refpoint_embed.device)
         # prepare input for the decoder
         cls_memory = rearrange(cls_memory, "B C T H W L -> L (H W) (B T) C")
         cls_pos_embed = rearrange(cls_pos_embed, "B C T H W L -> L (H W) (B T) C")
@@ -605,6 +602,7 @@ class TransformerDecoder(nn.Module):
         if self.eff:
             t = len_frame
             q_memory = rearrange(q_memory, "N HW (B T) C -> N HW B T C", B=refpoints_unsigmoid.size(1), T=t)[:,:,:,t//2:t//2+1,:].flatten(2,3)
+            output = rearrange(output, "N (B T) C -> N B T C", B=refpoints_unsigmoid.size(1), T=t)[:,:,t//2:t//2+1,:].flatten(1,2)
         for layer_id, (layer, cls_layer) in enumerate(zip(self.layers, self.cls_layers)):
             obj_center = reference_points[..., :self.query_dim]     # [num_queries, batch_size, 2]
             # get sine embedding for the query vector
