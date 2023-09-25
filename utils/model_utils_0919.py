@@ -76,11 +76,11 @@ def load_detr_weights(model, pretrain_dir, cfg):
                     v = v[:nq].repeat(t, 1)                
             pretrained_dict.update({k: v})
     if distributed:
-        pretrained_dict_ = {k: v for k, v in pretrained_dict.items() if k in model_dict}
+        pretrained_dict_ = {k: v.half() for k, v in pretrained_dict.items() if k in model_dict}
         unused_dict = {k: v for k, v in pretrained_dict.items() if not k in model_dict}
         not_found_dict = {k: v for k, v in model_dict.items() if not k in pretrained_dict}
     else:
-        pretrained_dict_ = {k[7:]: v for k, v in pretrained_dict.items() if k[7:] in model_dict}
+        pretrained_dict_ = {k[7:]: v.half() for k, v in pretrained_dict.items() if k[7:] in model_dict}
         unused_dict = {k[7:]: v for k, v in pretrained_dict.items() if not k[7:] in model_dict}
         not_found_dict = {k: v for k, v in model_dict.items() if not "module."+k in pretrained_dict}
 
