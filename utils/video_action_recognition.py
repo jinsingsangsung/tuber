@@ -202,6 +202,9 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
             if max_norm > 0: torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
             scaler.step(optimizer)
             scaler.update()
+            min_scale = 32
+            if scaler._scale < min_scale:
+                scaler._scale = torch.tensor(min_scale).to(scaler._scale)
         # optimizer_c.step()
         lr_scheduler.step_update(epoch * len(data_loader) + idx)
         batch_time.update(time.time() - end)
