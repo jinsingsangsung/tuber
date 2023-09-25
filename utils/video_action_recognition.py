@@ -189,7 +189,7 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
         losses = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
         # losses = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if (k in weight_dict and "bbox" not in k and "giou" not in k))
         # loss_dict.keys(): dict_keys(['loss_ce', 'loss_ce_b', 'class_error', 'loss_bbox', 'loss_giou'])  
-        if not scaler is None:
+        if scaler is None:
             optimizer.zero_grad()
             # optimizer_c.zero_grad()
             losses.backward()
