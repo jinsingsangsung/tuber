@@ -162,7 +162,7 @@ def load_model(model, cfg, load_fc=True):
 
     return model, None
 
-def load_model_and_states(model, optimizer, scheduler, cfg):
+def load_model_and_states(model, optimizer, scheduler, scaler, cfg):
     """
     Load pretrained model weights.
     """
@@ -200,6 +200,8 @@ def load_model_and_states(model, optimizer, scheduler, cfg):
     
     scheduler.load_state_dict(checkpoint['lr_scheduler'])
     optimizer.load_state_dict(checkpoint['optimizer'])
+    if not scaler is None:
+        scaler.load_state_dict(checkpoint['scaler'])    
     start_epoch = checkpoint['epoch']+1
     random.setstate(checkpoint["random_python"])
     np.random.set_state(checkpoint["random_numpy"])
@@ -209,7 +211,7 @@ def load_model_and_states(model, optimizer, scheduler, cfg):
     return model, optimizer, scheduler, start_epoch
 
 
-def save_model(model, optimizer, epoch, cfg):
+def save_model(model, optimizer, epoch, cfg, scaler=None):
     # pylint: disable=line-too-long
     """
     Save trained model weights.
@@ -221,15 +223,19 @@ def save_model(model, optimizer, epoch, cfg):
         os.makedirs(model_save_dir)
     ckpt_name = "f{}_s{}_ckpt_epoch{}.pth".format(cfg.CONFIG.DATA.CLIP_LEN, cfg.CONFIG.DATA.FRAME_RATE, epoch)
     checkpoint = os.path.join(model_save_dir, ckpt_name)
-    save_checkpoint({
-        'epoch': epoch + 1,
-        'state_dict': model.state_dict(),
-        'best_acc1': None,
-        'optimizer': optimizer.state_dict(),
-    }, filename=checkpoint)
+    state_dict = {
+            'epoch': epoch + 1,
+            'state_dict': model.state_dict(),
+            'best_acc1': None,
+            'optimizer': optimizer.state_dict(),
+        }
+    if cfg.CONFIG.AMP:
+        state_dict.update({"scaler": scaler.state_dict()})
+
+    save_checkpoint(state_dict, filename=checkpoint)     
 
 
-def save_checkpoint(cfg, epoch, model, max_accuracy, optimizer, lr_scheduler):
+def save_checkpoint(cfg, epoch, model, max_accuracy, optimizer, lr_scheduler, scaler):
     cuda_rng_state = 0
     if model.device == 'cuda':
         cuda_rng_state = torch.cuda.get_rng_state()
@@ -249,6 +255,9 @@ def save_checkpoint(cfg, epoch, model, max_accuracy, optimizer, lr_scheduler):
                   'random_pytorch': torch.get_rng_state(),
                   'random_cuda': cuda_rng_state,
                   }
+    
+    if cfg.CONFIG.AMP:
+        save_state.update({"scaler": scaler.state_dict()})    
 
     if not os.path.exists(model_save_dir):
         os.makedirs(model_save_dir)
