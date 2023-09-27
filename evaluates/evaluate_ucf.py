@@ -152,7 +152,7 @@ class STDetectionEvaluaterUCF(object):
 
     def load_detection_from_path(self, file_lst):
         # loading data from files
-        num_queries = 10
+        num_queries = 15
         t_end = time.time()
         sample_dict_per_image = {}
         all_boxes = {} # for video-map
