@@ -111,6 +111,8 @@ class Transformer(nn.Module):
                  no_sine_embed=False,
                  gradient_checkpointing=False,
                  num_conv_blocks=3,
+                 num_classes=80,
+                 temp_len=32,
                  ):
 
         super().__init__()
@@ -135,8 +137,9 @@ class Transformer(nn.Module):
                                           modulate_hw_attn=modulate_hw_attn,
                                           bbox_embed_diff_each_layer=bbox_embed_diff_each_layer,
                                           gradient_checkpointing=gradient_checkpointing,
-                                          )
-        
+                                          num_classes=num_classes,
+                                          temp_len=temp_len)
+        self.temp_len = temp_len
         self.level_embed = nn.Parameter(torch.Tensor(num_feature_levels, d_model))
         if two_stage:
             self.enc_output = nn.Linear(d_model, d_model)
@@ -333,11 +336,12 @@ class Transformer(nn.Module):
             mask = rearrange(masks[2][:,t//2:t//2+1,:,:], "B T H W -> (B T) (H W)")
             memory = self.encoder(src=src, src_key_padding_mask=mask, pos=pos_embed)
         else:
-            intpltd_src, intpltd_mask = self.make_interpolated_features([srcs[2]], [pos_embeds[2]])
-            t = intpltd_src.size(2)
+            self.decoder.eff = False
+            intpltd_src, intpltd_pos = self.make_interpolated_features([srcs[2]], [pos_embeds[2]], num_frames=self.temp_len)
+            t = intpltd_src[0].size(2)
             src = rearrange(intpltd_src[0], "B C T H W -> (H W) (B T) C")
-            pos_embed = rearrange(pos_embeds[2][:,:,0:1,:,:].expand(-1,-1,t,-1,-1), "B C T H W -> (H W) (B T) C")
-            mask = rearrange(intpltd_mask[0], "B T H W -> (B T) (H W)")
+            pos_embed = rearrange(intpltd_pos[0], "B C T H W -> (H W) (B T) C")
+            mask = rearrange(masks[2][:,0:1,:,:].expand(-1,t,-1,-1), "B T H W -> (B T) (H W)")
             memory = self.encoder(src=src, src_key_padding_mask=mask, pos=pos_embed)
             
         # revert to the original shape
@@ -355,7 +359,7 @@ class Transformer(nn.Module):
             srcs_per_lvl.append(NestedTensor(src_l, masks[i]))
             poses_per_lvl.append(pos_l)
         
-        features_per_lvl, poses_per_lvl = self.make_interpolated_features(srcs_per_lvl, poses_per_lvl, level=-2)
+        features_per_lvl, poses_per_lvl = self.make_interpolated_features(srcs_per_lvl, poses_per_lvl, num_frames=self.temp_len, level=-2)
         # bs, c, t, h, w = src.shape
         # src_shape = src.shape
         # src = src.permute(0,2,1,3,4).contiguous()
@@ -538,6 +542,8 @@ class TransformerDecoder(nn.Module):
                     bbox_embed_diff_each_layer=False,
                     gradient_checkpointing=False,
                     num_levels=4,
+                    num_classes=80,
+                    temp_len=32,
                     ):
         super().__init__()
         self.layers = _get_clones(decoder_layer, num_layers)
@@ -575,7 +581,8 @@ class TransformerDecoder(nn.Module):
                 self.layers[layer_id + 1].ca_qpos_proj = None
 
         self.cls_norm = nn.LayerNorm(d_model)
-        self.class_queries = nn.Embedding(80, 256).weight
+        self.class_queries = nn.Embedding(num_classes, 256).weight
+        self.temp_len = temp_len
         
         self.cls_norm2 = nn.LayerNorm(d_model)
         self.gradient_checkpointing = gradient_checkpointing
@@ -588,7 +595,6 @@ class TransformerDecoder(nn.Module):
                 pos: Optional[Tensor] = None,
                 refpoints_unsigmoid: Optional[Tensor] = None, # num_queries, bs, 2
                 orig_res = None,
-                len_frame = 32,
                 ):
         output = tgt
 
@@ -600,7 +606,7 @@ class TransformerDecoder(nn.Module):
         lvl_w = self.lvl_w_embed(tgt) # num_queries, BT, num_levels
         q_memory = torch.einsum("ntl,lhtc->nhtc", lvl_w, cls_memory) # (N_q, BT, L), (L, HW, BT, C),  ->  N_q, HW, BT, C
         if self.eff:
-            t = len_frame
+            t = self.temp_len
             q_memory = rearrange(q_memory, "N HW (B T) C -> N HW B T C", B=refpoints_unsigmoid.size(1), T=t)[:,:,:,t//2:t//2+1,:].flatten(2,3)
             output = rearrange(output, "N (B T) C -> N B T C", B=refpoints_unsigmoid.size(1), T=t)[:,:,t//2:t//2+1,:].flatten(1,2)
         for layer_id, (layer, cls_layer) in enumerate(zip(self.layers, self.cls_layers)):
@@ -1074,6 +1080,8 @@ def build_transformer(cfg):
         activation="relu",
         num_patterns=cfg.CONFIG.MODEL.NUM_PATTERNS,
         bbox_embed_diff_each_layer=cfg.CONFIG.MODEL.BBOX_EMBED_DIFF_EACH_LAYER,
+        num_classes=cfg.CONFIG.DATA.NUM_CLASSES,
+        temp_len=cfg.CONFIG.DATA.TEMP_LEN,
     )
 
 

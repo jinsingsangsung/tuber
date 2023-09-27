@@ -129,9 +129,9 @@ class DETR(nn.Module):
             self.class_embed_b = nn.Linear(hidden_dim, 3)
             # self.class_embed.bias.data = torch.ones(num_classes) * bias_value
         else:
-            self.class_embed = nn.Linear(2*hidden_dim, num_classes+1)
+            # self.class_embed = nn.Linear(2*hidden_dim, num_classes+1)
             self.class_embed_b = nn.Linear(hidden_dim, 3)
-            self.class_embed.bias.data = torch.ones(num_classes+1) * bias_value
+            # self.class_embed.bias.data = torch.ones(num_classes+1) * bias_value
         
 
         if bbox_embed_diff_each_layer:
