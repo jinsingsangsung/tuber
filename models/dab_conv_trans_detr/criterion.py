@@ -513,6 +513,7 @@ class SetCriterionUCF(nn.Module):
         #                      dtype=torch.float32, device=src_logits.device)
         # weights[idx] = self.weight
         # loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot, weights) / 10        
+        src_logits = torch.cat([src_logits, src_logits_b[...,2:]], dim=-1)
         loss_ce = F.cross_entropy(src_logits.flatten(1,2).transpose(1, 2), target_classes.flatten(1,2), self.empty_weight)
         losses = {'loss_ce': loss_ce}
         losses['loss_ce_b'] = loss_ce_b
