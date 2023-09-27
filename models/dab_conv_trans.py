@@ -255,7 +255,8 @@ class DETR(nn.Module):
         ######## mix temporal features for classification
         # lay_n, bst, nq, dim = hs.shape
         # hw, bst, ch = memory.shape
-        bs, _, t, h, w = src.shape
+        bs = srcs[0].size(0)
+        t = self.temporal_length
         # memory = self.encoder(memory, src.shape, mask, pos_embed)
         ##### prepare for the second decoder
         # tgt = self.patterns.weight[:, None, None, :].repeat(1, self.num_queries, bs*t, 1).flatten(0, 1) # n_q*n_pat, bs, d_model
@@ -277,7 +278,7 @@ class DETR(nn.Module):
                 outputs_coord = outputs_coord.reshape(-1, bs, self.num_queries, 4)
                 outputs_class_b = outputs_class_b.reshape(-1, bs, self.num_queries, 3)
         else:
-            outputs_class = outputs_class.reshape(-1, bs, t, self.num_queries, self.num_classes+1)
+            outputs_class = outputs_class.reshape(-1, bs, t, self.num_queries, self.num_classes)
             outputs_coord = outputs_coord.reshape(-1, bs, t, self.num_queries, 4)
             outputs_class_b = outputs_class_b.reshape(-1, bs, t, self.num_queries, 3)
         out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1], 'pred_logits_b': outputs_class_b[-1],}
