@@ -234,7 +234,7 @@ def save_model(model, optimizer, epoch, cfg):
     }, filename=checkpoint)
 
 
-def save_checkpoint(cfg, epoch, model, max_accuracy, optimizer, lr_scheduler):
+def save_checkpoint(cfg, epoch, model, max_accuracy, optimizer, lr_scheduler, scaler):
     cuda_rng_state = 0
     if model.device == 'cuda':
         cuda_rng_state = torch.cuda.get_rng_state()
@@ -254,6 +254,9 @@ def save_checkpoint(cfg, epoch, model, max_accuracy, optimizer, lr_scheduler):
                   'random_pytorch': torch.get_rng_state(),
                   'random_cuda': cuda_rng_state,
                   }
+    
+    if cfg.CONFIG.AMP:
+        save_state.update({"scaler": scaler.state_dict()})
 
     if not os.path.exists(model_save_dir):
         os.makedirs(model_save_dir)
