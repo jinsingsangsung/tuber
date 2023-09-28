@@ -94,10 +94,10 @@ def deploy_model(model, cfg, is_tuber=True):
             model.cuda(cfg.DDP_CONFIG.GPU)
             model = torch.nn.parallel.DistributedDataParallel(model,
                                                               device_ids=[cfg.DDP_CONFIG.GPU],
-                                                              find_unused_parameters=True)
+                                                              )
         else:
             model.cuda()
-            model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters=True)
+            model = torch.nn.parallel.DistributedDataParallel(model)
     elif cfg.DDP_CONFIG.GPU is not None:
         torch.cuda.set_device(cfg.DDP_CONFIG.GPU)
         model = model.cuda(cfg.DDP_CONFIG.GPU)
