@@ -309,9 +309,9 @@ class Transformer(nn.Module):
             spatio_temporal_shape = (t, h, w)
             spatio_temporal_shapes.append(spatio_temporal_shape)
 
-            src = src.flatten(2).transpose(1, 2)                # bs, thw, c
+            src = src.flatten(2).transpose(1, 2).contiguous()                # bs, thw, c
             mask = mask.flatten(1)                              # bs, thw
-            pos_embed = pos_embed.flatten(2).transpose(1, 2)    # bs, thw, c
+            pos_embed = pos_embed.flatten(2).transpose(1, 2).contiguous()    # bs, thw, c
             lvl_pos_embed = pos_embed + self.level_embed[lvl].view(1, 1, -1)
             lvl_pos_embed_flatten.append(lvl_pos_embed)
             src_flatten.append(src)
