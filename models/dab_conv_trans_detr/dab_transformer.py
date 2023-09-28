@@ -111,6 +111,8 @@ class Transformer(nn.Module):
                  no_sine_embed=False,
                  gradient_checkpointing=False,
                  num_conv_blocks=3,
+                 num_classes=80,
+                 temp_len=32,                 
                  ):
 
         super().__init__()
@@ -133,8 +135,9 @@ class Transformer(nn.Module):
                                           modulate_hw_attn=modulate_hw_attn,
                                           bbox_embed_diff_each_layer=bbox_embed_diff_each_layer,
                                           gradient_checkpointing=gradient_checkpointing,
-                                          )
-        
+                                          num_classes=num_classes,
+                                          temp_len=temp_len)
+        self.temp_len = temp_len
         self.level_embed = nn.Parameter(torch.Tensor(num_feature_levels, d_model))
         if two_stage:
             self.enc_output = nn.Linear(d_model, d_model)
@@ -339,7 +342,7 @@ class Transformer(nn.Module):
             srcs_per_lvl.append(NestedTensor(src_l, masks[i]))
             poses_per_lvl.append(pos_l)
         
-        features_per_lvl, poses_per_lvl = self.make_interpolated_features(srcs_per_lvl, poses_per_lvl, level=-2)
+        features_per_lvl, poses_per_lvl = self.make_interpolated_features(srcs_per_lvl, poses_per_lvl, level=-2, num_frames=self.temp_len)
         # bs, c, t, h, w = src.shape
         # src_shape = src.shape
         # src = src.permute(0,2,1,3,4).contiguous()
@@ -347,7 +350,7 @@ class Transformer(nn.Module):
         # src = src.flatten(2).permute(2, 0, 1) # hw, bst, c
         # pos_embed = pos_embed.permute(0,2,1,3,4).contiguous().flatten(0,1)
         # pos_embed = pos_embed.flatten(2).permute(2, 0, 1)
-        refpoint_embed = refpoint_embed.repeat(1, bs, 1) #n_q, bs * t, 4
+        refpoint_embed = refpoint_embed[:,None].expand(-1, bs, -1, -1).flatten(1,2) #n_q, bs * t, 4
         # mask = mask.flatten(0,1).flatten(1)
 
         # memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed, src_shape=src_shape) 
@@ -522,6 +525,8 @@ class TransformerDecoder(nn.Module):
                     modulate_hw_attn=False,
                     bbox_embed_diff_each_layer=False,
                     gradient_checkpointing=False,
+                    num_classes=80,
+                    temp_len=32,                    
                     ):
         super().__init__()
         self.layers = _get_clones(decoder_layer, num_layers)
@@ -558,7 +563,8 @@ class TransformerDecoder(nn.Module):
                 self.layers[layer_id + 1].ca_qpos_proj = None
 
         self.cls_norm = nn.LayerNorm(d_model)
-        self.class_queries = nn.Embedding(80, 256).weight
+        self.class_queries = nn.Embedding(num_classes, d_model).weight
+        self.temp_len = temp_len
         
         self.cls_norm2 = nn.LayerNorm(d_model)
         self.gradient_checkpointing = gradient_checkpointing
@@ -655,7 +661,6 @@ class TransformerDecoder(nn.Module):
             if layer_id != 0:
                 cls_output = self.cls_norm(cls_output + prev_output)
             prev_output = cls_output
-            
             # iter update
             if self.bbox_embed is not None:
                 if self.bbox_embed_diff_each_layer:
@@ -1027,6 +1032,8 @@ def build_transformer(cfg):
         activation="relu",
         num_patterns=cfg.CONFIG.MODEL.NUM_PATTERNS,
         bbox_embed_diff_each_layer=cfg.CONFIG.MODEL.BBOX_EMBED_DIFF_EACH_LAYER,
+        num_classes=cfg.CONFIG.DATA.NUM_CLASSES,
+        temp_len=cfg.CONFIG.DATA.TEMP_LEN,
     )
 
 

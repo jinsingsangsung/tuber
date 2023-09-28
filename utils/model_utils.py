@@ -25,7 +25,12 @@ def load_detr_weights(model, pretrain_dir, cfg):
             if "offset_embed" in k:
                 for i in range(6):
                     pretrained_dict.update({k.replace("offset_embed.layers", "offset_embed.{}.layers".format(i)): v})
-            pretrained_dict.update({k: v})
+            elif "class_queries" in k:
+                if model_dict[k].shape[0] == checkpoint["model"][k].shape[0]:
+                # if model_dict[k[7:]].shape[0] == checkpoint["model"][k].shape[0]:
+                    pretrained_dict.update({k: v})
+            else:
+                pretrained_dict.update({k: v})
         elif k.split('.')[l] == 'bbox_embed':
             pretrained_dict.update({k: v})
         elif k.split('.')[l] == 'query_embed':
