@@ -97,7 +97,7 @@ def main_worker(cfg):
     lr_scheduler = build_scheduler(cfg, optimizer, len(train_loader))
     
     if cfg.CONFIG.AMP:
-        scaler = torch.cuda.amp.GradScaler(growth_interval=100)
+        scaler = torch.cuda.amp.GradScaler(growth_interval=1)
     else:
         scaler = None  
 

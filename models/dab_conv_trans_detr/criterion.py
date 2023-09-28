@@ -693,7 +693,13 @@ class PostProcess(nn.Module):
         assert len(out_logits) == len(target_sizes)
         assert target_sizes.shape[1] == 2
 
-        prob = F.softmax(out_logits, -1)
+        try:
+            prob_binary = out_logits_b.softmax(-1)[:, :, 1:2]
+            prob_bbox = (prob_binary > 0.8).float() * prob_binary
+            prob = F.softmax(out_logits, -1) * prob_bbox
+        except:
+            prob = F.softmax(out_logits, -1)
+
 
         # convert to [x0, y0, x1, y1] format
         boxes = box_ops.box_cxcywh_to_xyxy(out_bbox)
@@ -739,8 +745,7 @@ class PostProcessAVA(nn.Module):
             prob_bbox = (prob_binary > 0.8).float() * prob_binary
             prob = out_logits.sigmoid() * prob_bbox
         except:
-            pass
-        prob = out_logits.sigmoid()
+            prob = out_logits.sigmoid()
 
         boxes = box_ops.box_cxcywh_to_xyxy(out_bbox)
         img_h, img_w = target_sizes.unbind(1)
