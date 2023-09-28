@@ -129,9 +129,9 @@ class DETR(nn.Module):
             self.class_embed_b = nn.Linear(hidden_dim, 3)
             # self.class_embed.bias.data = torch.ones(num_classes) * bias_value
         else:
-            self.class_embed = nn.Linear(2*hidden_dim, num_classes+1)
+            # self.class_embed = nn.Linear(2*hidden_dim, num_classes+1)
             self.class_embed_b = nn.Linear(hidden_dim, 3)
-            self.class_embed.bias.data = torch.ones(num_classes+1) * bias_value
+            # self.class_embed.bias.data = torch.ones(num_classes+1) * bias_value
         
 
         if bbox_embed_diff_each_layer:
@@ -277,7 +277,7 @@ class DETR(nn.Module):
                 outputs_coord = outputs_coord.reshape(-1, bs, self.num_queries, 4)
                 outputs_class_b = outputs_class_b.reshape(-1, bs, self.num_queries, 3)
         else:
-            outputs_class = outputs_class.reshape(-1, bs, t, self.num_queries, self.num_classes+1)
+            outputs_class = outputs_class.reshape(-1, bs, t, self.num_queries, self.num_classes)
             outputs_coord = outputs_coord.reshape(-1, bs, t, self.num_queries, 4)
             outputs_class_b = outputs_class_b.reshape(-1, bs, t, self.num_queries, 3)
         out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1], 'pred_logits_b': outputs_class_b[-1],}

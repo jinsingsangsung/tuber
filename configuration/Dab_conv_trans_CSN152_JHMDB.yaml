@@ -17,7 +17,7 @@ CONFIG:
   USE_LOCATION: False
   EFFICIENT: False
   TRAIN:
-    EPOCH_NUM: 20
+    EPOCH_NUM: 50
     BATCH_SIZE: 2
     LR: 1e-4
     MIN_LR: 1e-6 # only if cosine scheduler is used
@@ -28,7 +28,7 @@ CONFIG:
     USE_WARMUP: True # does nothing
     WARMUP_START_LR: 1e-5
     WARMUP_EPOCHS: 3 # this determines whether to use Warmup unless using "step"
-    LR_MILESTONE: [12,17] #only for multistep
+    LR_MILESTONE: [25,40] #only for multistep
     STEP: 0.1 # gamma for lr decay
     OPTIMIZER:
       NAME: ADAMW
@@ -44,15 +44,14 @@ CONFIG:
     TYPE: "frame"
 
   DATA:
-    DATASET_NAME: 'ava'
-    LABEL_PATH: '/home/nsml/assets/ava_action_list_v2.1_for_activitynet_2018.pbtxt'
-    ANNO_PATH: '/home/nsml/assets/ava_{}_v22_updated.json'
-    DATA_PATH: '/mnt/tmp/frames/{}/'
-    NUM_CLASSES: 80
+    DATASET_NAME: 'jhmdb'
+    ANNO_PATH: '/mnt/tmp/JHMDB'
+    DATA_PATH: '/mnt/tmp/JHMDB/Frames'
+    NUM_CLASSES: 21
     MULTIGRID: False
     IMG_SIZE: 256
     IMG_RESHAPE_SIZE: 288
-    TEMP_LEN: 32
+    TEMP_LEN: 40
     FRAME_RATE: 2
 
   MODEL:
@@ -61,7 +60,7 @@ CONFIG:
     TEMPORAL_DS_STRATEGY: decode
     LAST_STRIDE: False
     GENERATE_LFB: False
-    NAME: 'ava_detr_9_224'
+    NAME: 'jhmdb_detr_9_224'
     ENC_LAYERS: 6
     DEC_LAYERS: 6
     D_MODEL: 256
@@ -72,7 +71,7 @@ CONFIG:
     NORMALIZE_BEFORE: False
     DROPOUT: 0.1
     DS_RATE: 8
-    TEMP_LEN: 32
+    TEMP_LEN: 40
     SAMPLE_RATE: 2
     PRETRAINED: True
     PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_152_ft_kinetics_from_ig65m_f126851907.mat"
@@ -112,11 +111,11 @@ CONFIG:
     CLIPS_MAX_NORM: 0.1
 
   LOG:
-    BASE_PATH: '/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/AVA_Tuber'
+    BASE_PATH: '/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/JHMDB_Tuber'
     LOG_DIR: 'tb_log'
     SAVE_DIR: 'checkpoints'
-    EVAL_DIR: '/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/AVA_Tuber/eval'
+    EVAL_DIR: '/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/JHMDB_Tuber/eval'
     SAVE_FREQ: 1
     RES_DIR: Dab_conv_trans_decsasde_CSN152_{}-{}/res
     EXP_NAME: Dab_conv_trans_decsasde_CSN152_{}-{}
-    DISPLAY_FREQ: 1000
+    DISPLAY_FREQ: 50

@@ -44,21 +44,20 @@ CONFIG:
     TYPE: "frame"
 
   DATA:
-    DATASET_NAME: 'ava'
-    LABEL_PATH: '/home/nsml/assets/ava_action_list_v2.1_for_activitynet_2018.pbtxt'
-    ANNO_PATH: '/home/nsml/assets/ava_{}_v22_updated.json'
-    DATA_PATH: '/mnt/tmp/frames/{}/'
-    NUM_CLASSES: 80
+    DATASET_NAME: 'ucf'
+    ANNO_PATH: '/mnt/tmp/UCF101_v2'
+    DATA_PATH: '/mnt/tmp/UCF101_v2/rgb-images'
+    NUM_CLASSES: 24
     MULTIGRID: False
-    IMG_SIZE: 256
-    IMG_RESHAPE_SIZE: 288
+    IMG_SIZE: 224
+    IMG_RESHAPE_SIZE: 256
     TEMP_LEN: 32
     FRAME_RATE: 2
 
   MODEL:
-    SINGLE_FRAME: True
+    SINGLE_FRAME: False
     BACKBONE_NAME: CSN-152
-    TEMPORAL_DS_STRATEGY: decode
+    TEMPORAL_DS_STRATEGY: decoder
     LAST_STRIDE: False
     GENERATE_LFB: False
     NAME: 'ava_detr_9_224'
@@ -76,7 +75,7 @@ CONFIG:
     SAMPLE_RATE: 2
     PRETRAINED: True
     PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_152_ft_kinetics_from_ig65m_f126851907.mat"
-    PRETRAIN_TRANSFORMER_DIR: "/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/AVA_Tuber/Dab_conv_trans_270-289/checkpoints/ckpt_epoch_16.pth"
+    PRETRAIN_TRANSFORMER_DIR: "/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/AVA_Tuber/Dab_conv_trans_cls_sim7_summed_CSN152_270-284/checkpoints/ckpt_epoch_14.pth"
     PRETRAINED_PATH: ""
     LOAD: False
     LOAD_FC: False
@@ -90,8 +89,6 @@ CONFIG:
     BOX_NOISE_SCALE: 0.4
     NUM_PATTERNS: 0
     BBOX_EMBED_DIFF_EACH_LAYER: False
-    USE_CLS_SA: False
-    RM_BINARY: False
 
   MATCHER:
     COST_CLASS: 12
@@ -112,11 +109,11 @@ CONFIG:
     CLIPS_MAX_NORM: 0.1
 
   LOG:
-    BASE_PATH: '/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/AVA_Tuber'
+    BASE_PATH: '/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/UCF'
     LOG_DIR: 'tb_log'
     SAVE_DIR: 'checkpoints'
-    EVAL_DIR: '/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/AVA_Tuber/eval'
-    SAVE_FREQ: 1
+    EVAL_DIR: '/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/UCF/eval'
+    SAVE_FREQ: 5
     RES_DIR: Dab_conv_trans_decsasde_CSN152_{}-{}/res
     EXP_NAME: Dab_conv_trans_decsasde_CSN152_{}-{}
     DISPLAY_FREQ: 1000
