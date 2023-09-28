@@ -84,12 +84,12 @@ class ConvBlock(nn.Module):
     def forward(self, x):
         input = x
         x = self.conv1(x)
-        x = x.permute(0,2,3,1)
+        x = x.permute(0,2,3,1).contiguous()
         x = self.norm(x)
         x = self.conv2(x)
         x = self.act(x)
         x = self.conv3(x)
-        x = x.permute(0,3,1,2)
+        x = x.permute(0,3,1,2).contiguous()
         x = input + self.drop_path(x)
         return x
 
@@ -334,8 +334,8 @@ class Transformer(nn.Module):
             else:
                 src_l = memory[:, index:, :]
                 pos_l = lvl_pos_embed_flatten[:, index:, :]
-            src_l = src_l.reshape(-1, *shape, self.d_model).permute(0,4,1,2,3)
-            pos_l = pos_l.reshape(-1, *shape, self.d_model).permute(0,4,1,2,3)
+            src_l = src_l.reshape(-1, *shape, self.d_model).permute(0,4,1,2,3).contiguous()
+            pos_l = pos_l.reshape(-1, *shape, self.d_model).permute(0,4,1,2,3).contiguous()
             srcs_per_lvl.append(NestedTensor(src_l, masks[i]))
             poses_per_lvl.append(pos_l)
         
@@ -983,10 +983,10 @@ class TransformerClassDecoderLayer(nn.Module):
         query = self.norm1(query)
         
 
-        key = torch.cat([self.k_proj(cls_feature).flatten(2).permute(2,0,1), pos[:,None].expand(-1, num_queries, -1, -1).flatten(1,2)], dim=-1)
+        key = torch.cat([self.k_proj(cls_feature).flatten(2).permute(2,0,1).contiguous(), pos[:,None].expand(-1, num_queries, -1, -1).flatten(1,2)], dim=-1)
         cls_query_pos = self.cls_qpos_sine_proj(query_sine_embed).flatten(0,1)[None].expand(len(class_queries), -1 ,-1)
         query = torch.cat([query, cls_query_pos], dim=-1)
-        value = self.v_proj(encoded_feature_expanded).flatten(2).permute(2,0,1)
+        value = self.v_proj(encoded_feature_expanded).flatten(2).permute(2,0,1).contiguous()
         # if self.gradient_checkpointing:
         #     def custom_layer(module):
         #         def custom_forward(*inputs):
@@ -998,7 +998,7 @@ class TransformerClassDecoderLayer(nn.Module):
         #     cls_output = checkpoint.checkpoint(custom_layer(self.cross_attn), query, key, value)[0].reshape(len(class_queries), num_queries, -1, self.d_model).permute(1,2,0,3)
         # else:
         #     cls_output = self.cross_attn(query=query, key=key, value=value)[0].reshape(len(class_queries), num_queries, -1, self.d_model).permute(1,2,0,3)
-        cls_output = self.cross_attn(query=query, key=key, value=value)[0].reshape(len(class_queries), num_queries, -1, self.d_model).permute(1,2,0,3)
+        cls_output = self.cross_attn(query=query, key=key, value=value)[0].reshape(len(class_queries), num_queries, -1, self.d_model).permute(1,2,0,3).contiguous()
         
         # FFN
         cls_output2 = self.cls_linear2_(self.dropout1_(self.activation(self.cls_linear1_(cls_output))))
