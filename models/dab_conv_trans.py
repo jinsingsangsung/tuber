@@ -285,9 +285,8 @@ class DETR(nn.Module):
         if self.aux_loss:
             out['aux_outputs'] = self._set_aux_loss(outputs_class, outputs_coord, outputs_class_b)
         
-        import pdb; pdb.set_trace()
-
         return out
+
     @torch.jit.unused
     def _set_aux_loss(self, outputs_class, outputs_coord, outputs_class_b):
         # this is a workaround to make torchscript happy, as torchscript
