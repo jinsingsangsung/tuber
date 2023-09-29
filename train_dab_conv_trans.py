@@ -5,7 +5,7 @@ import time
 import torch
 import torch.optim
 from models.dab_conv_trans import build_model
-from utils.model_utils import deploy_model, load_model, save_checkpoint, load_model_and_states
+from utils.model_utils_0919 import deploy_model, load_model, save_checkpoint, load_model_and_states
 from utils.video_action_recognition import train_tuber_detection, validate_tuber_detection, validate_tuber_ucf_detection, validate_tuber_jhmdb_detection
 from pipelines.video_action_recognition_config import get_cfg_defaults
 from pipelines.launch import spawn_workers
@@ -97,7 +97,7 @@ def main_worker(cfg):
     lr_scheduler = build_scheduler(cfg, optimizer, len(train_loader))
     
     if cfg.CONFIG.AMP:
-        scaler = torch.cuda.amp.GradScaler(growth_interval=1)
+        scaler = torch.cuda.amp.GradScaler(growth_interval=1000)
     else:
         scaler = None  
 

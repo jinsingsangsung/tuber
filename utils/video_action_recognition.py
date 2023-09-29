@@ -131,31 +131,7 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
 
         samples = samples.to(device)
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
-        if cfg.CONFIG.AMP:
-            with torch.autocast("cuda", dtype=torch.float16):
-                if cfg.CONFIG.TWO_STREAM:
-                    if cfg.CONFIG.USE_LFB:
-                        if cfg.CONFIG.USE_LOCATION:
-                            outputs = model(samples, samples2, lfb_features, lfb_location_features)
-                        else:
-                            outputs = model(samples, samples2, lfb_features)
-                    else:
-                        outputs = model(samples, samples2)
-                else:
-                    if cfg.CONFIG.USE_LFB:
-                        if cfg.CONFIG.USE_LOCATION:
-                            outputs = model(samples, lfb_features, lfb_location_features)
-                        else:
-                            outputs = model(samples, lfb_features)
-                    else:
-                        if not "DN" in cfg.CONFIG.LOG.RES_DIR:
-                            outputs = model(samples)
-                            loss_dict = criterion(outputs, targets)
-                        else:
-                            dn_args = targets, cfg.CONFIG.MODEL.SCALAR, cfg.CONFIG.MODEL.LABEL_NOISE_SCALE, cfg.CONFIG.MODEL.BOX_NOISE_SCALE, cfg.CONFIG.MODEL.NUM_PATTERNS
-                            outputs, mask_dict = model(samples, dn_args)
-                            loss_dict = criterion(outputs, targets, mask_dict)
-        else:
+        with torch.autocast("cuda", dtype=torch.float16, enabled=cfg.CONFIG.AMP):
             if cfg.CONFIG.TWO_STREAM:
                 if cfg.CONFIG.USE_LFB:
                     if cfg.CONFIG.USE_LOCATION:
@@ -177,7 +153,7 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
                     else:
                         dn_args = targets, cfg.CONFIG.MODEL.SCALAR, cfg.CONFIG.MODEL.LABEL_NOISE_SCALE, cfg.CONFIG.MODEL.BOX_NOISE_SCALE, cfg.CONFIG.MODEL.NUM_PATTERNS
                         outputs, mask_dict = model(samples, dn_args)
-                        loss_dict = criterion(outputs, targets, mask_dict)            
+                        loss_dict = criterion(outputs, targets, mask_dict)       
 
         # if not math.isfinite(outputs["pred_logits"][0].data.cpu().numpy()[0,0]):
         #     print(outputs["pred_logits"][0].data.cpu().numpy())
@@ -202,7 +178,7 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
             if max_norm > 0: torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
             scaler.step(optimizer)
             scaler.update()
-            min_scale = 32
+            min_scale = 128
             if scaler._scale < min_scale:
                 scaler._scale = torch.tensor(min_scale).to(scaler._scale)
         # optimizer_c.step()

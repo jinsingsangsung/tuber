@@ -385,8 +385,9 @@ class Transformer(nn.Module):
         pos_embed = rearrange(pos_embed, "B C T H W L -> L (H W) (B T) C")
         mask = rearrange(mask, "B T H W L -> (B T) (H W) L")[..., 0]
 
-        hs, cls_hs, references = self.decoder(tgt, memory, memory_key_padding_mask=mask,
-                          pos=pos_embed, refpoints_unsigmoid=refpoint_embed, orig_res=(h,w))
+        with torch.autocast("cuda", dtype=torch.float16, enabled=False):
+            hs, cls_hs, references = self.decoder(tgt, memory, memory_key_padding_mask=mask,
+                            pos=pos_embed, refpoints_unsigmoid=refpoint_embed, orig_res=(h,w))
         return hs, cls_hs, references
 
 
