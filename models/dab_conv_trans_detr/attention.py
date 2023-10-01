@@ -84,7 +84,7 @@ class MultiheadAttention(Module):
     bias_k: Optional[torch.Tensor]
     bias_v: Optional[torch.Tensor]
 
-    def __init__(self, embed_dim, num_heads, dropout=0., bias=True, add_bias_kv=False, add_zero_attn=False, kdim=None, vdim=None, query_specific_key=False, stop_middle=False):
+    def __init__(self, embed_dim, num_heads, dropout=0., bias=True, add_bias_kv=False, add_zero_attn=False, kdim=None, vdim=None, query_specific_key=False, stop_middle=False, query_specific_value=False):
         super(MultiheadAttention, self).__init__()
         self.embed_dim = embed_dim
         self.kdim = kdim if kdim is not None else embed_dim
@@ -109,6 +109,7 @@ class MultiheadAttention(Module):
         self.add_zero_attn = add_zero_attn
         self.stop_middle = stop_middle
         self.query_specific_key = query_specific_key
+        self.query_specific_value = query_specific_value
         self._reset_parameters()
 
     def _reset_parameters(self):
@@ -173,6 +174,7 @@ class MultiheadAttention(Module):
                 q_proj_weight=self.q_proj_weight, k_proj_weight=self.k_proj_weight,
                 v_proj_weight=self.v_proj_weight, out_dim=self.vdim,
                 query_specific_key=self.query_specific_key,
+                query_specific_value=self.query_specific_value,
                 stop_middle=self.stop_middle)
         else:
             return multi_head_attention_forward(
@@ -184,6 +186,7 @@ class MultiheadAttention(Module):
                 key_padding_mask=key_padding_mask, need_weights=need_weights,
                 attn_mask=attn_mask, out_dim=self.vdim,
                 query_specific_key=self.query_specific_key,                
+                query_specific_value=self.query_specific_value,              
                 stop_middle=self.stop_middle)
 
 
@@ -213,6 +216,7 @@ def multi_head_attention_forward(query: Tensor,
                                  out_dim: Optional[Tensor] = None,
                                  stop_middle: bool = False,
                                  query_specific_key: bool = False,
+                                 query_specific_value: bool = False,
                                  ) -> Tuple[Tensor, Optional[Tensor]]:
     r"""
     Args:
@@ -283,7 +287,10 @@ def multi_head_attention_forward(query: Tensor,
     tgt_len, bsz, embed_dim = query.size()
     assert embed_dim == embed_dim_to_check
     # allow MHA to have different sizes for the feature dimension
-    assert key.size(0) == value.size(0) and key.size(1) == value.size(1)
+    if not query_specific_value:
+        assert key.size(0) == value.size(0) and key.size(1) == value.size(1)
+    else:
+        assert key.size(0) == value.size(1) and key.size(1) == value.size(2)
 
     head_dim = embed_dim // num_heads
     v_head_dim = out_dim // num_heads
@@ -338,7 +345,10 @@ def multi_head_attention_forward(query: Tensor,
         if k is not None:
             k = k.contiguous().view(-1, bsz * num_heads, head_dim).transpose(0, 1)
         if v is not None:
-            v = v.contiguous().view(-1, bsz * num_heads, v_head_dim).transpose(0, 1)
+            if not query_specific_value:
+                v = v.contiguous().view(-1, bsz * num_heads, v_head_dim).transpose(0, 1)
+            else:
+                v = v.contiguous().view(tgt_len, -1, bsz * num_heads, v_head_dim).transpose(0, 1)
     else:
         if k is not None:
             k = k.contiguous().view(tgt_len, -1, bsz * num_heads, head_dim).transpose(1, 2)
@@ -405,10 +415,12 @@ def multi_head_attention_forward(query: Tensor,
         attn_output_weights = attn_output_weights.view(bsz, num_heads, tgt_len, src_len)
         return attn_output_weights.sum(dim=1) / num_heads + 0*out_proj_bias.sum() + 0*out_proj_weight.sum()
     
-    if not query_specific_key:
-        attn_output = torch.bmm(attn_output_weights, v)
-    else:
+    if query_specific_key:
         attn_output = torch.einsum("bnl,nbld->bnd", attn_output_weights, v)
+    elif query_specific_value:
+        attn_output = torch.einsum("bnl,lnbd->bnd", attn_output_weights, v)
+    else:
+        attn_output = torch.bmm(attn_output_weights, v)
         
     assert list(attn_output.size()) == [bsz * num_heads, tgt_len, v_head_dim]
     attn_output = attn_output.transpose(0, 1).contiguous().view(tgt_len, bsz, out_dim)

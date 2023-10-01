@@ -657,7 +657,7 @@ class TransformerDecoder(nn.Module):
                             pos=pos, query_pos=query_pos, query_sine_embed=query_sine_embed,
                             is_first=(layer_id == 0))
 
-                cls_output = cls_layer(actor_feature.clone().detach(), q_memory, pos[0], query_sine_embed, self.class_queries, orig_res, len(tgt))
+                cls_output = cls_layer(actor_feature.clone().detach(), memory, q_memory, pos[0], query_sine_embed, self.class_queries, orig_res, len(tgt))
             
             if layer_id != 0:
                 cls_output = self.cls_norm(cls_output + prev_output)
@@ -942,10 +942,12 @@ class TransformerClassDecoderLayer(nn.Module):
         self.norm1 = nn.LayerNorm(d_model)
         
         # Class decoder cross-attention
+        self.lvl_w_embed = nn.Linear(d_model, 4)
         self.k_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
-        self.v_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
+        # self.v_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
+        self.v_proj_ = nn.Linear(d_model, d_model)
         self.cls_qpos_sine_proj = nn.Linear(d_model, d_model)
-        self.cross_attn = MultiheadAttention(d_model*2, nhead, dropout=dropout, vdim=d_model)
+        self.cross_attn = MultiheadAttention(d_model*2, nhead, dropout=dropout, vdim=d_model, query_specific_value=True)
         
         # FFN layer
         # self.linear = nn.Linear(d_model, d_model)
@@ -955,7 +957,7 @@ class TransformerClassDecoderLayer(nn.Module):
         self.dropout2_ = nn.Dropout(dropout) # self.dropout_
         self.cls_norm_ = nn.LayerNorm(d_model)
 
-    def forward(self, actor_feature, q_memory, pos, query_sine_embed, class_queries, orig_res, num_queries):
+    def forward(self, actor_feature, memory, q_memory, pos, query_sine_embed, class_queries, orig_res, num_queries):
                     
         # separate classification branch from localization
         actor_feature2 = self.cls_linear2(self.dropout1(self.activation(self.cls_linear1(actor_feature))))
@@ -992,7 +994,9 @@ class TransformerClassDecoderLayer(nn.Module):
         key = torch.cat([self.k_proj(cls_feature).flatten(2).permute(2,0,1).contiguous(), pos[:,None].expand(-1, num_queries, -1, -1).flatten(1,2)], dim=-1)
         cls_query_pos = self.cls_qpos_sine_proj(query_sine_embed).flatten(0,1)[None].expand(len(class_queries), -1 ,-1)
         query = torch.cat([query, cls_query_pos], dim=-1)
-        value = self.v_proj(encoded_feature_expanded).flatten(2).permute(2,0,1).contiguous()
+        lvl_w = self.lvl_w_embed(class_queries)
+        q_value = torch.einsum("nl,lhtc->nhtc", lvl_w, memory)[:,:,None,:,:].expand(-1,-1,num_queries,-1,-1).flatten(2,3) # (N_q, L), (L, HW, BT, C),  ->  N_q, HW, BT, C -> N_q, HW, NBT, C 
+        value = self.v_proj_(q_value) # N_q, HW, (N BT), D
         # if self.gradient_checkpointing:
         #     def custom_layer(module):
         #         def custom_forward(*inputs):
