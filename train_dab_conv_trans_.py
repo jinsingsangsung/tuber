@@ -122,7 +122,10 @@ def main_worker(cfg):
     start_time = time.time()
     max_accuracy = 0.0  
     for epoch in range(cfg.CONFIG.TRAIN.START_EPOCH, cfg.CONFIG.TRAIN.EPOCH_NUM):
-        last_epoch = os.path.join(cfg.CONFIG.LOG.BASE_PATH, exp_name, cfg.CONFIG.LOG.SAVE_DIR, f'ckpt_epoch_{epoch:02d}.pth')
+        if epoch > 0:
+            last_epoch = os.path.join(cfg.CONFIG.LOG.BASE_PATH, exp_name, cfg.CONFIG.LOG.SAVE_DIR, f'ckpt_epoch_{epoch-1:02d}.pth')
+        else: 
+            last_epoch = ""
         if os.path.isfile(last_epoch):
             cfg.CONFIG.MODEL.LOAD = True
             cfg.CONFIG.MODEL.LOAD_FC = True
