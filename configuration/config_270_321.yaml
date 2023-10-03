@@ -17,7 +17,7 @@ CONFIG:
   USE_LOCATION: False
   EFFICIENT: False
   TRAIN:
-    EPOCH_NUM: 20
+    EPOCH_NUM: 18
     BATCH_SIZE: 2
     LR: 1e-4
     MIN_LR: 1e-6 # only if cosine scheduler is used
@@ -28,7 +28,7 @@ CONFIG:
     USE_WARMUP: True # does nothing
     WARMUP_START_LR: 1e-5
     WARMUP_EPOCHS: 3 # this determines whether to use Warmup unless using "step"
-    LR_MILESTONE: [12,18] #only for multistep
+    LR_MILESTONE: [12,15] #only for multistep
     STEP: 0.1 # gamma for lr decay
     OPTIMIZER:
       NAME: ADAMW
@@ -107,7 +107,7 @@ CONFIG:
     GIOU_COF: 2
     EOS_COF: 0.1
     WEIGHT: 10
-    WEIGHT_CHANGE: 8
+    WEIGHT_CHANGE: 1000
     LOSS_CHANGE_COF: 2
     CLIPS_MAX_NORM: 0.1
 
@@ -117,6 +117,6 @@ CONFIG:
     SAVE_DIR: 'checkpoints'
     EVAL_DIR: '/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/AVA_Tuber/eval'
     SAVE_FREQ: 1
-    RES_DIR: Dab_conv_trans_decsasde_{}-{}/res
-    EXP_NAME: Dab_conv_trans_decsasde_{}-{}
+    RES_DIR: Dab_conv_trans_decsasde_CSN50_{}-{}/res
+    EXP_NAME: Dab_conv_trans_decsasde_CSN50_{}-{}
     DISPLAY_FREQ: 1000
