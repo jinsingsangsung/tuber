@@ -26,7 +26,7 @@ from models.transformer.util.misc import NestedTensor
 from utils.misc import inverse_sigmoid
 from .ops.modules import MSDeformAttn, MSDeformAttn3D
 from timm.models.layers import DropPath
-from einops import rearrange
+from einops import rearrange, repeat
 import torch.utils.checkpoint as checkpoint
 
 class MLP(nn.Module):
@@ -49,12 +49,23 @@ def gen_sineembed_for_position(pos_tensor):
     scale = 2 * math.pi
     dim_t = torch.arange(128, dtype=torch.float32, device=pos_tensor.device)
     dim_t = 10000 ** (2 * (dim_t // 2) / 128)
-    x_embed = pos_tensor[:, :, 0] * scale
-    y_embed = pos_tensor[:, :, 1] * scale
-    pos_x = x_embed[:, :, None] / dim_t
-    pos_y = y_embed[:, :, None] / dim_t
-    pos_x = torch.stack((pos_x[:, :, 0::2].sin(), pos_x[:, :, 1::2].cos()), dim=3).flatten(2)
-    pos_y = torch.stack((pos_y[:, :, 0::2].sin(), pos_y[:, :, 1::2].cos()), dim=3).flatten(2)
+    if not pos_tensor.size(-1) == 6:
+        x_embed = pos_tensor[:, :, 0] * scale
+        y_embed = pos_tensor[:, :, 1] * scale
+        pos_x = x_embed[:, :, None] / dim_t
+        pos_y = y_embed[:, :, None] / dim_t
+        pos_x = torch.stack((pos_x[:, :, 0::2].sin(), pos_x[:, :, 1::2].cos()), dim=3).flatten(2)
+        pos_y = torch.stack((pos_y[:, :, 0::2].sin(), pos_y[:, :, 1::2].cos()), dim=3).flatten(2)
+    else:
+        t_embed = pos_tensor[:, :, 0] * scale
+        x_embed = pos_tensor[:, :, 1] * scale
+        y_embed = pos_tensor[:, :, 2] * scale
+        pos_x = t_embed[:, :, None] / dim_t
+        pos_x = x_embed[:, :, None] / dim_t
+        pos_y = y_embed[:, :, None] / dim_t
+        pos_t = torch.stack((pos_t[:, :, 0::2].sin(), pos_t[:, :, 1::2].cos()), dim=3).flatten(2)
+        pos_x = torch.stack((pos_x[:, :, 0::2].sin(), pos_x[:, :, 1::2].cos()), dim=3).flatten(2)
+        pos_y = torch.stack((pos_y[:, :, 0::2].sin(), pos_y[:, :, 1::2].cos()), dim=3).flatten(2)    
     if pos_tensor.size(-1) == 2:
         pos = torch.cat((pos_y, pos_x), dim=2)
     elif pos_tensor.size(-1) == 4:
@@ -67,6 +78,20 @@ def gen_sineembed_for_position(pos_tensor):
         pos_h = torch.stack((pos_h[:, :, 0::2].sin(), pos_h[:, :, 1::2].cos()), dim=3).flatten(2)
 
         pos = torch.cat((pos_y, pos_x, pos_w, pos_h), dim=2)
+    elif pos_tensor.size(-1) == 6:
+        t_embed = pos_tensor[:, :, 3] * scale
+        pos_t = t_embed[:, :, None] / dim_t
+        pos_t = torch.stack((pos_t[:, :, 0::2].sin(), pos_t[:, :, 1::2].cos()), dim=3).flatten(2)
+        
+        w_embed = pos_tensor[:, :, 4] * scale
+        pos_w = w_embed[:, :, None] / dim_t
+        pos_w = torch.stack((pos_w[:, :, 0::2].sin(), pos_w[:, :, 1::2].cos()), dim=3).flatten(2)
+
+        h_embed = pos_tensor[:, :, 5] * scale
+        pos_h = h_embed[:, :, None] / dim_t
+        pos_h = torch.stack((pos_h[:, :, 0::2].sin(), pos_h[:, :, 1::2].cos()), dim=3).flatten(2)
+
+        pos = torch.cat((pos_y, pos_x, pos_w, pos_h), dim=2)        
     else:
         raise ValueError("Unknown pos_tensor shape(-1):{}".format(pos_tensor.size(-1)))
     return pos
@@ -105,6 +130,7 @@ class Transformer(nn.Module):
                  bbox_embed_diff_each_layer=False,
                  num_feature_levels=4,
                  enc_n_points=8,
+                 dec_n_points=8,
                  two_stage=False,
                  two_stage_num_proposals=300,
                  high_dim_query_update=False,
@@ -125,8 +151,11 @@ class Transformer(nn.Module):
                                                           dropout, activation,
                                                           num_feature_levels, nhead, enc_n_points)
         self.encoder = DeformableTransformerEncoder(encoder_layer, num_encoder_layers, gradient_checkpointing)
-        decoder_layer = TransformerDecoderLayer(d_model, nhead, dim_feedforward,
-                                                dropout, activation, normalize_before, keep_query_pos=keep_query_pos)
+        # decoder_layer = TransformerDecoderLayer(d_model, nhead, dim_feedforward,
+        #                                         dropout, activation, normalize_before, keep_query_pos=keep_query_pos)
+        decoder_layer = DeformableTransformerDecoderLayer(d_model, dim_feedforward,
+                                                          dropout, activation,
+                                                          num_feature_levels, nhead, dec_n_points)
         cls_decoder_layer = TransformerClassDecoderLayer(d_model, nhead, dim_feedforward, dropout, activation, num_conv_blocks)        
         decoder_norm = nn.LayerNorm(d_model)
         self.decoder = TransformerDecoder(decoder_layer, cls_decoder_layer, num_decoder_layers, decoder_norm,
@@ -289,15 +318,15 @@ class Transformer(nn.Module):
         else:
             return interpolated_features, None
 
-    def forward(self, srcs, masks, pos_embeds, refpoint_embed=None):
+    def forward(self, srcs, masks, pos_embeds, query_embed=None):
         """
         Input:
             - srcs: List([bs, c, t, h, w])
             - masks: List([bs, t, h, w])
             - pos_embeds: List([bs, c, t, h, w])
-            - refpoint_embed: take either torch.Tensor([nq, d+4]) or torch.Tensor([b, nq, d+4])
+            - query_embed: take either torch.Tensor([nq, t, d+4]) or torch.Tensor([nq, 1, d+4])
         """ 
-        assert self.two_stage or refpoint_embed is not None
+        assert self.two_stage or query_embed is not None
 
         # prepare input for encoder
         src_flatten = []
@@ -343,19 +372,10 @@ class Transformer(nn.Module):
             poses_per_lvl.append(pos_l)
         
         features_per_lvl, poses_per_lvl = self.make_interpolated_features(srcs_per_lvl, poses_per_lvl, level=-2, num_frames=self.temp_len)
-        # bs, c, t, h, w = src.shape
-        # src_shape = src.shape
-        # src = src.permute(0,2,1,3,4).contiguous()
-        # src = src.reshape(bs, t, c, h, w).flatten(0,1) # bs*t, c, h, w
-        # src = src.flatten(2).permute(2, 0, 1) # hw, bst, c
-        # pos_embed = pos_embed.permute(0,2,1,3,4).contiguous().flatten(0,1)
-        # pos_embed = pos_embed.flatten(2).permute(2, 0, 1)
-        refpoint_embed = refpoint_embed[:,None].expand(-1, bs, -1, -1).flatten(1,2) #n_q, bs * t, 4
-        # mask = mask.flatten(0,1).flatten(1)
+        query_embed = query_embed[:,None].expand(-1, bs, -1, -1).flatten(1,2).transpose(0,1).contiguous() #bs * t, nq, 4+d
+        tgt_embed = query_embed[..., :self.d_model]
+        refpoint_embed = query_embed[..., self.d_model:]
 
-        # memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed, src_shape=src_shape) 
-        # temporal dimension is alive
-        # query_embed = gen_sineembed_for_position(refpoint_embed)
         intpltd_srcs_per_lvl = []
         intpltd_masks_per_lvl = []
         for feature in features_per_lvl:
@@ -370,24 +390,31 @@ class Transformer(nn.Module):
         num_queries = refpoint_embed.shape[0]
         
         if self.eff:
-            memory = srcs_per_lvl[:,:,t//2:t//2+1,:,:,:]
+            raw_memory = srcs_per_lvl[:,:,t//2:t//2+1,:,:,:]
             pos_embed = poses_per_lvl[:,:,t//2:t//2+1,:,:,:]
             mask = masks_per_lvl[:,t//2:t//2+1,:,:,:]
-            tgt = torch.zeros(num_queries, bs, self.d_model, device=refpoint_embed.device)
+            tgt = tgt_embed
         else:
-            memory = srcs_per_lvl
+            raw_memory = srcs_per_lvl
             pos_embed = poses_per_lvl
             mask = masks_per_lvl
-            tgt = torch.zeros(num_queries, bs*t, self.d_model, device=refpoint_embed.device)
+            tgt = tgt_embed
         
         # prepare input for the decoder
-        memory = rearrange(memory, "B C T H W L -> L (H W) (B T) C")
+        raw_memory = rearrange(raw_memory, "B C T H W L -> L (H W) (B T) C")
         pos_embed = rearrange(pos_embed, "B C T H W L -> L (H W) (B T) C")
         mask = rearrange(mask, "B T H W L -> (B T) (H W) L")[..., 0]
 
         with torch.autocast("cuda", dtype=torch.float16, enabled=False):
-            hs, cls_hs, references = self.decoder(tgt, memory, memory_key_padding_mask=mask,
-                            pos=pos_embed, refpoints_unsigmoid=refpoint_embed, orig_res=(h,w))
+            hs, cls_hs, references = self.decoder(tgt_embed, memory, raw_memory,
+                                                  spatio_temporal_shapes,
+                                                  level_start_index,
+                                                  valid_ratios,
+                                                  memory_key_padding_mask=mask,
+                                                  pos=pos_embed, refpoints_unsigmoid=refpoint_embed, orig_res=(h,w),
+                                                  temp_len=self.temp_len,
+                                                  eff=self.eff,
+                                                  padding_mask=mask_flatten)
         return hs, cls_hs, references
 
 
@@ -570,14 +597,20 @@ class TransformerDecoder(nn.Module):
         self.cls_norm2 = nn.LayerNorm(d_model)
         self.gradient_checkpointing = gradient_checkpointing
 
-    def forward(self, tgt, memory,
+    def forward(self, tgt, memory, raw_memory,
+                spatio_temporal_shapes,
+                level_start_index,
+                valid_ratios,
                 tgt_mask: Optional[Tensor] = None,
                 memory_mask: Optional[Tensor] = None,
                 tgt_key_padding_mask: Optional[Tensor] = None,
                 memory_key_padding_mask: Optional[Tensor] = None,
                 pos: Optional[Tensor] = None,
-                refpoints_unsigmoid: Optional[Tensor] = None, # num_queries, bs, 2
+                refpoints_unsigmoid: Optional[Tensor] = None, # num_queries, bs*t, 4
                 orig_res = None,
+                temp_len = 32,
+                eff = False,
+                padding_mask: Optional[Tensor] = None,
                 ):
         output = tgt
 
@@ -586,10 +619,21 @@ class TransformerDecoder(nn.Module):
         reference_points = refpoints_unsigmoid.sigmoid()
         ref_points = [reference_points]
 
-        # import ipdb; ipdb.set_trace()        
-
+        bs = tgt.size(0) if eff else tgt.size(0) // temp_len
+        nq = tgt.size(1)
+        
         for layer_id, (layer, cls_layer) in enumerate(zip(self.layers, self.cls_layers)):
-            obj_center = reference_points[..., :self.query_dim]     # [num_queries, batch_size, 2]
+            if not eff:
+                t = torch.linspace(0,1,temp_len, device=reference_points.device)[None, ..., None, None].expand(bs, -1, nq, -1).flatten(0,1)
+            else:
+                t = torch.full((reference_points.size(0), reference_points.size(1), 1), 0.5, device=reference_points.device)
+            
+            z = torch.full((reference_points.size(0), reference_points.size(1), 1), 0., device=reference_points.device)
+            obj_center = reference_points[..., :self.query_dim]
+            reference_points = torch.cat([t, reference_points[:,:,:2], z, reference_points[:,:,2:]], -1)
+            reference_points_input = reference_points[:, :, None] \
+                                        * torch.cat([valid_ratios, valid_ratios], -1)[:, None] # bs*t, nq, 4, 6
+            
             # get sine embedding for the query vector
             query_sine_embed = gen_sineembed_for_position(obj_center)  
             query_pos = self.ref_point_head(query_sine_embed) 
@@ -604,14 +648,14 @@ class TransformerDecoder(nn.Module):
                 pos_transformation = self.query_scale.weight[layer_id]
 
             # apply transformation
-            query_sine_embed = query_sine_embed[...,:self.d_model] * pos_transformation
+            query_sine_embed = query_pos * pos_transformation
 
             # modulated HW attentions
             if self.modulate_hw_attn:
                 refHW_cond = self.ref_anchor_head(output).sigmoid() # nq, bs*t, 2
                 query_sine_embed[..., self.d_model // 2:] *= (refHW_cond[..., 0] / obj_center[..., 2]).unsqueeze(-1)
                 query_sine_embed[..., :self.d_model // 2] *= (refHW_cond[..., 1] / obj_center[..., 3]).unsqueeze(-1)
-
+            
             if self.gradient_checkpointing:
                 def custom_layer(module):
                     def custom_forward(*inputs):
@@ -650,14 +694,14 @@ class TransformerDecoder(nn.Module):
                                                    orig_res,
                                                    len(tgt))
             else:
-                output, actor_feature, q_memory = layer(output, memory, tgt_mask=tgt_mask,
-                            memory_mask=memory_mask,
-                            tgt_key_padding_mask=tgt_key_padding_mask,
-                            memory_key_padding_mask=memory_key_padding_mask,
-                            pos=pos, query_pos=query_pos, query_sine_embed=query_sine_embed,
-                            is_first=(layer_id == 0))
-
-                cls_output = cls_layer(actor_feature.clone().detach(), q_memory, pos[0], query_sine_embed, self.class_queries, orig_res, len(tgt))
+                # output, actor_feature, q_memory = layer(output, memory, tgt_mask=tgt_mask,
+                #             memory_mask=memory_mask,
+                #             tgt_key_padding_mask=tgt_key_padding_mask,
+                #             memory_key_padding_mask=memory_key_padding_mask,
+                #             pos=pos, query_pos=query_pos, query_sine_embed=query_sine_embed,
+                #             is_first=(layer_id == 0))
+                output, actor_feature = layer(output, query_sine_embed, reference_points_input, memory, spatio_temporal_shapes, level_start_index, padding_mask)
+                cls_output = cls_layer(actor_feature.clone().detach(), raw_memory, pos[0], query_sine_embed, self.class_queries, orig_res, nq)
             
             if layer_id != 0:
                 cls_output = self.cls_norm(cls_output + prev_output)
@@ -669,7 +713,8 @@ class TransformerDecoder(nn.Module):
                 else:
                     tmp = self.bbox_embed(output)
                 # import ipdb; ipdb.set_trace()
-                tmp[..., :self.query_dim] += inverse_sigmoid(reference_points)
+                ref_pt_unsig = inverse_sigmoid(reference_points)
+                tmp[..., :self.query_dim] += torch.cat([ref_pt_unsig[...,1:3], ref_pt_unsig[...,4:6]], dim=-1)
                 new_reference_points = tmp[..., :self.query_dim].sigmoid()
                 if layer_id != self.num_layers - 1:
                     ref_points.append(new_reference_points)
@@ -915,6 +960,59 @@ class TransformerDecoderLayer(nn.Module):
         tgt = self.norm3(tgt)
         return tgt, tgt_temp, q_memory
 
+class DeformableTransformerDecoderLayer(nn.Module):
+    def __init__(self, d_model=256, d_ffn=1024,
+                 dropout=0.1, activation="relu",
+                 n_levels=4, n_heads=8, n_points=4):
+        super().__init__()
+
+        # cross attention
+        self.cross_attn = MSDeformAttn3D(d_model, n_levels, n_heads, n_points)
+        self.dropout1 = nn.Dropout(dropout)
+        self.norm1 = nn.LayerNorm(d_model)
+
+        # self attention
+        self.self_attn = nn.MultiheadAttention(d_model, n_heads, dropout=dropout)
+        self.dropout2 = nn.Dropout(dropout)
+        self.norm2 = nn.LayerNorm(d_model)
+
+        # ffn
+        self.linear1 = nn.Linear(d_model, d_ffn)
+        self.activation = _get_activation_fn(activation)
+        self.dropout3 = nn.Dropout(dropout)
+        self.linear2 = nn.Linear(d_ffn, d_model)
+        self.dropout4 = nn.Dropout(dropout)
+        self.norm3 = nn.LayerNorm(d_model)
+
+    @staticmethod
+    def with_pos_embed(tensor, pos):
+        return tensor if pos is None else tensor + pos
+
+    def forward_ffn(self, tgt):
+        tgt2 = self.linear2(self.dropout3(self.activation(self.linear1(tgt))))
+        tgt = tgt + self.dropout4(tgt2)
+        tgt = self.norm3(tgt)
+        return tgt
+
+    def forward(self, tgt, query_pos, reference_points, src, src_spatio_temporal_shapes, level_start_index, src_padding_mask=None):
+        # self attention
+        q = k = self.with_pos_embed(tgt, query_pos)
+        tgt2 = self.self_attn(q.transpose(0, 1), k.transpose(0, 1), tgt.transpose(0, 1))[0].transpose(0, 1)
+        tgt = tgt + self.dropout2(tgt2)
+        tgt = self.norm2(tgt)
+        # cross attention
+        tgt2 = self.cross_attn(self.with_pos_embed(tgt, query_pos),
+                               reference_points,
+                               src, src_spatio_temporal_shapes, level_start_index, src_padding_mask)
+        tgt = tgt + self.dropout1(tgt2)
+        tgt = self.norm1(tgt)
+        actor_feature = tgt
+        # ffn
+        tgt = self.forward_ffn(tgt)
+
+        return tgt, actor_feature
+
+
 class TransformerClassDecoderLayer(nn.Module):
 
     def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1,
@@ -949,13 +1047,14 @@ class TransformerClassDecoderLayer(nn.Module):
         
         # FFN layer
         # self.linear = nn.Linear(d_model, d_model)
+        self.lvl_w_embed = nn.Linear(d_model, 4)
         self.cls_linear1_ = nn.Linear(d_model, dim_feedforward)
         self.dropout1_ = nn.Dropout(dropout) # self.dropout_
         self.cls_linear2_ = nn.Linear(dim_feedforward, d_model)
         self.dropout2_ = nn.Dropout(dropout) # self.dropout_
         self.cls_norm_ = nn.LayerNorm(d_model)
 
-    def forward(self, actor_feature, q_memory, pos, query_sine_embed, class_queries, orig_res, num_queries):
+    def forward(self, actor_feature, memory, pos, query_sine_embed, class_queries, orig_res, num_queries):
                     
         # separate classification branch from localization
         actor_feature2 = self.cls_linear2(self.dropout1(self.activation(self.cls_linear1(actor_feature))))
@@ -964,12 +1063,20 @@ class TransformerClassDecoderLayer(nn.Module):
 
         # apply actor-centric convolution
         h, w = orig_res
-        actor_feature_expanded = actor_feature.flatten(0,1)[..., None, None].expand(-1, -1, h, w) # N_q*B*t, D, H, W
+        l = memory.size(0)
+        # actor_feature_expanded = rearrange(actor_feature[None].expand(l, -1, -1, -1), "L BT N D -> (N BT L) D")
+        # actor_feature_expanded = repeat(actor_feature_expanded, "NBTL D -> NBTL D H W", H=h, W=w)
+        actor_feature_expanded = repeat(actor_feature, "BT N D -> BT N D H W", H=h, W=w).flatten(0,1)
         # memory needs to be hw, bs*t, d
         # q_memory: n_q, hw, bs*t, d
         # encoded_feature_expanded = q_memory.transpose(0,1).flatten(1,2).view(h,w,-1,actor_feature.shape[-1]).permute(2,3,0,1) # N_q*B(*t), D, H, W
-        encoded_feature_expanded = rearrange(q_memory, "N (H W) BT D -> (N BT) D H W", H=h, W=w)
-        cls_feature = actor_feature_expanded + encoded_feature_expanded
+        # lvl_w = self.lvl_w_embed(class_queries)
+        # q_value = torch.einsum("nl,lhtc->nhtc", lvl_w, memory)[:,:,None,:,:].expand(-1,-1,num_queries,-1,-1).flatten(2,3) # (N_q, L), (L, HW, BT, C),  ->  N_q, HW, BT, C -> N_q, HW, NBT, C
+        memory = rearrange(memory, "L (H W) BT D -> BT L D H W", H=h, W=w)
+        encoded_feature_expanded = repeat(memory, "BT L D H W -> BT L N D H W", N=num_queries)
+        lvl_w = self.lvl_w_embed(actor_feature) # BT, N, 4
+        encoded_feature_expanded = torch.einsum("bnl,blndhw->bndhw", lvl_w, encoded_feature_expanded).flatten(0,1)
+        cls_feature = (actor_feature_expanded + encoded_feature_expanded) # BTN D H W
         cls_feature = self.conv_norm(cls_feature.transpose(-1, 1).contiguous()).transpose(-1, 1).contiguous()            
         for block in self.conv_blocks:    
         #     if self.gradient_checkpointing:
@@ -983,12 +1090,11 @@ class TransformerClassDecoderLayer(nn.Module):
             cls_feature = block(cls_feature)
         
         # class query self-attention
-        query = class_queries[:, None].expand(-1, actor_feature_expanded.shape[0], -1)
+        query = class_queries[:, None].expand(-1, actor_feature.size(0)*actor_feature.size(1), -1)
         query2 = self.self_attn(query, query, query)[0]
         query = query + self.dropout1(query2)
         query = self.norm1(query)
         
-
         key = torch.cat([self.k_proj(cls_feature).flatten(2).permute(2,0,1).contiguous(), pos[:,None].expand(-1, num_queries, -1, -1).flatten(1,2)], dim=-1)
         cls_query_pos = self.cls_qpos_sine_proj(query_sine_embed).flatten(0,1)[None].expand(len(class_queries), -1 ,-1)
         query = torch.cat([query, cls_query_pos], dim=-1)
@@ -1005,7 +1111,9 @@ class TransformerClassDecoderLayer(nn.Module):
         # else:
         #     cls_output = self.cross_attn(query=query, key=key, value=value)[0].reshape(len(class_queries), num_queries, -1, self.d_model).permute(1,2,0,3)
         cls_output = self.cross_attn(query=query, key=key, value=value)[0].reshape(len(class_queries), num_queries, -1, self.d_model).permute(1,2,0,3).contiguous()
-        
+        # lvl_w = self.lvl_w_embed(class_queries)
+        # cls_output = rearrange(cls_output, "N1 (BT L) N2 D -> N1 BT L N2 D", L=l)
+        # cls_output = torch.einsum("ml,nblmc->nbmc", lvl_w, cls_output)
         # FFN
         cls_output2 = self.cls_linear2_(self.dropout1_(self.activation(self.cls_linear1_(cls_output))))
         cls_output = cls_output + self.dropout2_(cls_output2)

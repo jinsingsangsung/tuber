@@ -58,9 +58,11 @@ class DETR(nn.Module):
         assert query_dim in [2, 4]
         self.efficient = efficient
         if not efficient:
+            self.tgt_embed = nn.Embedding(num_queries*temporal_length, hidden_dim)
             self.refpoint_embed = nn.Embedding(num_queries*temporal_length, 4)
         else:
             assert dataset_mode == "ava", "efficient mode is only for AVA"
+            self.tgt_embed = nn.Embedding(num_queries, hidden_dim)
             self.refpoint_embed = nn.Embedding(num_queries, 4)
         self.transformer.eff = efficient
         self.random_refpoints_xy = random_refpoints_xy
@@ -230,10 +232,13 @@ class DETR(nn.Module):
         # bs = samples.tensors.shape[0]
         if not self.efficient:
             embedweight = self.refpoint_embed.weight.view(self.num_queries, self.temporal_length, 4)      # nq, t, 4
+            tgt_embed = self.tgt_embed.weight.view(self.num_queries, self.temporal_length, self.hidden_dim) 
         else:
             embedweight = self.refpoint_embed.weight.view(self.num_queries, 1, 4)
+            tgt_embed = self.tgt_embed.weight.view(self.num_queries, 1, self.hidden_dim) 
 
-        hs, cls_hs, reference  = self.transformer(srcs, masks, poses, embedweight)
+        query_embed = torch.cat([tgt_embed, embedweight], dim=-1)
+        hs, cls_hs, reference  = self.transformer(srcs, masks, poses, query_embed)
         outputs_class_b = self.class_embed_b(hs)
         ######## localization head
         if not self.bbox_embed_diff_each_layer:
