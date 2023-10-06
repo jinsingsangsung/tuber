@@ -251,17 +251,27 @@ class Transformer(nn.Module):
         return output_memory, output_proposals
 
     def get_valid_ratio(self, mask): # using mask, see the valid t,h,w area in flattened space
-        _, T, H, W = mask.shape
-        valid_T = torch.sum(~mask[:, :, 0, 0], 1)
-        valid_H = torch.sum(~mask[:, 0, :, 0], 1)
-        valid_W = torch.sum(~mask[:, 0, 0, :], 1)
-        valid_ratio_t = valid_T.float() / T
-        valid_ratio_h = valid_H.float() / H
-        valid_ratio_w = valid_W.float() / W
-        valid_ratio = torch.stack([valid_ratio_w, valid_ratio_h, valid_ratio_t], -1)
+        if mask.ndim == 4:
+            _, T, H, W = mask.shape
+            valid_T = torch.sum(~mask[:, :, 0, 0], 1)
+            valid_H = torch.sum(~mask[:, 0, :, 0], 1)
+            valid_W = torch.sum(~mask[:, 0, 0, :], 1)
+            valid_ratio_t = valid_T.float() / T
+            valid_ratio_h = valid_H.float() / H
+            valid_ratio_w = valid_W.float() / W
+            valid_ratio = torch.stack([valid_ratio_w, valid_ratio_h, valid_ratio_t], -1)
+        elif mask.ndim == 3:
+            _, H, W = mask.shape
+            valid_H = torch.sum(~mask[:, :, 0], 1)
+            valid_W = torch.sum(~mask[:, 0, :], 1)
+            valid_ratio_h = valid_H.float() / H
+            valid_ratio_w = valid_W.float() / W
+            valid_ratio = torch.stack([valid_ratio_w, valid_ratio_h], -1)
+        else:
+            raise AssertionError
         return valid_ratio
 
-    def make_interpolated_features(self, features, pos=None, num_frames=32, level=0):
+    def make_interpolated_features(self, features, pos=None, num_frames=32, level=0, only_t=False):
         '''
             features: list of tensors [B, C, T, H_l, W_l]
                     l = 0, 1, ..., num_feats-1
@@ -273,9 +283,31 @@ class Transformer(nn.Module):
         use_mask = isinstance(features[0], NestedTensor)
         if use_mask:
             tensors = [feature.tensors for feature in features]
+            masks = [feature.mask for feature in features]
             mask = features[level].mask
             mask = mask.repeat(1, num_frames//mask.size(1), 1, 1)
             features = tensors
+        if only_t:
+            interpolated_poses=[]
+            interpolated_masks=[]
+            for l, (feature, pos_, mask_) in enumerate(zip(features, pos, masks)):
+                B, C, T, H, W = feature.shape
+                feature = rearrange(feature, 'b c t h w -> (b h w) c t')
+                interpolated_features.append(
+                    F.interpolate(
+                        feature,
+                        size=(num_frames),
+                        mode="linear",
+                        align_corners=False,            
+                    ).view(B,H,W,C,num_frames).permute(0,4,3,1,2).flatten(0,1).contiguous() # BT C H W
+                )
+                interpolated_poses.append(
+                    pos_.repeat(1, 1, num_frames//pos_.size(2), 1, 1).permute(0,2,1,3,4).flatten(0,1).contiguous()
+                    )
+                interpolated_masks.append(
+                    mask_.repeat(1, num_frames//mask_.size(1), 1, 1).flatten(0,1).contiguous()
+                )
+            return interpolated_features, interpolated_masks, interpolated_poses
 
         B, C, T, H, W = features[level].shape
         if T == num_frames:
@@ -371,6 +403,31 @@ class Transformer(nn.Module):
             srcs_per_lvl.append(NestedTensor(src_l, masks[i]))
             poses_per_lvl.append(pos_l)
         
+        t_extended_features, t_extended_masks, t_extended_poses = self.make_interpolated_features(srcs_per_lvl, poses_per_lvl, level=-2, num_frames=self.temp_len, only_t=True)
+        
+        t_src_flatten = []
+        t_mask_flatten = []
+        t_lvl_pos_embed_flatten = []
+        spatial_shapes = []
+        for lvl, (src, mask, pos_embed) in enumerate(zip(t_extended_features, t_extended_masks, t_extended_poses)):
+            bt, c, h, w = src.shape
+            spatial_shape = (h, w)
+            spatial_shapes.append(spatial_shape)
+            src = src.flatten(2).transpose(1, 2).contiguous()                # bs, hw, c
+            mask = mask.flatten(1)                                           # bs, hw
+            pos_embed = pos_embed.flatten(2).transpose(1, 2).contiguous()    # bs, hw, c
+            lvl_pos_embed = pos_embed + self.level_embed[lvl].view(1, 1, -1)
+            t_lvl_pos_embed_flatten.append(lvl_pos_embed)
+            t_src_flatten.append(src)
+            t_mask_flatten.append(mask)   
+     
+        t_src_flatten = torch.cat(t_src_flatten, 1)     # bst, \sum{hxw}, c 
+        t_mask_flatten = torch.cat(t_mask_flatten, 1)   # bst, \sum{hxw}
+        t_lvl_pos_embed_flatten = torch.cat(t_lvl_pos_embed_flatten, 1)
+        spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=t_src_flatten.device)
+        t_level_start_index = torch.cat((spatial_shapes.new_zeros((1, )), spatial_shapes.prod(1).cumsum(0)[:-1]))
+        t_valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)        
+
         features_per_lvl, poses_per_lvl = self.make_interpolated_features(srcs_per_lvl, poses_per_lvl, level=-2, num_frames=self.temp_len)
         query_embed = query_embed[:,None].expand(-1, bs, -1, -1).flatten(1,2).transpose(0,1).contiguous() #bs * t, nq, 4+d
         tgt_embed = query_embed[..., :self.d_model]
@@ -390,15 +447,15 @@ class Transformer(nn.Module):
         num_queries = refpoint_embed.shape[0]
         
         if self.eff:
+            t_src_flatten = rearrange(t_src_flatten, "(bs t) hw c -> bs t hw c", bs=bs, t=t)[:,t//2:t//2+1,:,:].flatten(0,1).contiguous()
+            t_mask_flatten = rearrange(t_mask_flatten, "(bs t) hw -> bs t hw", bs=bs, t=t)[:,t//2:t//2+1,:].flatten(0,1).contiguous()
             raw_memory = srcs_per_lvl[:,:,t//2:t//2+1,:,:,:]
             pos_embed = poses_per_lvl[:,:,t//2:t//2+1,:,:,:]
             mask = masks_per_lvl[:,t//2:t//2+1,:,:,:]
-            tgt = tgt_embed
         else:
             raw_memory = srcs_per_lvl
             pos_embed = poses_per_lvl
             mask = masks_per_lvl
-            tgt = tgt_embed
         
         # prepare input for the decoder
         raw_memory = rearrange(raw_memory, "B C T H W L -> L (H W) (B T) C")
@@ -406,15 +463,15 @@ class Transformer(nn.Module):
         mask = rearrange(mask, "B T H W L -> (B T) (H W) L")[..., 0]
 
         with torch.autocast("cuda", dtype=torch.float16, enabled=False):
-            hs, cls_hs, references = self.decoder(tgt_embed, memory, raw_memory,
-                                                  spatio_temporal_shapes,
-                                                  level_start_index,
-                                                  valid_ratios,
+            hs, cls_hs, references = self.decoder(tgt_embed, t_src_flatten, raw_memory,
+                                                  spatial_shapes,
+                                                  t_level_start_index,
+                                                  t_valid_ratios,
                                                   memory_key_padding_mask=mask,
                                                   pos=pos_embed, refpoints_unsigmoid=refpoint_embed, orig_res=(h,w),
                                                   temp_len=self.temp_len,
                                                   eff=self.eff,
-                                                  padding_mask=mask_flatten)
+                                                  padding_mask=t_mask_flatten)
         return hs, cls_hs, references
 
 
@@ -598,7 +655,7 @@ class TransformerDecoder(nn.Module):
         self.gradient_checkpointing = gradient_checkpointing
 
     def forward(self, tgt, memory, raw_memory,
-                spatio_temporal_shapes,
+                spatial_shapes,
                 level_start_index,
                 valid_ratios,
                 tgt_mask: Optional[Tensor] = None,
@@ -623,19 +680,11 @@ class TransformerDecoder(nn.Module):
         nq = tgt.size(1)
         
         for layer_id, (layer, cls_layer) in enumerate(zip(self.layers, self.cls_layers)):
-            if not eff:
-                t = torch.linspace(0,1,temp_len, device=reference_points.device)[None, ..., None, None].expand(bs, -1, nq, -1).flatten(0,1)
-            else:
-                t = torch.full((reference_points.size(0), reference_points.size(1), 1), 0.5, device=reference_points.device)
-            
-            z = torch.full((reference_points.size(0), reference_points.size(1), 1), 0., device=reference_points.device)
-            obj_center = reference_points[..., :self.query_dim]
-            reference_points = torch.cat([t, reference_points[:,:,:2], z, reference_points[:,:,2:]], -1)
             reference_points_input = reference_points[:, :, None] \
-                                        * torch.cat([valid_ratios, valid_ratios], -1)[:, None] # bs*t, nq, 4, 6
+                                        * torch.cat([valid_ratios[:,:,:2], valid_ratios[:,:,:2]], -1)[:, None] # bs*t, nq, 4, 4
             
             # get sine embedding for the query vector
-            query_sine_embed = gen_sineembed_for_position(obj_center)  
+            query_sine_embed = gen_sineembed_for_position(reference_points_input[:, :, 0, :]) 
             query_pos = self.ref_point_head(query_sine_embed) 
 
             # For the first decoder layer, we do not apply transformation over p_s
@@ -649,13 +698,6 @@ class TransformerDecoder(nn.Module):
 
             # apply transformation
             query_sine_embed = query_pos * pos_transformation
-
-            # modulated HW attentions
-            if self.modulate_hw_attn:
-                refHW_cond = self.ref_anchor_head(output).sigmoid() # nq, bs*t, 2
-                query_sine_embed[..., self.d_model // 2:] *= (refHW_cond[..., 0] / obj_center[..., 2]).unsqueeze(-1)
-                query_sine_embed[..., :self.d_model // 2] *= (refHW_cond[..., 1] / obj_center[..., 3]).unsqueeze(-1)
-            
             if self.gradient_checkpointing:
                 def custom_layer(module):
                     def custom_forward(*inputs):
@@ -700,7 +742,7 @@ class TransformerDecoder(nn.Module):
                 #             memory_key_padding_mask=memory_key_padding_mask,
                 #             pos=pos, query_pos=query_pos, query_sine_embed=query_sine_embed,
                 #             is_first=(layer_id == 0))
-                output, actor_feature = layer(output, query_sine_embed, reference_points_input, memory, spatio_temporal_shapes, level_start_index, padding_mask)
+                output, actor_feature = layer(output, query_sine_embed, reference_points_input, memory, spatial_shapes, level_start_index, padding_mask)
                 cls_output = cls_layer(actor_feature.clone().detach(), raw_memory, pos[0], query_sine_embed, self.class_queries, orig_res, nq)
             
             if layer_id != 0:
@@ -714,7 +756,7 @@ class TransformerDecoder(nn.Module):
                     tmp = self.bbox_embed(output)
                 # import ipdb; ipdb.set_trace()
                 ref_pt_unsig = inverse_sigmoid(reference_points)
-                tmp[..., :self.query_dim] += torch.cat([ref_pt_unsig[...,1:3], ref_pt_unsig[...,4:6]], dim=-1)
+                tmp[..., :self.query_dim] += ref_pt_unsig
                 new_reference_points = tmp[..., :self.query_dim].sigmoid()
                 if layer_id != self.num_layers - 1:
                     ref_points.append(new_reference_points)
@@ -967,7 +1009,7 @@ class DeformableTransformerDecoderLayer(nn.Module):
         super().__init__()
 
         # cross attention
-        self.cross_attn = MSDeformAttn3D(d_model, n_levels, n_heads, n_points)
+        self.cross_attn = MSDeformAttn(d_model, n_levels, n_heads, n_points)
         self.dropout1 = nn.Dropout(dropout)
         self.norm1 = nn.LayerNorm(d_model)
 
