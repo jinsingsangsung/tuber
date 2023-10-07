@@ -64,24 +64,24 @@ class HungarianMatcher(nn.Module):
         tgt_bbox = tgt_bbox[:,1:]
         # Compute the L1 cost between boxes
         cost_bbox = torch.cdist(out_bbox, tgt_bbox, p=1)
+        with torch.autocast("cuda", dtype=torch.float16, enabled=False):
+            # Compute the giou cost betwen boxes
+            cost_giou = -generalized_box_iou(box_cxcywh_to_xyxy(out_bbox), box_cxcywh_to_xyxy(tgt_bbox))
 
-        # Compute the giou cost betwen boxes
-        cost_giou = -generalized_box_iou(box_cxcywh_to_xyxy(out_bbox), box_cxcywh_to_xyxy(tgt_bbox))
+            # out_classes = outputs["pred_logits"].flatten(0,1).sigmoid()
+            # tgt_classes = torch.cat([v["labels"] for v in targets])
+            # cost_class = -(torch.mm(out_classes, tgt_classes.T) + torch.mm(1 - out_classes, 1 - tgt_classes.T))/out_classes.shape[-1]
 
-        # out_classes = outputs["pred_logits"].flatten(0,1).sigmoid()
-        # tgt_classes = torch.cat([v["labels"] for v in targets])
-        # cost_class = -(torch.mm(out_classes, tgt_classes.T) + torch.mm(1 - out_classes, 1 - tgt_classes.T))/out_classes.shape[-1]
+            # cost_class = torch.cdist(out_classes, tgt_classes, p=1)
+            out_prob = outputs["pred_logits_b"].flatten(0, 1).softmax(-1)
+            cost_class = -out_prob[:, 1:2].repeat(1, len(tgt_bbox))
+            # Final cost matrix
+            C = self.cost_bbox * cost_bbox+ self.cost_giou * cost_giou + self.cost_class * cost_class 
+            C = C.view(bs, num_queries, -1).cpu()
 
-        # cost_class = torch.cdist(out_classes, tgt_classes, p=1)
-        out_prob = outputs["pred_logits_b"].flatten(0, 1).softmax(-1)
-        cost_class = -out_prob[:, 1:2].repeat(1, len(tgt_bbox))
-        # Final cost matrix
-        C = self.cost_bbox * cost_bbox+ self.cost_giou * cost_giou + self.cost_class * cost_class 
-        C = C.view(bs, num_queries, -1).cpu()
+            sizes = [len(v["boxes"]) for v in targets]
 
-        sizes = [len(v["boxes"]) for v in targets]
-
-        indices = [linear_sum_assignment(c[i]) for i, c in enumerate(C.split(sizes, -1))]
+            indices = [linear_sum_assignment(c[i]) for i, c in enumerate(C.split(sizes, -1))]
         return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
 
 

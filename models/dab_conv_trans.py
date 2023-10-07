@@ -236,21 +236,22 @@ class DETR(nn.Module):
         hs, cls_hs, reference  = self.transformer(srcs, masks, poses, embedweight)
         outputs_class_b = self.class_embed_b(hs)
         ######## localization head
-        if not self.bbox_embed_diff_each_layer:
-            reference_before_sigmoid = inverse_sigmoid(reference)
-            tmp = self.bbox_embed(hs)
-            tmp[..., :self.query_dim] += reference_before_sigmoid
-            outputs_coord = tmp.sigmoid()
-        else:
-            reference_before_sigmoid = inverse_sigmoid(reference)
-            outputs_coords = []
-            for lvl in range(hs.shape[0]):
-                # hs.shape: lay_n, bs, nq, dim
-                tmp = self.bbox_embed[lvl](hs[lvl])
-                tmp[..., :self.query_dim] += reference_before_sigmoid[lvl]
+        with torch.autocast("cuda", dtype=torch.float16, enabled=False):
+            if not self.bbox_embed_diff_each_layer:
+                reference_before_sigmoid = inverse_sigmoid(reference)
+                tmp = self.bbox_embed(hs)
+                tmp[..., :self.query_dim] += reference_before_sigmoid
                 outputs_coord = tmp.sigmoid()
-                outputs_coords.append(outputs_coord)
-            outputs_coord = torch.stack(outputs_coords)        
+            else:
+                reference_before_sigmoid = inverse_sigmoid(reference)
+                outputs_coords = []
+                for lvl in range(hs.shape[0]):
+                    # hs.shape: lay_n, bs, nq, dim
+                    tmp = self.bbox_embed[lvl](hs[lvl])
+                    tmp[..., :self.query_dim] += reference_before_sigmoid[lvl]
+                    outputs_coord = tmp.sigmoid()
+                    outputs_coords.append(outputs_coord)
+                outputs_coord = torch.stack(outputs_coords)        
 
         ######## mix temporal features for classification
         # lay_n, bst, nq, dim = hs.shape
