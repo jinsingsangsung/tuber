@@ -38,7 +38,7 @@ def main_worker(cfg):
     else:
         writer = None
 
-    if int(os.getenv('NSML_SESSION', '0')) <= 0:
+    if int(os.getenv('NSML_SESSION', '0')) > 0:
         cfg.CONFIG.MODEL.LOAD = True
         cfg.CONFIG.MODEL.LOAD_FC = True
         cfg.CONFIG.MODEL.LOAD_DETR = False
@@ -105,7 +105,7 @@ def main_worker(cfg):
     run = os.environ["NSML_RUN_NAME"].split("/")[-1]
     exp_name = cfg.CONFIG.LOG.EXP_NAME.format(study, run)
 
-    if int(os.getenv('NSML_SESSION', '0')) <= 0:
+    if int(os.getenv('NSML_SESSION', '0')) > 0:
         # 실험 이어하기의 경우
         epochs_folder = os.listdir(os.path.join(cfg.CONFIG.LOG.BASE_PATH, exp_name, cfg.CONFIG.LOG.SAVE_DIR))
         epochs_folder.sort()
