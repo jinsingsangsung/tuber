@@ -52,8 +52,8 @@ CONFIG:
     MULTIGRID: False
     IMG_SIZE: 256
     IMG_RESHAPE_SIZE: 288
-    TEMP_LEN: 32
-    FRAME_RATE: 2
+    TEMP_LEN: 16
+    FRAME_RATE: 4
 
   MODEL:
     SINGLE_FRAME: True
@@ -72,8 +72,8 @@ CONFIG:
     NORMALIZE_BEFORE: False
     DROPOUT: 0.1
     DS_RATE: 8
-    TEMP_LEN: 32
-    SAMPLE_RATE: 2
+    TEMP_LEN: 16
+    SAMPLE_RATE: 4
     PRETRAINED: True
     PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_152_ft_kinetics_from_ig65m_f126851907.mat"
     PRETRAIN_TRANSFORMER_DIR: "/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/AVA_Tuber/Dab_conv_trans_decsasde_270-321/checkpoints/ckpt_epoch_12.pth"
