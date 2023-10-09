@@ -75,7 +75,7 @@ CONFIG:
     SAMPLE_RATE: 2
     PRETRAINED: True
     PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_152_ft_kinetics_from_ig65m_f126851907.mat"
-    PRETRAIN_TRANSFORMER_DIR: "/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/AVA_Tuber/Dab_conv_trans_270-289/checkpoints/ckpt_epoch_16.pth"
+    PRETRAIN_TRANSFORMER_DIR: "/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/decsasde_JHMDB.pth"
     PRETRAINED_PATH: ""
     LOAD: False
     LOAD_FC: False
@@ -93,7 +93,7 @@ CONFIG:
     RM_BINARY: False
 
   MATCHER:
-    COST_CLASS: 12
+    COST_CLASS: 1
     COST_BBOX: 5
     COST_GIOU: 2
     BNY_LOSS: True
@@ -101,7 +101,7 @@ CONFIG:
 
   LOSS_COFS:
     MASK_COF: 1
-    DICE_COF: 10
+    DICE_COF: 1
     BBOX_COF: 5
     GIOU_COF: 2
     EOS_COF: 0.1
