@@ -204,6 +204,8 @@ _C.CONFIG.MODEL.USE_AFFINE = False
 _C.CONFIG.MODEL.DROP_RATE = 0.0
 # Drop path rate
 _C.CONFIG.MODEL.DROP_PATH_RATE = 0.1
+# Model backbone tune point
+_C.CONFIG.MODEL.TUNE_POINT = 4
 
 
 _C.CONFIG.LOG = CN(new_allowed=True)
