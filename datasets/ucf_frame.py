@@ -347,7 +347,10 @@ def make_transforms(image_set, cfg):
         return T.Compose([
             T.RandomHorizontalFlip(),
             T.RandomSizeCrop_Custom(cfg.CONFIG.DATA.IMG_SIZE),
-            T.ColorJitter(),
+            T.ColorJitter(sat_shift=cfg.CONFIG.AUG.COLOR_JITTER,val_shift=cfg.CONFIG.AUG.COLOR_JITTER,),
+            T.PCAJitter(alphastd=0.1,
+                        eigval=np.array(cfg.CONFIG.AUG.TRAIN_PCA_EIGVAL).astype(np.float32),
+                        eigvec=np.array(cfg.CONFIG.AUG.TRAIN_PCA_EIGVEC).astype(np.float32),),
             normalize,
         ])
 

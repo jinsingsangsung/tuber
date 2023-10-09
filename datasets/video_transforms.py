@@ -161,6 +161,46 @@ def pad(images, target, padding):
     return padded_images, target
 
 
+def lighting_list(clip, alphastd, eigval, eigvec, alpha=None):
+    """
+    Perform AlexNet-style PCA jitter on the given list of images.
+    Args:
+        images (list): list of images to perform lighting jitter.
+        alphastd (float): jitter ratio for PCA jitter.
+        eigval (list): eigenvalues for PCA jitter.
+        eigvec (list[list]): eigenvectors for PCA jitter.
+    Returns:
+        out_images (list): the list of jittered images.
+    """
+    if alphastd == 0:
+        return clip
+    # generate alpha1, alpha2, alpha3
+    alpha = np.random.normal(0, alphastd, size=(1, 3))
+    eig_vec = np.array(eigvec)
+    eig_val = np.reshape(eigval, (1, 3))
+    rgb = np.sum(
+        eig_vec * np.repeat(alpha, 3, axis=0) * np.repeat(eig_val, 3, axis=0),
+        axis=1,
+    )
+    out_images = []
+    for img in clip:
+        img_rgb = np.asarray(img)
+        out_rgb = np.zeros(img_rgb.shape).astype(img_rgb.dtype)
+        for idx in range(3):
+            out_rgb[:,:,idx] = img_rgb[:,:,idx] + rgb[2 - idx]
+            out_img = Image.fromarray(out_rgb)
+        out_images.append(out_img)
+    return out_images
+
+class PCAJitter(object):
+    def __init__(self, alphastd=0., eigval=None, eigvec=None, alpha=None):
+        self.alphastd = alphastd
+        self.eigval = eigval
+        self.eigvec = eigvec
+        self.alpha = alpha
+    def __call__(self, imgs, target):
+        return lighting_list(imgs, self.alphastd, self.eigval, self.eigvec, self.alpha), target.copy()
+
 class RandomCrop(object):
     def __init__(self, size):
         self.size = size

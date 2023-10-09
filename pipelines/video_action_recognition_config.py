@@ -174,6 +174,13 @@ _C.CONFIG.AUG.LABEL_SMOOTHING = 0.1
 # Repeated augmentation
 _C.CONFIG.AUG.REPEATED_AUG = True
 
+_C.CONFIG.AUG.TRAIN_PCA_EIGVAL = [0.225, 0.224, 0.229]
+_C.CONFIG.AUG.TRAIN_PCA_EIGVEC = [
+    [-0.5675, 0.7192, 0.4009],
+    [-0.5808, -0.0045, -0.8140],
+    [-0.5836, -0.6948, 0.4203],
+]
+
 
 _C.CONFIG.MODEL = CN(new_allowed=True)
 # Model architecture. You can find available models in the model zoo.
@@ -193,7 +200,6 @@ _C.CONFIG.MODEL.BN_EVAL = False
 _C.CONFIG.MODEL.PARTIAL_BN = False
 _C.CONFIG.MODEL.BN_FROZEN = False
 _C.CONFIG.MODEL.USE_AFFINE = False
-_C.CONFIG.MODEL.TUNE_POINT = 4
 # Dropout rate
 _C.CONFIG.MODEL.DROP_RATE = 0.0
 # Drop path rate
