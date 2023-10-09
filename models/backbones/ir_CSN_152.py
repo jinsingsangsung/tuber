@@ -341,7 +341,7 @@ def load_weights(model, pretrain_path, load_fc=True, use_affine=False, tune_poin
 
 
 def build_CSN(cfg):
-    tune_point = 4
+    tune_point = cfg.CONFIG.MODEL.TUNE_POINT
     log_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
     model = build_model(n_classes=cfg.CONFIG.DATA.NUM_CLASSES,
                         sample_size=cfg.CONFIG.DATA.IMG_SIZE,
