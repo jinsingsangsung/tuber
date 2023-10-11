@@ -19,8 +19,31 @@ from models.transformer.position_encoding import build_position_encoding
 
 from models.backbones.ir_CSN_50 import build_CSN
 from models.backbones.ir_CSN_152 import build_CSN as build_CSN_152
+from models.backbones.vit import build_ViT
 # from models.transformer.transformer_layers import LSTRTransformerDecoder, LSTRTransformerDecoderLayer, layer_norm
 # from detectron2.layers import ShapeSpec
+
+class LayerNorm(nn.Module):
+    """
+    A LayerNorm variant, popularized by Transformers, that performs point-wise mean and
+    variance normalization over the channel dimension for inputs that have shape
+    (batch_size, channels, t, height, width).
+    https://github.com/facebookresearch/ConvNeXt/blob/d1fa8f6fef0a165b27399986cc2bdacc92777e40/models/convnext.py#L119  # noqa B950
+    """
+
+    def __init__(self, normalized_shape, eps=1e-6):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(normalized_shape))
+        self.bias = nn.Parameter(torch.zeros(normalized_shape))
+        self.eps = eps
+        self.normalized_shape = (normalized_shape,)
+
+    def forward(self, x):
+        u = x.mean(1, keepdim=True)
+        s = (x - u).pow(2).mean(1, keepdim=True)
+        x = (x - u) / torch.sqrt(s + self.eps)
+        x = self.weight[:, None, None, None] * x + self.bias[:, None, None, None]
+        return x
 
 class Backbone(nn.Module):
 
@@ -30,10 +53,14 @@ class Backbone(nn.Module):
         if cfg.CONFIG.MODEL.BACKBONE_NAME== 'CSN-152':
             print("CSN-152 backbone")
             self.body = build_CSN_152(cfg)
-        else:
+        elif cfg.CONFIG.MODEL.BACKBONE_NAME== 'CSN-50':
             print("CSN-50 backbone")
             self.body = build_CSN(cfg)
+        else:
+            print("ViT-B backbone")
+            self.body = build_ViT(cfg)
         self.position_embedding = position_embedding
+
         for name, parameter in self.body.named_parameters():
             if not train_backbone:
                 parameter.requires_grad_(False)
@@ -50,23 +77,84 @@ class Backbone(nn.Module):
         #         self.pool_decoder = LSTRTransformerDecoder(
         #             LSTRTransformerDecoderLayer(d_model=2048, nhead=8, dim_feedforward=2048, dropout=0.1), 1,
         #             norm=layer_norm(d_model=2048, condition=True))
-
+        use_ViT = "ViT" in cfg.CONFIG.MODEL.BACKBONE_NAME
+        self.use_ViT = use_ViT
         if return_interm_layers:
-            return_layers = {"layer1": "0", "layer2": "1", "layer3": "2", "layer4": "3"}
-            # return_layers = {"layer2": "0", "layer3": "1", "layer4": "2"}
-            self.strides = [8, 16, 32]
-            self.num_channels = [512, 1024, 2048]
-            try:
-                self.in_features = cfg.CONFIG.MODEL.SparseRCNN.ROI_HEADS.IN_FEATURES
-            except:
+            if not use_ViT:
+                return_layers = {"layer1": "0", "layer2": "1", "layer3": "2", "layer4": "3"}
+                # return_layers = {"layer2": "0", "layer3": "1", "layer4": "2"}
+                self.strides = [8, 16, 32]
+                self.num_channels = [512, 1024, 2048]
                 self.in_features = None
+            else:
+                out_channel = cfg.CONFIG.MODEL.D_MODEL
+                in_channels = [cfg.CONFIG.ViT.EMBED_DIM]*4
+                self.strides = [8, 16, 32]
+                self.num_channels = in_channels
+                self.lateral_convs = nn.ModuleList()
+
+                for idx, scale in enumerate([4, 2, 1, 0.5]):
+                    dim = in_channels[idx]
+                    if scale == 4.0:
+                        layers = [
+                            nn.ConvTranspose3d(dim, dim // 2, kernel_size=[1, 2, 2], stride=[1, 2, 2]),
+                            LayerNorm(dim // 2),
+                            nn.GELU(),
+                            nn.ConvTranspose3d(dim // 2, dim // 4, kernel_size=[1, 2, 2], stride=[1, 2, 2]),
+                        ]
+                        out_dim = dim // 4
+                    elif scale == 2.0:
+                        layers = [nn.ConvTranspose3d(dim, dim // 2, kernel_size=[1, 2, 2], stride=[1, 2, 2])]
+                        out_dim = dim // 2
+                    elif scale == 1.0:
+                        layers = []
+                        out_dim = dim
+                    elif scale == 0.5:
+                        layers = [nn.MaxPool3d(kernel_size=[1, 2, 2], stride=[1, 2, 2])]
+                        out_dim = dim
+                    else:
+                        raise NotImplementedError(f"scale_factor={scale} is not supported yet.")
+                    layers.extend(
+                        [
+                            nn.Conv3d(
+                                out_dim,
+                                out_channel,
+                                kernel_size=1,
+                                bias=False,
+                            ),
+                            LayerNorm(out_channel),
+                            nn.Conv3d(
+                                out_channel,
+                                out_channel,
+                                kernel_size=3,
+                                padding=1,
+                                bias=False,
+                            ),
+                        ]
+                    )
+                    layers = nn.Sequential(*layers)
+
+                    self.lateral_convs.append(layers)                
         else:
             return_layers = {'layer4': "0"}
             self.strides = [32]
             self.num_channels = [2048]
-        self.body = IntermediateLayerGetter(self.body, return_layers=return_layers)
+        if not use_ViT:
+            self.body = IntermediateLayerGetter(self.body, return_layers=return_layers)
         self.backbone_name = cfg.CONFIG.MODEL.BACKBONE_NAME
         self.temporal_ds_strategy = cfg.CONFIG.MODEL.TEMPORAL_DS_STRATEGY
+
+    def space_forward(self, features):
+        mapped_features = {}
+        for i, feature in enumerate(features):
+            if isinstance(feature, NestedTensor):
+                mask = feature.mask
+                feature = feature.tensors
+                mapped_features.update({f"{i}": NestedTensor(self.lateral_convs[i](feature), mask)})
+            else:
+                mapped_features.update({f"{i}": self.lateral_convs[i](feature)})
+            
+        return mapped_features
 
     def forward(self, tensor_list: NestedTensor):
         if "SlowFast" in self.backbone_name:
@@ -83,16 +171,9 @@ class Backbone(nn.Module):
         # print(xs['2'].shape)
         # print(xs['3'].shape)
         # bs, ch, t, w, h = xs.shape
-        # if self.ds:
-        #     if self.temporal_ds_strategy == 'avg' or self.temporal_ds_strategy == 'max':
-        #         xs = self.pool(xs)
-        #     elif self.temporal_ds_strategy == 'decode':
-        #         xs = xs.view(bs, ch, t, w * h).permute(2, 0, 3, 1).contiguous().view(t, bs * w * h, ch)
-        #         query_embed = self.query_pool.weight.unsqueeze(1).repeat(1, bs * w * h, 1)
-        #         xs = self.pool_decoder(query_embed, xs)
-        #         xs = xs.view(1, bs, w * h, ch).permute(1, 3, 0, 2).contiguous().view(bs, ch, 1, w, h)
-        #     else:
-        #         xs = xs[:, :, t // 2: t // 2 + 1, ...]
+        if self.use_ViT:
+            xs = self.space_forward(xs)
+
         out: Dict[str, NestedTensor] = {}
         # m = tensor_list.mask
         # assert m is not None

@@ -353,7 +353,8 @@ def build_CSN(cfg):
                         tune_point=tune_point,
                         last_stride=cfg.CONFIG.MODEL.LAST_STRIDE,
                         log_path=log_path,
-                        gradient_checkpointing=cfg.CONFIG.GRADIENT_CHECKPOINTING,)
+                        gradient_checkpointing=cfg.CONFIG.GRADIENT_CHECKPOINTING,
+                        gpu_world_rank=cfg.DDP_CONFIG.GPU_WORLD_RANK)
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
         print_log(log_path, "build CSN-152, tune point: {}".format(tune_point))
     return model

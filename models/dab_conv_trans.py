@@ -82,30 +82,31 @@ class DETR(nn.Module):
         #     self.class_proj = nn.Conv3d(backbone.num_channels, hidden_dim, kernel_size=1)
         num_feature_levels = 4
         self.num_feature_levels = num_feature_levels
-        if num_feature_levels > 1:            
-            self.input_proj = nn.ModuleList()
-            num_backbone_outs = len(backbone.strides)
-            for _ in range(num_backbone_outs):
-                in_channels = backbone.num_channels[_]
-                self.input_proj.append(nn.Sequential(
-                    nn.Conv3d(in_channels, hidden_dim, kernel_size=1),
-                    nn.GroupNorm(32, hidden_dim),
-                ))
-            for _ in range(num_feature_levels - num_backbone_outs):
-                self.input_proj.append(nn.Sequential(
-                    nn.Conv3d(in_channels, hidden_dim, kernel_size=3, stride=(1,2,2), padding=1),
-                    nn.GroupNorm(32, hidden_dim),
-                ))
-                in_channels = hidden_dim
-        else:
-            self.input_proj = nn.ModuleList([
-                nn.Sequential(
-                    nn.Conv3d(backbone.num_channels[0], hidden_dim, kernel_size=1),
-                    nn.GroupNorm(32, hidden_dim),
-                )])
-        for projection in self.input_proj:                    
-            nn.init.xavier_uniform_(projection[0].weight, gain=1)
-            nn.init.constant_(projection[0].bias, 0)
+        if not "ViT" in backbone_name:
+            if num_feature_levels > 1:            
+                self.input_proj = nn.ModuleList()
+                num_backbone_outs = len(backbone.strides)
+                for _ in range(num_backbone_outs):
+                    in_channels = backbone.num_channels[_]
+                    self.input_proj.append(nn.Sequential(
+                        nn.Conv3d(in_channels, hidden_dim, kernel_size=1),
+                        nn.GroupNorm(32, hidden_dim),
+                    ))
+                for _ in range(num_feature_levels - num_backbone_outs):
+                    self.input_proj.append(nn.Sequential(
+                        nn.Conv3d(in_channels, hidden_dim, kernel_size=3, stride=(1,2,2), padding=1),
+                        nn.GroupNorm(32, hidden_dim),
+                    ))
+                    in_channels = hidden_dim
+            else:
+                self.input_proj = nn.ModuleList([
+                    nn.Sequential(
+                        nn.Conv3d(backbone.num_channels[0], hidden_dim, kernel_size=1),
+                        nn.GroupNorm(32, hidden_dim),
+                    )])
+            for projection in self.input_proj:                    
+                nn.init.xavier_uniform_(projection[0].weight, gain=1)
+                nn.init.constant_(projection[0].bias, 0)
 
         # self.class_proj = nn.Conv3d(backbone.num_channels[-1], hidden_dim, kernel_size=(4,1,1))
 
@@ -158,6 +159,7 @@ class DETR(nn.Module):
         self.two_stage = two_stage
         self.hidden_dim = hidden_dim
         self.is_swin = "SWIN" in backbone_name
+        self.is_vit = "ViT" in backbone_name
         self.generate_lfb = generate_lfb
         self.last_stride = last_stride
         self.training = training
@@ -199,32 +201,39 @@ class DETR(nn.Module):
         poses = list()
         bs = samples.tensors.shape[0]
 
-        for l, feat in enumerate(features[1:]): # 첫 번째 feature는 버림
-            src, mask = feat.decompose()
-            src_proj_l = self.input_proj[l](src) # channel 통일
-            pos_l = pos[l+1]
-            srcs.append(src_proj_l)
-            masks.append(mask)
-            poses.append(pos_l)
-
-        if self.num_feature_levels > (len(features) - 1): # the last feature map is a projection of the previous map
-            _len_srcs = len(features) - 1
-            for l in range(_len_srcs, self.num_feature_levels):
-                if l == _len_srcs:
-                    src = self.input_proj[l](features[-1].tensors)
-                else:
-                    src = self.input_proj[l](srcs[-1])
-
-                m = samples.mask    # [B, H, W]
-                mask = F.interpolate(m[None].float(), size=src.shape[-2:]).to(torch.bool)[0]
-                mask = mask.unsqueeze(1).expand(-1,src.shape[2],-1,-1)
-                # src: bs, c, t, h, w      mask: bs, t, h, w
-                pos_l = self.backbone[1](NestedTensor(src.flatten(0,1), mask)).to(src.dtype)
-
+        if self.is_vit:
+            for l, feat in enumerate(features): # 첫 번째 feature는 버림
+                src, mask = feat.decompose()
+                pos_l = pos[l]
                 srcs.append(src)
                 masks.append(mask)
+                poses.append(pos_l)     
+        else:
+            for l, feat in enumerate(features[1:]): # 첫 번째 feature는 버림
+                src, mask = feat.decompose()
+                src_proj_l = self.input_proj[l](src) # channel 통일
+                pos_l = pos[l+1]
+                srcs.append(src_proj_l)
+                masks.append(mask)
                 poses.append(pos_l)
-        
+
+            if self.num_feature_levels > (len(features) - 1): # the last feature map is a projection of the previous map
+                _len_srcs = len(features) - 1
+                for l in range(_len_srcs, self.num_feature_levels):
+                    if l == _len_srcs:
+                        src = self.input_proj[l](features[-1].tensors)
+                    else:
+                        src = self.input_proj[l](srcs[-1])
+
+                    m = samples.mask    # [B, H, W]
+                    mask = F.interpolate(m[None].float(), size=src.shape[-2:]).to(torch.bool)[0]
+                    mask = mask.unsqueeze(1).expand(-1,src.shape[2],-1,-1)
+                    # src: bs, c, t, h, w      mask: bs, t, h, w
+                    pos_l = self.backbone[1](NestedTensor(src.flatten(0,1), mask)).to(src.dtype)
+
+                    srcs.append(src)
+                    masks.append(mask)
+                    poses.append(pos_l)
 
         assert mask is not None
         # bs = samples.tensors.shape[0]
