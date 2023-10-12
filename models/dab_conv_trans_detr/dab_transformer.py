@@ -986,7 +986,7 @@ class TransformerClassDecoderLayer(nn.Module):
         # class query self-attention
         query = class_queries[:, None].expand(-1, actor_feature_expanded.shape[0], -1)
         query2 = self.self_attn(query, query, query)[0]
-        query = query + self.dropout1(query2)
+        query = query + self.dropout3(query2)
         query = self.norm1(query)
         
 
