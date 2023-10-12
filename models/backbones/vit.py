@@ -52,10 +52,9 @@ class ViT(nn.Module):
         self.use_checkpoint = use_checkpoint
 
         self.patch_embed = PatchEmbed(img_size=pretrain_img_size, patch_size=patch_size, in_chans=in_chans,
-                                      embed_dim=embed_dim, tubelet_size=self.tubelet_size)
+                                      embed_dim=embed_dim, tubelet_size=self.tubelet_size, num_frames=cfg.CONFIG.DATA.TEMP_LEN,)
         num_patches = self.patch_embed.num_patches  # 8x14x14
         self.grid_size = [pretrain_img_size // patch_size, pretrain_img_size // patch_size]  # [14,14]
-
         if use_learnable_pos_emb:
             self.pos_embed = nn.Parameter(torch.zeros(1, num_patches, embed_dim))
         else:
