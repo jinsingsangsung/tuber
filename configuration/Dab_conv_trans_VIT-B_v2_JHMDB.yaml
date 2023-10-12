@@ -56,7 +56,8 @@ CONFIG:
 
   MODEL:
     SINGLE_FRAME: True
-    BACKBONE_NAME: CSN-152
+    BACKBONE_NAME: ViT
+    TUNE_POINT: 0 # [0, 11]
     TEMPORAL_DS_STRATEGY: decode
     LAST_STRIDE: False
     GENERATE_LFB: False
@@ -74,7 +75,7 @@ CONFIG:
     TEMP_LEN: 40
     SAMPLE_RATE: 1
     PRETRAINED: True
-    PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_152_ft_kinetics_from_ig65m_f126851907.mat"
+    PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/ViT-B_v2_K400_16x4.pth"
     PRETRAIN_TRANSFORMER_DIR: "/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/decsasde_JHMDB.pth"
     PRETRAINED_PATH: ""
     LOAD: False
@@ -116,6 +117,6 @@ CONFIG:
     SAVE_DIR: 'checkpoints'
     EVAL_DIR: '/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/JHMDB_Tuber/eval'
     SAVE_FREQ: 5
-    RES_DIR: Dab_conv_trans_decsasde_CSN152_{}-{}/res
-    EXP_NAME: Dab_conv_trans_decsasde_CSN152_{}-{}
+    RES_DIR: Dab_conv_trans_decsasde_ViT_B_v2_{}-{}/res
+    EXP_NAME: Dab_conv_trans_decsasde_ViT_B_v2_{}-{}
     DISPLAY_FREQ: 50
