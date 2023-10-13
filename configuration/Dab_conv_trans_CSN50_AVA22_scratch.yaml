@@ -17,8 +17,8 @@ CONFIG:
   USE_LOCATION: False
   EFFICIENT: False
   TRAIN:
-    EPOCH_NUM: 50
-    BATCH_SIZE: 1
+    EPOCH_NUM: 20
+    BATCH_SIZE: 2
     LR: 1e-4
     MIN_LR: 1e-6 # only if cosine scheduler is used
     LR_BACKBONE: 1e-5 # if <=0, freezes the backbone
@@ -28,7 +28,7 @@ CONFIG:
     USE_WARMUP: True # does nothing
     WARMUP_START_LR: 1e-5
     WARMUP_EPOCHS: 3 # this determines whether to use Warmup unless using "step"
-    LR_MILESTONE: [25,40] #only for multistep
+    LR_MILESTONE: [14,18] #only for multistep
     STEP: 0.1 # gamma for lr decay
     OPTIMIZER:
       NAME: ADAMW
@@ -44,23 +44,24 @@ CONFIG:
     TYPE: "frame"
 
   DATA:
-    DATASET_NAME: 'jhmdb'
-    ANNO_PATH: '/mnt/tmp/JHMDB'
-    DATA_PATH: '/mnt/tmp/JHMDB/Frames'
-    NUM_CLASSES: 21
+    DATASET_NAME: 'ava'
+    LABEL_PATH: '/home/nsml/assets/ava_action_list_v2.1_for_activitynet_2018.pbtxt'
+    ANNO_PATH: '/home/nsml/assets/ava_{}_v22_updated.json'
+    DATA_PATH: '/mnt/tmp/frames/{}/'
+    NUM_CLASSES: 80
     MULTIGRID: False
     IMG_SIZE: 256
     IMG_RESHAPE_SIZE: 288
-    TEMP_LEN: 40
-    FRAME_RATE: 1
+    TEMP_LEN: 32
+    FRAME_RATE: 2
 
   MODEL:
     SINGLE_FRAME: True
-    BACKBONE_NAME: CSN-152
+    BACKBONE_NAME: CSN-50
     TEMPORAL_DS_STRATEGY: decode
     LAST_STRIDE: False
     GENERATE_LFB: False
-    NAME: 'jhmdb_detr_9_224'
+    NAME: 'ava_detr_9_224'
     ENC_LAYERS: 6
     DEC_LAYERS: 6
     D_MODEL: 256
@@ -71,15 +72,15 @@ CONFIG:
     NORMALIZE_BEFORE: False
     DROPOUT: 0.1
     DS_RATE: 8
-    TEMP_LEN: 40
-    SAMPLE_RATE: 1
+    TEMP_LEN: 32
+    SAMPLE_RATE: 2
     PRETRAINED: True
-    PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_152_ft_kinetics_from_ig65m_f126851907.mat"
-    PRETRAIN_TRANSFORMER_DIR: "/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/decsasde_JHMDB.pth"
+    PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_50_ft_kinetics_from_ig65m_f233743920.mat"
+    PRETRAIN_TRANSFORMER_DIR: ""
     PRETRAINED_PATH: ""
     LOAD: False
     LOAD_FC: False
-    LOAD_DETR: True
+    LOAD_DETR: False
     POSITION_EMBEDDING: "sine"
     NUM_FEATURE_LEVELS: 4
     NUM_DEC_N_POINTS: 4
@@ -93,7 +94,7 @@ CONFIG:
     RM_BINARY: False
 
   MATCHER:
-    COST_CLASS: 1
+    COST_CLASS: 12
     COST_BBOX: 5
     COST_GIOU: 2
     BNY_LOSS: True
@@ -101,7 +102,7 @@ CONFIG:
 
   LOSS_COFS:
     MASK_COF: 1
-    DICE_COF: 1
+    DICE_COF: 10
     BBOX_COF: 5
     GIOU_COF: 2
     EOS_COF: 0.1
@@ -111,11 +112,11 @@ CONFIG:
     CLIPS_MAX_NORM: 0.1
 
   LOG:
-    BASE_PATH: '/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/JHMDB_Tuber'
+    BASE_PATH: '/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/AVA_Tuber'
     LOG_DIR: 'tb_log'
     SAVE_DIR: 'checkpoints'
-    EVAL_DIR: '/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/JHMDB_Tuber/eval'
-    SAVE_FREQ: 5
-    RES_DIR: Decsasde_qu_CSN152_{}-{}/res
-    EXP_NAME: Decsasde_qu_CSN152_{}-{}
-    DISPLAY_FREQ: 50
+    EVAL_DIR: '/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/AVA_Tuber/eval'
+    SAVE_FREQ: 1
+    RES_DIR: Decsasde_qu_scratch_{}-{}/res
+    EXP_NAME: Decsasde_qu_scratch_{}-{}
+    DISPLAY_FREQ: 1000

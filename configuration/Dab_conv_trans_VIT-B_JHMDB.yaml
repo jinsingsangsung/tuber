@@ -117,6 +117,6 @@ CONFIG:
     SAVE_DIR: 'checkpoints'
     EVAL_DIR: '/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/JHMDB_Tuber/eval'
     SAVE_FREQ: 5
-    RES_DIR: Dab_conv_trans_decsasde_ViT_B_{}-{}/res
-    EXP_NAME: Dab_conv_trans_decsasde_ViT_B_{}-{}
+    RES_DIR: Decsasde_qu_ViT_B_{}-{}/res
+    EXP_NAME: Decsasde_qu_ViT_B_{}-{}
     DISPLAY_FREQ: 50
