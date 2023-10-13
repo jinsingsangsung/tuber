@@ -565,7 +565,7 @@ class TransformerDecoder(nn.Module):
                 self.layers[layer_id + 1].ca_qpos_proj = None
 
         self.cls_norm = nn.LayerNorm(d_model)
-        self.class_queries = nn.Embedding(num_classes, d_model).weight
+        self.class_queries = nn.Embedding(num_classes, d_model)
         self.temp_len = temp_len
         
         self.cls_norm2 = nn.LayerNorm(d_model)
@@ -586,6 +586,7 @@ class TransformerDecoder(nn.Module):
         cls_intermediate = []
         reference_points = refpoints_unsigmoid.sigmoid()
         ref_points = [reference_points]
+        class_queries = self.class_queries.weight
 
         # import ipdb; ipdb.set_trace()        
 
@@ -647,7 +648,7 @@ class TransformerDecoder(nn.Module):
                                                    memory,
                                                    pos,
                                                    query_sine_embed,
-                                                   self.class_queries,
+                                                   class_queries,
                                                    orig_res,
                                                    len(tgt))
             else:
@@ -658,11 +659,8 @@ class TransformerDecoder(nn.Module):
                             pos=pos, query_pos=query_pos, query_sine_embed=query_sine_embed,
                             is_first=(layer_id == 0))
 
-                cls_output = cls_layer(actor_feature.clone().detach(), q_memory, pos[0], query_sine_embed, self.class_queries, orig_res, len(tgt))
+                cls_output, class_queries = cls_layer(actor_feature.clone().detach(), q_memory, pos[0], query_sine_embed, class_queries, orig_res, len(tgt), (layer_id == 0))
             
-            if layer_id != 0:
-                cls_output = self.cls_norm(cls_output + prev_output)
-            prev_output = cls_output
             # iter update
             if self.bbox_embed is not None:
                 if self.bbox_embed_diff_each_layer:
@@ -809,7 +807,6 @@ class TransformerDecoderLayer(nn.Module):
         self.linear1 = nn.Linear(d_model, dim_feedforward)
         self.dropout = nn.Dropout(dropout)
         self.linear2 = nn.Linear(dim_feedforward, d_model)
-
         
         self.norm2 = nn.LayerNorm(d_model)
         self.norm3 = nn.LayerNorm(d_model)
@@ -943,6 +940,7 @@ class TransformerClassDecoderLayer(nn.Module):
         self.norm1 = nn.LayerNorm(d_model)
         
         # Class decoder cross-attention
+        self.q_proj = nn.Linear(d_model, d_model)
         self.k_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
         self.v_proj = nn.Conv2d(d_model, d_model, kernel_size=1)
         self.cls_qpos_sine_proj = nn.Linear(d_model, d_model)
@@ -956,7 +954,7 @@ class TransformerClassDecoderLayer(nn.Module):
         self.dropout2_ = nn.Dropout(dropout) # self.dropout_
         self.cls_norm_ = nn.LayerNorm(d_model)
 
-    def forward(self, actor_feature, q_memory, pos, query_sine_embed, class_queries, orig_res, num_queries):
+    def forward(self, actor_feature, q_memory, pos, query_sine_embed, class_queries, orig_res, num_queries, is_first):
                     
         # separate classification branch from localization
         actor_feature2 = self.cls_linear2(self.dropout1(self.activation(self.cls_linear1(actor_feature))))
@@ -984,7 +982,10 @@ class TransformerClassDecoderLayer(nn.Module):
             cls_feature = block(cls_feature)
         
         # class query self-attention
-        query = class_queries[:, None].expand(-1, actor_feature_expanded.shape[0], -1)
+        if is_first:
+            query = class_queries[:, None].expand(-1, actor_feature_expanded.shape[0], -1)
+        else:
+            query = class_queries
         query2 = self.self_attn(query, query, query)[0]
         query = query + self.dropout3(query2)
         query = self.norm1(query)
@@ -1011,8 +1012,9 @@ class TransformerClassDecoderLayer(nn.Module):
         cls_output2 = self.cls_linear2_(self.dropout1_(self.activation(self.cls_linear1_(cls_output))))
         cls_output = cls_output + self.dropout2_(cls_output2)
         cls_output = self.cls_norm_(cls_output)
+        next_query = cls_output.permute(2,0,1,3).contiguous().flatten(1,2) #N_q, BT, D
         
-        return cls_output
+        return cls_output, next_query
 
 
 def _get_clones(module, N):
