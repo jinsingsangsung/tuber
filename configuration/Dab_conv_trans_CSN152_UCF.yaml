@@ -51,8 +51,8 @@ CONFIG:
     MULTIGRID: False
     IMG_SIZE: 224
     IMG_RESHAPE_SIZE: 256
-    TEMP_LEN: 32
-    FRAME_RATE: 2
+    TEMP_LEN: 20
+    FRAME_RATE: 1
 
   MODEL:
     SINGLE_FRAME: False
@@ -60,7 +60,7 @@ CONFIG:
     TEMPORAL_DS_STRATEGY: decoder
     LAST_STRIDE: False
     GENERATE_LFB: False
-    NAME: 'ava_detr_9_224'
+    NAME: 'ucf_detr_9_224'
     ENC_LAYERS: 6
     DEC_LAYERS: 6
     D_MODEL: 256
@@ -71,8 +71,8 @@ CONFIG:
     NORMALIZE_BEFORE: False
     DROPOUT: 0.1
     DS_RATE: 8
-    TEMP_LEN: 32
-    SAMPLE_RATE: 2
+    TEMP_LEN: 20
+    SAMPLE_RATE: 1
     PRETRAINED: True
     PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_152_ft_kinetics_from_ig65m_f126851907.mat"
     PRETRAIN_TRANSFORMER_DIR: ""
@@ -91,7 +91,7 @@ CONFIG:
     BBOX_EMBED_DIFF_EACH_LAYER: False
 
   MATCHER:
-    COST_CLASS: 12
+    COST_CLASS: 5
     COST_BBOX: 5
     COST_GIOU: 2
     BNY_LOSS: True
