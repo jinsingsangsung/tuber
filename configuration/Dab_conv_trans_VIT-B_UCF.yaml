@@ -58,6 +58,7 @@ CONFIG:
     SINGLE_FRAME: True
     BACKBONE_NAME: ViT
     TUNE_POINT: 0 # [0, 11]
+    TEMPORAL_DS_STRATEGY: decode    
     LAST_STRIDE: False
     GENERATE_LFB: False
     NAME: 'ucf_detr_9_224'
@@ -114,6 +115,6 @@ CONFIG:
     SAVE_DIR: 'checkpoints'
     EVAL_DIR: '/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/UCF/eval'
     SAVE_FREQ: 5
-    RES_DIR: Dab_conv_trans_decsasde_CSN152_{}-{}/res
-    EXP_NAME: Dab_conv_trans_decsasde_CSN152_{}-{}
+    RES_DIR: Dab_conv_trans_decsasde_ViT-B_{}-{}/res
+    EXP_NAME: Dab_conv_trans_decsasde_ViT-B_{}-{}
     DISPLAY_FREQ: 1000

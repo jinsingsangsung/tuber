@@ -58,6 +58,7 @@ CONFIG:
     SINGLE_FRAME: True
     BACKBONE_NAME: ViT
     TUNE_POINT: 0 # [0, 11]
+    TEMPORAL_DS_STRATEGY: decode
     LAST_STRIDE: False
     GENERATE_LFB: False
     NAME: 'ucf_detr_9_224'
