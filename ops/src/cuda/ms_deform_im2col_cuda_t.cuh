@@ -202,7 +202,7 @@ __device__ void ms_deform_attn_col2im_bilinear(const scalar_t* &bottom_data,
     grad_t_weight += (hh * hw) * v5;
     grad_h_weight -= (lt * hw) * v5;
     grad_w_weight -= (lt * hh) * v5;
-    atomicAdd(grad_value+ptr5, w1*top_grad_value);
+    atomicAdd(grad_value+ptr5, w5*top_grad_value);
   }
   scalar_t v6 = 0;
   if (t_high <= time - 1 && h_low >= 0 && w_high <= width - 1)
@@ -212,7 +212,7 @@ __device__ void ms_deform_attn_col2im_bilinear(const scalar_t* &bottom_data,
     grad_t_weight += (hh * lw) * v6;
     grad_h_weight -= (lt * lw) * v6;
     grad_w_weight += (lt * hh) * v6;
-    atomicAdd(grad_value+ptr6, w2*top_grad_value);
+    atomicAdd(grad_value+ptr6, w6*top_grad_value);
   }
   scalar_t v7 = 0;
   if (t_high <= time - 1 && h_high <= height - 1 && w_low >= 0)
@@ -222,7 +222,7 @@ __device__ void ms_deform_attn_col2im_bilinear(const scalar_t* &bottom_data,
     grad_t_weight += (lh * hw) * v7;
     grad_h_weight += (lt * hw) * v7;
     grad_w_weight -= (lt * lh) * v7;
-    atomicAdd(grad_value+ptr7, w3*top_grad_value); 
+    atomicAdd(grad_value+ptr7, w7*top_grad_value); 
   }
   scalar_t v8 = 0;
   if (t_high <= time - 1 && h_high <= height - 1 && w_high <= width - 1)
@@ -232,7 +232,7 @@ __device__ void ms_deform_attn_col2im_bilinear(const scalar_t* &bottom_data,
     grad_t_weight += (lh * lw) * v8;    
     grad_h_weight += (lt * lw) * v8;
     grad_w_weight += (lt * lh) * v8;
-    atomicAdd(grad_value+ptr8, w4*top_grad_value);
+    atomicAdd(grad_value+ptr8, w8*top_grad_value);
   }
 
   const scalar_t val = (w1 * v1 + w2 * v2 + w3 * v3 + w4 * v4 + w5 * v5 + w6 * v6 + w7 * v7 + w8 * v8);
