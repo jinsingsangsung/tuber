@@ -93,6 +93,9 @@ class HungarianMatcher(nn.Module):
 
         out_prob_b = outputs["pred_logits_b"].softmax(-1)
         cost_class = -out_prob_b[..., 1:2]
+        # out_prob = outputs["pred_logits"].softmax(-1)
+        # tgt_ids = tgt_ids.view(bs, t, 1, 1).expand(-1,-1,num_queries,-1)
+        # cost_class = -torch.gather(out_prob, dim=3, index=tgt_ids)
         # Final cost matrix
         if not self.binary_loss:
             cost_class_b = 0
