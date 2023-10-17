@@ -17,7 +17,7 @@ CONFIG:
   USE_LOCATION: False
   EFFICIENT: False
   TRAIN:
-    EPOCH_NUM: 100
+    EPOCH_NUM: 30
     BATCH_SIZE: 1
     LR: 1e-4
     MIN_LR: 1e-6 # only if cosine scheduler is used
@@ -49,8 +49,8 @@ CONFIG:
     DATA_PATH: '/mnt/tmp/JHMDB/Frames'
     NUM_CLASSES: 21
     MULTIGRID: False
-    IMG_SIZE: 256
-    IMG_RESHAPE_SIZE: 288
+    IMG_SIZE: 224
+    IMG_RESHAPE_SIZE: 256
     TEMP_LEN: 40
     FRAME_RATE: 1
 
