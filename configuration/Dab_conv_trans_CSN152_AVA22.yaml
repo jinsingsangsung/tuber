@@ -35,7 +35,8 @@ CONFIG:
     AUX_LOSS: True
     LR_SCHEDULER:
       NAME: 'multistep'
-    CUT_GRADIENT: FALSE
+    CUT_GRADIENT: False
+    SYNCBATCHNORM: True
 
   VAL:
     BATCH_SIZE: 1
@@ -76,7 +77,7 @@ CONFIG:
     SAMPLE_RATE: 2
     PRETRAINED: True
     PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_152_ft_kinetics_from_ig65m_f126851907.mat"
-    PRETRAIN_TRANSFORMER_DIR: "/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/AVA_Tuber/Dab_conv_trans_decsasde_270-321/checkpoints/ckpt_epoch_08.pth"
+    PRETRAIN_TRANSFORMER_DIR: "/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/AVA_Tuber/Decsasde_CSN50_scratch_270-376/checkpoints/ckpt_epoch_08.pth"
     PRETRAINED_PATH: ""
     LOAD: False
     LOAD_FC: False
