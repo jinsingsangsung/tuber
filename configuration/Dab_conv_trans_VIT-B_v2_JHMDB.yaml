@@ -76,11 +76,11 @@ CONFIG:
     SAMPLE_RATE: 1
     PRETRAINED: True
     PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/ViT-B_v2_K400_16x4.pth"
-    PRETRAIN_TRANSFORMER_DIR: ""
+    PRETRAIN_TRANSFORMER_DIR: "/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/AVA_Tuber/Decsasde_CSN50_scratch_270-376/checkpoints/ckpt_epoch_10.pth"
     PRETRAINED_PATH: ""
     LOAD: False
     LOAD_FC: False
-    LOAD_DETR: False
+    LOAD_DETR: True
     POSITION_EMBEDDING: "sine"
     NUM_FEATURE_LEVELS: 4
     NUM_DEC_N_POINTS: 4
