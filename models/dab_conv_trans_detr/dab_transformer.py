@@ -127,12 +127,11 @@ class Transformer(nn.Module):
         mask = mask.flatten(0,1).flatten(1)
 
         if self.gradient_checkpointing:
-            def custom_encoder(module, mask, pos_embed, src_shape):
-                def custom_forward(inputs):
-                    inputs = module(inputs, src_key_padding_mask=mask, pos=pos_embed, src_shape=src_shape)
-                    return inputs
+            def custom_encoder(module):
+                def custom_forward(src, mask, pos_embed, src_shape):
+                    return module(src, src_key_padding_mask=mask, pos=pos_embed, src_shape=src_shape)
                 return custom_forward
-            memory = checkpoint.checkpoint(custom_encoder(self.encoder, mask, pos_embed, src_shape), src)
+            memory = checkpoint.checkpoint(custom_encoder(self.encoder), src, mask, pos_embed, src_shape)
             
         else:
             memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed, src_shape=src_shape)
@@ -151,16 +150,8 @@ class Transformer(nn.Module):
         # tgt = self.patterns.weight[:, None, None, :].repeat(1, self.num_queries, bs*t, 1).flatten(0, 1) # n_q*n_pat, bs, d_model
         # refpoint_embed = refpoint_embed.repeat(self.num_patterns, 1, 1) # n_pat*n_q, bs*t, d_model
         
-        if self.gradient_checkpointing:
-            def custom_decoder(module, mask, pos_embed, refpoint_embed, src_shape):
-                def custom_forward(*inputs):
-                    inputs = module(*inputs, memory_key_padding_mask=mask, pos=pos_embed, refpoints_unsigmoid=refpoint_embed, orig_res=src_shape)
-                    return inputs
-                return custom_forward
-            hs, cls_hs, references = checkpoint.checkpoint(custom_decoder(self.decoder, mask, pos_embed, refpoint_embed, (h,w)), tgt, memory)
-        else:
-            hs, cls_hs, references = self.decoder(tgt, memory, memory_key_padding_mask=mask, 
-                                                  pos=pos_embed, refpoints_unsigmoid=refpoint_embed, orig_res=(h,w))
+        hs, cls_hs, references = self.decoder(tgt, memory, memory_key_padding_mask=mask, 
+                                                pos=pos_embed, refpoints_unsigmoid=refpoint_embed, orig_res=(h,w))
         
         return hs, cls_hs, references
 
