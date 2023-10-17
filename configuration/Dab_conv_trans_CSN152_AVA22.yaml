@@ -77,7 +77,7 @@ CONFIG:
     SAMPLE_RATE: 2
     PRETRAINED: True
     PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_152_ft_kinetics_from_ig65m_f126851907.mat"
-    PRETRAIN_TRANSFORMER_DIR: "/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/AVA_Tuber/Decsasde_CSN50_scratch_270-376/checkpoints/ckpt_epoch_10.pth"
+    PRETRAIN_TRANSFORMER_DIR: "/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/AVA_Tuber/Decsasde_CSN50_scratch_270-376/checkpoints/ckpt_epoch_12.pth"
     PRETRAINED_PATH: ""
     LOAD: False
     LOAD_FC: False
