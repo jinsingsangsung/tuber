@@ -232,7 +232,7 @@ class SetCriterion(nn.Module):
     """
 
     def __init__(self, weight, num_classes, num_queries, matcher, weight_dict, eos_coef, losses, data_file,
-                 evaluation=False):
+                 evaluation=False, label_smoothing_alpha=0.1):
         """ Create the criterion.
         Parameters:
             num_classes: number of object categories, omitting the special no-object category
@@ -251,6 +251,7 @@ class SetCriterion(nn.Module):
         self.eos_coef = eos_coef
         self.losses = losses
         self.data_file = data_file
+        self.label_smoothing_alpha = label_smoothing_alpha
 
         empty_weight = torch.ones(self.num_classes + 1)
         empty_weight[-1] = self.eos_coef
@@ -273,19 +274,29 @@ class SetCriterion(nn.Module):
         loss_ce_b = F.cross_entropy(src_logits_b.flatten(0,1), target_classes_b.flatten(0,1))
 
         target_classes_o = torch.cat([t["labels"] for t in targets])
-        # bs*t
 
-        # target_classes_o = torch.cat([unbatched_targets[J*T+i] for i, (_, J) in enumerate(indices)])
         # bs*t
         target_classes = torch.full(src_logits.shape[:2], self.num_classes,
                                     dtype=torch.int64, device=src_logits.device)
         # bs*t, n_q 
         target_classes[idx] = target_classes_o
-        target_classes_onehot = F.one_hot(target_classes, 22).float()[...,:-1]
+
+        target_classes_onehot = F.one_hot(target_classes, self.num_classes+1).float()
+        true_label = 1
+        false_label = 0
+        if self.label_smoothing_alpha:
+            alpha = self.label_smoothing_alpha
+            true_label = (1-alpha)*true_label + alpha/self.num_classes
+            false_label = (1-alpha)*false_label + alpha/self.num_classes
+            target_classes_onehot[target_classes_onehot == 0] = false_label
+            target_classes_onehot[target_classes_onehot == 1] = true_label
+        # target_classes_o = torch.cat([unbatched_targets[J*T+i] for i, (_, J) in enumerate(indices)])
+        
         # loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
-        weights = torch.full(src_logits.shape[:2], 1, dtype=torch.float32, device=src_logits.device)
+        weights = torch.full(src_logits.shape[:2], 1,
+                             dtype=torch.float32, device=src_logits.device)
         weights[idx] = self.weight
-        loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot, weights)   
+        loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot[...,:-1], weights)
         # src_logits = torch.cat([src_logits, src_logits_b[...,2:]], dim=-1)
         # loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
         losses = {'loss_ce': loss_ce}
@@ -456,7 +467,7 @@ class SetCriterionUCF(nn.Module):
     """
 
     def __init__(self, weight, num_classes, num_queries, matcher, weight_dict, eos_coef, losses, data_file,
-                 evaluation=False):
+                 evaluation=False, label_smoothing_alpha=0.1):
         """ Create the criterion.
         Parameters:
             num_classes: number of object categories, omitting the special no-object category
@@ -475,6 +486,7 @@ class SetCriterionUCF(nn.Module):
         self.eos_coef = eos_coef
         self.losses = losses
         self.data_file = data_file
+        self.label_smoothing_alpha = label_smoothing_alpha
 
         empty_weight = torch.ones(self.num_classes + 1)
         empty_weight[-1] = self.eos_coef
@@ -506,14 +518,23 @@ class SetCriterionUCF(nn.Module):
         # bs*t, n_q 
         target_classes[idx] = target_classes_o
 
-        # target_classes_onehot = F.one_hot(target_classes, 25).float()
+        target_classes_onehot = F.one_hot(target_classes, self.num_classes+1).float()
+        true_label = 1
+        false_label = 0
+        if self.label_smoothing_alpha:
+            alpha = self.label_smoothing_alpha
+            true_label = (1-alpha)*true_label + alpha/self.num_classes
+            false_label = (1-alpha)*false_label + alpha/self.num_classes
+            target_classes_onehot[target_classes_onehot == 0] = false_label
+            target_classes_onehot[target_classes_onehot == 1] = true_label
+
         # loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
-        # weights = torch.full(src_logits.shape[:2], 1,
-        #                      dtype=torch.float32, device=src_logits.device)
-        # weights[idx] = self.weight
-        # loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot, weights) / 10        
-        src_logits = torch.cat([src_logits, src_logits_b[...,2:]], dim=-1)
-        loss_ce = F.cross_entropy(src_logits.flatten(1,2).transpose(1, 2), target_classes.flatten(1,2), self.empty_weight)
+        weights = torch.full(src_logits.flatten(1,2).shape[:2], 1,
+                             dtype=torch.float32, device=src_logits.device)
+        weights[idx] = self.weight
+        loss_ce = sigmoid_focal_loss(src_logits.flatten(1,2), target_classes_onehot[...,:-1].flatten(1,2), weights)       
+        # src_logits = torch.cat([src_logits, src_logits_b[...,2:]], dim=-1)
+        # loss_ce = F.cross_entropy(src_logits.flatten(1,2).transpose(1, 2), target_classes.flatten(1,2), self.empty_weight)
         losses = {'loss_ce': loss_ce}
         losses['loss_ce_b'] = loss_ce_b
 
@@ -695,10 +716,9 @@ class PostProcess(nn.Module):
         try:
             prob_binary = out_logits_b.softmax(-1)[:, :, 1:2]
             prob_bbox = (prob_binary > 0.8).float() * prob_binary
-            prob = F.softmax(out_logits, -1) * prob_bbox
+            prob = F.softmax(out_logits*1.5, -1) * prob_bbox
         except:
             prob = F.softmax(out_logits, -1)
-
 
         # convert to [x0, y0, x1, y1] format
         boxes = box_ops.box_cxcywh_to_xyxy(out_bbox)
