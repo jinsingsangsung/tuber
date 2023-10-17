@@ -18,7 +18,7 @@ CONFIG:
   EFFICIENT: False
   TRAIN:
     EPOCH_NUM: 20
-    BATCH_SIZE: 2
+    BATCH_SIZE: 1
     LR: 1e-4
     MIN_LR: 1e-6 # only if cosine scheduler is used
     LR_BACKBONE: 1e-5 # if <=0, freezes the backbone
@@ -51,7 +51,7 @@ CONFIG:
     MULTIGRID: False
     IMG_SIZE: 224
     IMG_RESHAPE_SIZE: 256
-    TEMP_LEN: 20
+    TEMP_LEN: 32
     FRAME_RATE: 1
 
   MODEL:
