@@ -7,9 +7,10 @@ import torch.nn.functional as F
 from scipy.optimize import linear_sum_assignment
 from torch import nn
 
-from utils.box_ops import box_cxcywh_to_xyxy, batched_generalized_box_iou
+# from utils.box_ops import box_cxcywh_to_xyxy, batched_generalized_box_iou
+from utils.box_ops import box_cxcywh_to_xyxy, generalized_box_iou
 from evaluates.utils import compute_video_map
-
+from models.dab_new_detr.segmentation import sigmoid_focal_loss, dice_loss
 class HungarianMatcher(nn.Module):
     """This class computes an assignment between the targets and the predictions of the network
 
@@ -58,80 +59,136 @@ class HungarianMatcher(nn.Module):
                 len(index_i) = len(index_j) = min(num_queries, num_target_boxes)
         """
         l = self.clip_len
+        
+        # for ease, assume a single batch case
+        try:
+            front_pad = targets[0]["front_pad"]
+            end_pad = -targets[0]["end_pad"]
+            if end_pad == 0:
+                end_pad = None
+        except: # in case of JHMDB
+            front_pad = 0
+            end_pad = None
+
         bs, t, num_queries, num_classes = outputs["pred_logits"].shape
-        num_classes = outputs["pred_logits"].shape[-1]
-        out_bbox = outputs["pred_boxes"].permute(1,0,2,3).flatten(1, 2)    # t, bs*nq, 4
+        out_bbox = outputs["pred_boxes"][:,front_pad:end_pad,:,:].flatten(0,2) # bs*t*nq, 4
+        # out_bbox = outputs["pred_boxes"].permute(1,0,2,3).flatten(1, 2)    # t, bs*nq, 4
         # out_prob = outputs["pred_logits"].permute(1,0,2,3).flatten(1, 2).softmax(-1) # t, bs*nq, num_classes
         # Also concat the target labels
-        # tgt_bbox = torch.cat([v["boxes"] for v in targets]) 
+        tgt_bbox = torch.cat([v["boxes"] for v in targets]) # bs*num_actors*t, 5
+        tgt_bbox = tgt_bbox[:,1:].view(bs, -1, t, 4)[:,:,front_pad:end_pad,:]
+        num_actors = tgt_bbox.size(1)
+        num_valid_frames = tgt_bbox.size(2)
+        tgt_bbox = tgt_bbox.transpose(1,2).contiguous()
         sizes = []
-        tgt_bbox = []
-        # if torch.cat([v["boxes"] for v in targets]).__len__() > l:
-        #     import pdb; pdb.set_trace()
-        for v in targets:
-            tgt_bbox_ = v["boxes"]
-            num_tubes = len(tgt_bbox_) // l
-            sizes.append(num_tubes)
-            # tgt_bboxes = tgt_bbox_.split(l)
-            # tgt_bbox.append(torch.stack([tgt_bboxes[i] for i in range(num_tubes)], dim=0)) # num_tubes x clip_len x 5
-            tgt_bbox.append(tgt_bbox_.reshape(num_tubes, -1 ,5))
-        tgt_bbox = torch.cat(tgt_bbox, dim=0)[..., 1:]
-        tgt_ids = torch.cat([v["labels"] for v in targets])
-        invalid_ids = tgt_ids >= num_classes
-        assert len(tgt_bbox) == len(tgt_ids)
+        tgt_bbox = tgt_bbox.flatten(0,2) # bs*t*num_actors, 4
+        valid_tgt_bbox = []
+        for i, box in enumerate(tgt_bbox):
+            if i%num_actors == 0:
+                sizes.append(0)
+            if not ((box[1:] == 0.).all()):
+                sizes[-1] += 1
+                valid_tgt_bbox.append(box)
+            else:
+                pass
+        try:
+            valid_tgt_bbox = torch.stack(valid_tgt_bbox)
+        except: # when there is no valid box
+            return None
+        num_valid_boxes = sum(sizes)
+        # Compute the L1 cost between boxes
+        cost_bbox = torch.cdist(out_bbox, valid_tgt_bbox, p=1)
+        cost_giou = -generalized_box_iou(box_cxcywh_to_xyxy(out_bbox), box_cxcywh_to_xyxy(valid_tgt_bbox))
+        
+        # frame-wise hungarian matching
+        tgt_classes = torch.cat([v["labels"] for v in targets]) # num_actors, t
+        if tgt_classes.ndim == 1: # in case of JHMDB
+            tgt_classes = tgt_classes[None]
+        tgt_classes = tgt_classes[:, front_pad:end_pad]
+        tgt_classes = tgt_classes.transpose(0,1).contiguous().flatten()
+        tgt_classes = tgt_classes[tgt_classes!=num_classes]
+
+        assert num_valid_boxes == len(tgt_classes)
+        
+        # tgt_classes_onehot = F.one_hot(tgt_classes, num_classes).float()
+        # out_prob = torch.cat([outputs["pred_logits"], outputs["pred_logits_b"][..., 2:]], dim=-1).flatten(0,2)
+        out_prob = outputs["pred_logits"][:,front_pad:end_pad,:,:].flatten(0,2)
+        cost_class = -out_prob.softmax(-1)[:, tgt_classes] # b*num_valid_frames*nq, num_valid_boxes
+
+        C = self.cost_bbox * cost_bbox + self.cost_giou * cost_giou + self.cost_class * cost_class 
+
+        C = C.view(bs*(num_valid_frames), num_queries, -1).cpu()
+        # sizes = [len(v["boxes"]) for v in targets]
+        indices = [linear_sum_assignment(c[i]) for i, c in enumerate(C.split(sizes, -1))]
+        return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
+        # sizes = []
+        # tgt_bbox = []
+        # # if torch.cat([v["boxes"] for v in targets]).__len__() > l:
+        # #     import pdb; pdb.set_trace()
+        # for v in targets:
+        #     tgt_bbox_ = v["boxes"]
+        #     num_tubes = len(tgt_bbox_) // l
+        #     sizes.append(num_tubes)
+        #     # tgt_bboxes = tgt_bbox_.split(l)
+        #     # tgt_bbox.append(torch.stack([tgt_bboxes[i] for i in range(num_tubes)], dim=0)) # num_tubes x clip_len x 5
+        #     tgt_bbox.append(tgt_bbox_.reshape(num_tubes, -1 ,5))
+        # tgt_bbox = torch.cat(tgt_bbox, dim=0)[..., 1:]
+        # tgt_ids = torch.cat([v["labels"] for v in targets])
+        # invalid_ids = tgt_ids >= num_classes
+        # assert len(tgt_bbox) == len(tgt_ids)
         # TODO: Matching strategy: tube? or frame? let's go with tube
         # 1. make it generalizable to multiple actors, make a good output of matching indices (take the idea from ava)
         # 2. discard the outputs with non-meaningful labels (actually null tube) how to return the idx?
 
-        tgt_bbox = tgt_bbox.permute(1,0,2).contiguous()
-        tgt_ids = tgt_ids.permute(1,0).contiguous()
-        invalid_ids = invalid_ids.permute(1,0).contiguous() # clip_len x bs~#
-        # Compute the L1 cost between boxes
-        cost_bbox = torch.cdist(tgt_bbox, out_bbox) # clip_len x bs~# x bs*n_q
-        cost_bbox[invalid_ids] = torch.zeros(out_bbox.shape[1], device=cost_bbox.device)
-        cost_bbox = cost_bbox.permute(0,2,1).contiguous()
+        # tgt_bbox = tgt_bbox.permute(1,0,2).contiguous()
+        # tgt_ids = tgt_ids.permute(1,0).contiguous()
+        # invalid_ids = invalid_ids.permute(1,0).contiguous() # clip_len x bs~#
+        # # Compute the L1 cost between boxes
+        # cost_bbox = torch.cdist(tgt_bbox, out_bbox) # clip_len x bs~# x bs*n_q
+        # cost_bbox[invalid_ids] = torch.zeros(out_bbox.shape[1], device=cost_bbox.device)
+        # cost_bbox = cost_bbox.permute(0,2,1).contiguous()
 
-        # Compute the giou cost betwen boxes
-        cost_giou = -batched_generalized_box_iou(box_cxcywh_to_xyxy(tgt_bbox), box_cxcywh_to_xyxy(out_bbox))
-        cost_giou[invalid_ids] = torch.zeros(out_bbox.shape[1], device=cost_bbox.device)
-        cost_giou = cost_giou.permute(0,2,1).contiguous()
-        out_prob = outputs["pred_logits_b"].permute(1,0,2,3).flatten(1, 2).softmax(-1)
-        cost_class = -out_prob[..., 1:2].repeat(1,1,sum(sizes))
-        # t, bs*n_q, bs~#
+        # # Compute the giou cost betwen boxes
+        # cost_giou = -batched_generalized_box_iou(box_cxcywh_to_xyxy(tgt_bbox), box_cxcywh_to_xyxy(out_bbox))
+        # cost_giou[invalid_ids] = torch.zeros(out_bbox.shape[1], device=cost_bbox.device)
+        # cost_giou = cost_giou.permute(0,2,1).contiguous()
+        # out_prob = outputs["pred_logits_b"].permute(1,0,2,3).flatten(1, 2).softmax(-1)
+        # cost_class = -out_prob[..., 1:2].repeat(1,1,sum(sizes))
+        # # t, bs*n_q, bs~#
 
-        # Final cost matrix
-        C = self.cost_bbox * cost_bbox + self.cost_giou * cost_giou + self.cost_class * cost_class
-        # t, bs*n_q, bs~#
+        # # Final cost matrix
+        # C = self.cost_bbox * cost_bbox + self.cost_giou * cost_giou + self.cost_class * cost_class
+        # # t, bs*n_q, bs~#
 
-        # bs, t, num_queries, len(tgt_bbox)
-        C = C.view(t, bs, num_queries, -1).cpu()
+        # # bs, t, num_queries, len(tgt_bbox)
+        # C = C.view(t, bs, num_queries, -1).cpu()
 
-        indices = []
-        output = []
+        # indices = []
+        # output = []
         
-        # matched_queries = []
-        for j in range(t):
-            idx = [linear_sum_assignment(c[i]) for i, c in enumerate(C[j].split(sizes, -1))]
+        # # matched_queries = []
+        # for j in range(t):
+        #     idx = [linear_sum_assignment(c[i]) for i, c in enumerate(C[j].split(sizes, -1))]
 
-            for batch_id, (queries, keys) in enumerate(idx):
-                if len(output) < len(idx):
-                    interm = {}
-                    for q, k in zip(queries, keys):
-                        if interm.get(k) is None:
-                            interm[k] = []
-                        interm[k].append(q)
-                    output.append(interm) 
-                else:
-                    for q, k in zip(queries, keys):
-                        output[batch_id][k].append(q)
-            indices.append(idx) # idx length: batch
-        output_real = []
-        for batch_id, out_dict in enumerate(output):
-            interm = []
-            for k in out_dict:
-                interm.append(torch.tensor([max(set(out_dict[k]), key=out_dict[k].count), k]))
-            interm = torch.stack(interm).transpose(0, 1).contiguous()
-            output_real.append(interm)
+        #     for batch_id, (queries, keys) in enumerate(idx):
+        #         if len(output) < len(idx):
+        #             interm = {}
+        #             for q, k in zip(queries, keys):
+        #                 if interm.get(k) is None:
+        #                     interm[k] = []
+        #                 interm[k].append(q)
+        #             output.append(interm) 
+        #         else:
+        #             for q, k in zip(queries, keys):
+        #                 output[batch_id][k].append(q)
+        #     indices.append(idx) # idx length: batch
+        # output_real = []
+        # for batch_id, out_dict in enumerate(output):
+        #     interm = []
+        #     for k in out_dict:
+        #         interm.append(torch.tensor([max(set(out_dict[k]), key=out_dict[k].count), k]))
+        #     interm = torch.stack(interm).transpose(0, 1).contiguous()
+        #     output_real.append(interm)
                 
 
         # if (torch.tensor(sizes) > 1).any():
@@ -147,7 +204,7 @@ class HungarianMatcher(nn.Module):
         #
         # return res
         # return [(torch.as_tensor([idx], dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
-        return output_real
+        # return output_real
 
 def build_matcher(cfg):
     return HungarianMatcher(cost_class=cfg.CONFIG.MATCHER.COST_CLASS, cost_bbox=cfg.CONFIG.MATCHER.COST_BBOX, cost_giou=cfg.CONFIG.MATCHER.COST_GIOU, data_file=cfg.CONFIG.DATA.DATASET_NAME, binary_loss=cfg.CONFIG.MATCHER.BNY_LOSS, before=cfg.CONFIG.MATCHER.BEFORE, clip_len=cfg.CONFIG.DATA.TEMP_LEN)

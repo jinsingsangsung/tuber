@@ -310,8 +310,8 @@ class DETR(nn.Module):
 def build_model(cfg):
     if cfg.CONFIG.DATA.DATASET_NAME == 'ava':
         from models.dab_conv_trans_detr.matcher import build_matcher
-    elif cfg.CONFIG.DATA.DATASET_NAME == 'jhmdb':
-        from models.dab_conv_trans_detr.matcher_ucf import build_matcher
+    # elif cfg.CONFIG.DATA.DATASET_NAME == 'jhmdb':
+    #     from models.dab_conv_trans_detr.matcher_ucf import build_matcher
     else:
         from models.dab_conv_trans_detr.matcher_ucf_ import build_matcher
     num_classes = cfg.CONFIG.DATA.NUM_CLASSES
@@ -364,15 +364,15 @@ def build_model(cfg):
                                     losses=losses,
                                     data_file=cfg.CONFIG.DATA.DATASET_NAME,
                                     evaluation=cfg.CONFIG.EVAL_ONLY)
-    elif cfg.CONFIG.DATA.DATASET_NAME == 'jhmdb':
-        criterion = SetCriterion(cfg.CONFIG.LOSS_COFS.WEIGHT,
-                                    num_classes,
-                                    num_queries=cfg.CONFIG.MODEL.QUERY_NUM,
-                                    matcher=matcher, weight_dict=weight_dict,
-                                    eos_coef=cfg.CONFIG.LOSS_COFS.EOS_COF,                                    
-                                    losses=losses,
-                                    data_file=cfg.CONFIG.DATA.DATASET_NAME,
-                                    evaluation=cfg.CONFIG.EVAL_ONLY)
+    # elif cfg.CONFIG.DATA.DATASET_NAME == 'jhmdb':
+    #     criterion = SetCriterion(cfg.CONFIG.LOSS_COFS.WEIGHT,
+    #                                 num_classes,
+    #                                 num_queries=cfg.CONFIG.MODEL.QUERY_NUM,
+    #                                 matcher=matcher, weight_dict=weight_dict,
+    #                                 eos_coef=cfg.CONFIG.LOSS_COFS.EOS_COF,                                    
+    #                                 losses=losses,
+    #                                 data_file=cfg.CONFIG.DATA.DATASET_NAME,
+    #                                 evaluation=cfg.CONFIG.EVAL_ONLY)
     else:
         criterion = SetCriterionUCF(cfg.CONFIG.LOSS_COFS.WEIGHT,
                                     num_classes,

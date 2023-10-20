@@ -124,7 +124,6 @@ class SetCriterionAVA(nn.Module):
         src_boxes = outputs['pred_boxes'][idx]
         target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0)
         target_boxes = target_boxes[:, 1:]
-
         loss_bbox = F.l1_loss(src_boxes, target_boxes, reduction='none')
 
         losses = {}
@@ -478,7 +477,7 @@ class SetCriterionUCF(nn.Module):
     """
 
     def __init__(self, weight, num_classes, num_queries, matcher, weight_dict, eos_coef, losses, data_file,
-                 evaluation=False, label_smoothing_alpha=0.1):
+                 evaluation=False, label_smoothing_alpha=0.0):
         """ Create the criterion.
         Parameters:
             num_classes: number of object categories, omitting the special no-object category
@@ -508,26 +507,49 @@ class SetCriterionUCF(nn.Module):
         targets dicts must contain the key "labels" containing a tensor of dim [nb_target_boxes]
         """
         assert 'pred_logits' in outputs
-        src_logits = outputs['pred_logits'].transpose(1,2) # bs, n, t, 24
+        src_logits = outputs['pred_logits'] # bs, t, n, 24
         T = outputs['pred_logits'].size(1)
-        idx = self._get_src_permutation_idx(indices)
+        empty_frame = False
+        # for ease, assume a single batch case
+        try:
+            front_pad = targets[0]["front_pad"]
+            end_pad = -targets[0]["end_pad"]
+            if end_pad == 0:
+                end_pad = None
+        except: # in case of JHMDB
+            front_pad = 0
+            end_pad = None
 
-        src_logits_b = outputs['pred_logits_b'].transpose(1,2) # bs, n, t, 3
-        target_classes_b = torch.full(src_logits_b.shape[:3], 2,
-                            dtype=torch.int64, device=src_logits_b.device)      
-        target_classes_b[idx] = torch.ones(T, device=target_classes_b.device, dtype=target_classes_b.dtype)
+        try:
+            idx = self._get_src_permutation_idx(indices)
+        except:
+            empty_frame = True
+            idx = T + 1
 
-        loss_ce_b = F.cross_entropy(src_logits_b.flatten(1,2).transpose(1,2), target_classes_b.flatten(1,2))
-
-        target_classes_o = torch.cat([t["labels"] for t in targets])
-        # bs*t
-
-        # target_classes_o = torch.cat([unbatched_targets[J*T+i] for i, (_, J) in enumerate(indices)])
-        # bs*t
-        target_classes = torch.full(src_logits.shape[:3], self.num_classes,
+        src_logits_b = outputs['pred_logits_b'].flatten(0,1)# bs, t, n, 3
+        target_classes_b = torch.full(src_logits_b.shape[:2], 2,
+                            dtype=torch.int64, device=src_logits_b.device)   
+        try:
+            target_classes_b[front_pad:end_pad,:][idx] = 1        
+        except:
+            pass
+        loss_ce_b = F.cross_entropy(src_logits_b.transpose(1,2), target_classes_b)
+        
+        if not empty_frame:
+            target_classes_o = torch.cat([t["labels"] for t in targets])
+            if target_classes_o.ndim == 1:
+                target_classes_o = target_classes_o[None]
+            target_classes_o = target_classes_o[:, front_pad:end_pad].transpose(0,1).contiguous().flatten() # t*num_actors
+            # bs*t
+            target_classes_o = target_classes_o[target_classes_o != self.num_classes]
+            # target_classes_o = torch.cat([unbatched_targets[J*T+i] for i, (_, J) in enumerate(indices)])
+            # bs*t
+        src_logits = src_logits[:,front_pad:end_pad,:,:].flatten(0,1) # bs*t, n, 24
+        target_classes = torch.full(src_logits.shape[:2], self.num_classes,
                                     dtype=torch.int64, device=src_logits.device)
         # bs*t, n_q 
-        target_classes[idx] = target_classes_o
+        if not empty_frame:
+            target_classes[idx] = target_classes_o
 
         target_classes_onehot = F.one_hot(target_classes, self.num_classes+1).float()
         true_label = 1
@@ -540,10 +562,12 @@ class SetCriterionUCF(nn.Module):
             target_classes_onehot[target_classes_onehot == 1] = true_label
 
         # loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
-        weights = torch.full(src_logits.flatten(1,2).shape[:2], 1,
+        weights = torch.full(src_logits.shape[:2], 1,
                              dtype=torch.float32, device=src_logits.device)
-        weights[idx] = self.weight
-        loss_ce = sigmoid_focal_loss(src_logits.flatten(1,2), target_classes_onehot[...,:-1].flatten(1,2), weights)       
+        if not empty_frame:
+            weights[idx] = self.weight
+        weights = weights[..., None]
+        loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot[...,:-1], weights) / len(src_logits)
         # src_logits = torch.cat([src_logits, src_logits_b[...,2:]], dim=-1)
         # loss_ce = F.cross_entropy(src_logits.flatten(1,2).transpose(1, 2), target_classes.flatten(1,2), self.empty_weight)
         losses = {'loss_ce': loss_ce}
@@ -551,7 +575,10 @@ class SetCriterionUCF(nn.Module):
 
         if log:
             # TODO this should probably be a separate loss, not hacked in this one here
-            losses['class_error'] = 100 - accuracy(src_logits[idx].flatten(0,1), target_classes_o.flatten(0,1))[0]
+            if not empty_frame:
+                losses['class_error'] = 100 - accuracy(src_logits[idx], target_classes_o)[0]
+            else:
+                losses['class_error'] = 100 - accuracy(src_logits.flatten(0,1), target_classes.flatten(0,1))[0]
 
         return losses
 
@@ -575,39 +602,76 @@ class SetCriterionUCF(nn.Module):
            The target boxes are expected in format (center_x, center_y, w, h), normalized by the image size.
         """
         assert 'pred_boxes' in outputs
-        idx = self._get_src_permutation_idx(indices)
+
+        try:
+            idx = self._get_src_permutation_idx(indices)
+        except:
+            device = outputs["pred_boxes"].device
+            return {'loss_bbox': torch.tensor(0, device=device),
+                    'loss_giou': torch.tensor(0, device=device)}
+        
         # idx[0]: range(bs*t)
         # idx[1]: the matched idx corresponds to idx[0]
-        T = outputs['pred_boxes'].size(1)
-        src_boxes = outputs['pred_boxes'].transpose(1,2)[idx] # b, t, 4
-
-        # target_boxes = torch.cat([t["boxes"] for t in targets])
-        target_boxes = torch.cat([t["boxes"].reshape(-1, T, 5)[i] for t, (_, i) in zip(targets, indices)], dim=0)
+        bs, T, num_queries = outputs['pred_boxes'].shape[:3]
+        src_boxes = outputs['pred_boxes'].flatten(0,1)[idx]
+        
+        # for ease, assume a single batch case
+        try:
+            front_pad = targets[0]["front_pad"]
+            end_pad = -targets[0]["end_pad"]
+            if end_pad == 0:
+                end_pad = None            
+        except: # in case of JHMDB
+            front_pad = 0
+            end_pad = None
+        target_boxes = torch.cat([t["boxes"] for t in targets])
+        target_boxes = target_boxes[:,1:].view(bs, -1, T, 4)[:,:,front_pad:end_pad,:]
+        # target_boxes = torch.cat([t["boxes"].reshape(-1, T, 5)[i] for t, (_, i) in zip(targets, indices)], dim=0)
         
         # target_boxes = torch.cat([unbatched_targets[i] for i, (_, J) in enumerate(indices)], dim=0)
-        target_boxes = target_boxes[..., 1:]
-        tgt_ids = torch.cat([v["labels"] for v in targets])
-        valid_ids = tgt_ids < self.num_classes
-        if valid_ids.any():
-            loss_bbox = F.l1_loss(src_boxes[valid_ids], target_boxes[valid_ids], reduction='none')
-        else:
-            loss_bbox = 0*(src_boxes + target_boxes).sum()
-        num_boxes = valid_ids.sum()
-        
+        # target_boxes = target_boxes[..., 1:]
+        num_actors = target_boxes.size(1)
+        num_valid_frames = target_boxes.size(2)        
+        target_boxes = target_boxes.transpose(1,2).contiguous()
+        sizes = []
+        valid_target_boxes = []
+        target_boxes = target_boxes.flatten(0,2) # bs*t*num_actors, 4
+        for i, box in enumerate(target_boxes):
+            if i%num_actors == 0:
+                sizes.append(0)
+            if not (box[1:] == 0.).all():
+                sizes[-1] += 1
+                valid_target_boxes.append(box)
+            else:
+                pass        
+        valid_target_boxes = torch.stack(valid_target_boxes)
+        num_valid_boxes = sum(sizes)
+    
+        # tgt_ids = torch.cat([v["labels"] for v in targets])
+        # valid_ids = tgt_ids < self.num_classes
+        # if valid_ids.any():
+        #     loss_bbox = F.l1_loss(src_boxes[valid_ids], target_boxes[valid_ids], reduction='none')
+        # else:
+        #     loss_bbox = 0*(src_boxes + target_boxes).sum()
+        # num_boxes = valid_ids.sum()
+        loss_bbox = F.l1_loss(src_boxes, valid_target_boxes, reduction='none')
+        losses = {}
+        losses['loss_bbox'] = loss_bbox.sum() / num_valid_boxes        
         # cost_giou = -batched_generalized_box_iou(box_cxcywh_to_xyxy(tgt_bbox), box_cxcywh_to_xyxy(out_bbox))
         # cost_giou[invalid_ids] = torch.zeros(out_bbox.shape[1], device=cost_bbox.device)        
-        invalid_ids = tgt_ids >= self.num_classes
-
-        loss_giou = 1 - box_ops.batched_generalized_box_iou(box_ops.box_cxcywh_to_xyxy(src_boxes), box_ops.box_cxcywh_to_xyxy(target_boxes))
-        loss_giou[invalid_ids] = torch.zeros(src_boxes.shape[1], device=loss_giou.device) 
-        losses = {}
-        if num_boxes > 0:
-            losses['loss_bbox'] = loss_bbox.sum() / num_boxes
-            losses['loss_giou'] = loss_giou.sum() / num_boxes / T
-        else:
-            # loss_dumy = F.l1_loss(torch.as_tensor([1]).to(targets[0]["boxes"].device), torch.as_tensor([1]).to(targets[0]["boxes"].device), reduction='none')
-            losses['loss_bbox'] = 0*loss_bbox.sum()
-            losses['loss_giou'] = 0*loss_giou.sum()
+        # loss_giou = 1 - box_ops.batched_generalized_box_iou(box_ops.box_cxcywh_to_xyxy(src_boxes), box_ops.box_cxcywh_to_xyxy(target_boxes))
+        loss_giou = 1 - torch.diag(box_ops.generalized_box_iou(
+            box_ops.box_cxcywh_to_xyxy(src_boxes),
+            box_ops.box_cxcywh_to_xyxy(valid_target_boxes)))
+        # loss_giou[invalid_ids] = torch.zeros(src_boxes.shape[1], device=loss_giou.device) 
+        losses['loss_giou'] = loss_giou.sum() / num_valid_boxes
+        # if num_boxes > 0:
+        #     losses['loss_bbox'] = loss_bbox.sum() / num_boxes
+        #     losses['loss_giou'] = loss_giou.sum() / num_boxes / T
+        # else:
+        #     # loss_dumy = F.l1_loss(torch.as_tensor([1]).to(targets[0]["boxes"].device), torch.as_tensor([1]).to(targets[0]["boxes"].device), reduction='none')
+        #     losses['loss_bbox'] = 0*loss_bbox.sum()
+        #     losses['loss_giou'] = 0*loss_giou.sum()
         return losses
 
     def loss_masks(self, outputs, targets, indices, num_boxes):
@@ -725,9 +789,9 @@ class PostProcess(nn.Module):
         assert target_sizes.shape[1] == 2
 
         try:
-            prob_binary = out_logits_b.softmax(-1)[:, :, 1:2]
+            prob_binary = out_logits_b.softmax(-1)[..., 1:2]
             prob_bbox = (prob_binary > 0.8).float() * prob_binary
-            prob = F.softmax(out_logits*1.5, -1) * prob_bbox
+            prob = F.softmax(out_logits, -1) * prob_bbox
         except:
             prob = F.softmax(out_logits, -1)
 
