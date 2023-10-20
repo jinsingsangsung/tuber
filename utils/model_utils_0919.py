@@ -105,6 +105,10 @@ def deploy_model(model, cfg, is_tuber=True):
     Deploy model to multiple GPUs for DDP training.
     """
     log_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
+    
+    if cfg.CONFIG.TRAIN.SYNCBATCHNORM:
+        model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+    
     if cfg.DDP_CONFIG.DISTRIBUTED:
         if cfg.DDP_CONFIG.GPU is not None:
             torch.cuda.set_device(cfg.DDP_CONFIG.GPU)
