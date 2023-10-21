@@ -789,11 +789,11 @@ class PostProcess(nn.Module):
         assert target_sizes.shape[1] == 2
 
         try:
-            prob_binary = out_logits_b.softmax(-1)[..., 1:2]
-            prob_bbox = (prob_binary > 0.8).float() * prob_binary
-            prob = F.softmax(out_logits, -1) * prob_bbox
+            # prob_binary = out_logits_b.softmax(-1)[..., 1:2]
+            # prob_bbox = (prob_binary > 0.8).float() * prob_binary
+            prob = out_logits.sigmoid()
         except:
-            prob = F.softmax(out_logits, -1)
+            prob = out_logits.sigmoid()
 
         # convert to [x0, y0, x1, y1] format
         boxes = box_ops.box_cxcywh_to_xyxy(out_bbox)
