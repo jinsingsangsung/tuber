@@ -570,7 +570,10 @@ class SetCriterionUCF(nn.Module):
         if not empty_frame:
             weights[idx] = self.weight
         weights = weights[..., None]
-        loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot[...,:-1], weights) / len(src_logits)
+        # loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot[...,:-1], weights) / len(src_logits)
+        src_logits_b_ = outputs['pred_logits_b'][:,front_pad:end_pad,:,2:].flatten(0,1)
+        src_logits = torch.cat([src_logits, src_logits_b_], dim=-1)
+        loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)                
         # src_logits = torch.cat([src_logits, src_logits_b[...,2:]], dim=-1)
         # loss_ce = F.cross_entropy(src_logits.flatten(1,2).transpose(1, 2), target_classes.flatten(1,2), self.empty_weight)
         losses = {'loss_ce': loss_ce}
