@@ -265,7 +265,10 @@ class SetCriterion(nn.Module):
 
         empty_weight = torch.ones(self.num_classes + 1)
         empty_weight[-1] = self.eos_coef
+        empty_weight_ = torch.ones(3)
+        empty_weight_[-1] = self.eos_coef        
         self.register_buffer('empty_weight', empty_weight)
+        self.register_buffer('empty_weight_', empty_weight_)
 
     def loss_labels(self, outputs, targets, indices, num_boxes, log=True):
         """Classification loss (NLL)
@@ -281,7 +284,7 @@ class SetCriterion(nn.Module):
                             dtype=torch.int64, device=src_logits_b.device)      
         target_classes_b[idx] = 1
 
-        loss_ce_b = F.cross_entropy(src_logits_b.flatten(0,1), target_classes_b.flatten(0,1))
+        loss_ce_b = F.cross_entropy(src_logits_b.flatten(0,1), target_classes_b.flatten(0,1), self.empty_weight_.to(src_logits_b.device))
 
         target_classes_o = torch.cat([t["labels"] for t in targets])
 
@@ -306,9 +309,9 @@ class SetCriterion(nn.Module):
         weights = torch.full(src_logits.shape[:2], 1,
                              dtype=torch.float32, device=src_logits.device)
         weights[idx] = self.weight
-        loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot[...,:-1], weights)
-        # src_logits = torch.cat([src_logits, src_logits_b[...,2:]], dim=-1)
-        # loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
+        # loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot[...,:-1], weights)
+        src_logits = torch.cat([src_logits, src_logits_b[...,2:]], dim=-1)
+        loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
         losses = {'loss_ce': loss_ce}
         losses['loss_ce_b'] = loss_ce_b
 
@@ -791,7 +794,8 @@ class PostProcess(nn.Module):
         try:
             # prob_binary = out_logits_b.softmax(-1)[..., 1:2]
             # prob_bbox = (prob_binary > 0.8).float() * prob_binary
-            prob = out_logits.sigmoid()
+            prob_binary = out_logits_b[..., 2:]
+            prob = F.softmax(torch.cat([out_logits, prob_binary], dim=-1), -1)
         except:
             prob = out_logits.sigmoid()
 
