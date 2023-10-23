@@ -40,7 +40,7 @@ CONFIG:
 
   VAL:
     BATCH_SIZE: 1
-    FREQ: 2
+    FREQ: 5
     PUT_GT: False
     TYPE: "frame"
 
