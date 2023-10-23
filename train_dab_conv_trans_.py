@@ -28,7 +28,15 @@ def read_file_to_list(file_path):
     return ip_list
 
 def main_worker(cfg):
-
+    
+    random.seed(cfg.CONFIG.RANDOM_SEED)
+    np.random.seed(cfg.CONFIG.RANDOM_SEED)
+    torch.manual_seed(cfg.CONFIG.RANDOM_SEED)
+    torch.cuda.manual_seed(cfg.CONFIG.RANDOM_SEED)
+    torch.cuda.manual_seed_all(cfg.CONFIG.RANDOM_SEED)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+    
     # create tensorboard and logs
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
         # tb_logdir = build_log_dir(cfg)
@@ -185,6 +193,8 @@ if __name__ == '__main__':
 
     cfg = get_cfg_defaults()
     cfg.merge_from_file(args.config_file)
+    
+    cfg.CONFIG.RANDOM_SEED = args.random_seed
     study = os.environ["NSML_STUDY"]
     run = os.environ["NSML_RUN_NAME"].split("/")[-1]
 
