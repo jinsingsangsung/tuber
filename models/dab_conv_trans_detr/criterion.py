@@ -18,7 +18,7 @@ class SetCriterionAVA(nn.Module):
     """
 
     def __init__(self, weight, num_classes, num_queries, matcher, weight_dict, eos_coef, losses, data_file,
-                 evaluation=False):
+                 evaluation=False, label_smoothing_alpha=0.0):
         """ Create the criterion.
         Parameters
             num_classes: number of object categories, omitting the special no-object category
@@ -42,6 +42,7 @@ class SetCriterionAVA(nn.Module):
         self.register_buffer('empty_weight', empty_weight)
         self.focal_loss_alpha = 0.25
         self.focal_loss_gamma = 2.0
+        self.label_smoothing_alpha = label_smoothing_alpha
 
     def loss_labels(self, outputs, targets, indices, num_boxes, log=True):
         """Classification loss (NLL)
@@ -61,7 +62,17 @@ class SetCriterionAVA(nn.Module):
             pass
         src_logits_sig = src_logits.sigmoid()
         target_classes_o = torch.cat([t["labels"][J] for t, (_, J) in zip(targets, indices)])
-        target_classes = torch.full(src_logits.shape, 0,
+        target_classes_o_ = target_classes_o
+        true_label = 1
+        false_label = 0
+        if self.label_smoothing_alpha:
+            alpha = self.label_smoothing_alpha
+            true_label = (1-alpha)*true_label + alpha/2
+            false_label = (1-alpha)*false_label + alpha/2
+            target_classes_o[target_classes_o == 0] = false_label
+            target_classes_o[target_classes_o == 1] = true_label
+        
+        target_classes = torch.full(src_logits.shape, false_label,
                                     dtype=torch.float32, device=src_logits.device)
         # rebalance way 1:
         weights = torch.full(src_logits.shape[:2], 1,
@@ -85,7 +96,7 @@ class SetCriterionAVA(nn.Module):
             pass
         if log:
             # docs this should probably be a separate loss, not hacked in this one here
-            losses['class_error'] = 100 - accuracy_sigmoid(src_logits[idx], target_classes_o)[0]
+            losses['class_error'] = 100 - accuracy_sigmoid(src_logits[idx], target_classes_o_)[0]
 
         return losses
 
@@ -281,14 +292,13 @@ class SetCriterion(nn.Module):
                                     dtype=torch.int64, device=src_logits.device)
         # bs*t, n_q 
         target_classes[idx] = target_classes_o
-        # target_classes_onehot = F.one_hot(target_classes, 22).float()
+        target_classes_onehot = F.one_hot(target_classes, 22).float()[...,:-1]
         # loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
-        # weights = torch.full(src_logits.shape[:2], 1,
-                            #  dtype=torch.float32, device=src_logits.device)
-        # weights[idx] = self.weight
-        # loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot, weights) / 10     
-        src_logits = torch.cat([src_logits, src_logits_b[...,2:]], dim=-1)
-        loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
+        weights = torch.full(src_logits.shape[:2], 1, dtype=torch.float32, device=src_logits.device)
+        weights[idx] = self.weight
+        loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot, weights)   
+        # src_logits = torch.cat([src_logits, src_logits_b[...,2:]], dim=-1)
+        # loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
         losses = {'loss_ce': loss_ce}
         losses['loss_ce_b'] = loss_ce_b
 
