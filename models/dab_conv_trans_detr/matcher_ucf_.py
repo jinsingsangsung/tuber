@@ -11,6 +11,7 @@ from torch import nn
 from utils.box_ops import box_cxcywh_to_xyxy, generalized_box_iou
 from evaluates.utils import compute_video_map
 from models.dab_new_detr.segmentation import sigmoid_focal_loss, dice_loss
+
 class HungarianMatcher(nn.Module):
     """This class computes an assignment between the targets and the predictions of the network
 
@@ -100,7 +101,7 @@ class HungarianMatcher(nn.Module):
         cost_bbox = torch.cdist(out_bbox, valid_tgt_bbox, p=1)
         cost_giou = -generalized_box_iou(box_cxcywh_to_xyxy(out_bbox), box_cxcywh_to_xyxy(valid_tgt_bbox))
         
-        class_using_cost = False
+        class_using_cost = True
         if class_using_cost:
             # frame-wise hungarian matching
             tgt_classes = torch.cat([v["labels"] for v in targets]) # num_actors, t
@@ -108,9 +109,14 @@ class HungarianMatcher(nn.Module):
                 tgt_classes = tgt_classes[None]
             tgt_classes = tgt_classes[:, front_pad:end_pad]
             tgt_classes = tgt_classes.transpose(0,1).contiguous().flatten()
-            tgt_classes = tgt_classes[tgt_classes!=num_classes]
-
-            assert num_valid_boxes == len(tgt_classes)
+            tgt_classes = tgt_classes[tgt_classes!=num_classes-1]
+            
+            try:
+                assert num_valid_boxes == len(tgt_classes)
+            except:
+                print(num_valid_boxes)
+                print(len(tgt_classes))
+                import pdb; pdb.set_trace()
             
             # tgt_classes_onehot = F.one_hot(tgt_classes, num_classes).float()
             # out_prob = torch.cat([outputs["pred_logits"], outputs["pred_logits_b"][..., 2:]], dim=-1).flatten(0,2)

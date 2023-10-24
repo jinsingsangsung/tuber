@@ -325,7 +325,7 @@ class Transformer(nn.Module):
         valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
 
         # encoder
-        with torch.autocast("cuda", dtype=torch.float16, enabled=False):
+        with torch.autocast("cuda", dtype=torch.float16, enabled=True):
             memory = self.encoder(src_flatten.float(), spatio_temporal_shapes, level_start_index, valid_ratios, lvl_pos_embed_flatten, mask_flatten)
         
         # revert to the original shape
@@ -386,7 +386,7 @@ class Transformer(nn.Module):
         pos_embed = rearrange(pos_embed, "B C T H W L -> L (H W) (B T) C")
         mask = rearrange(mask, "B T H W L -> (B T) (H W) L")[..., 0]
 
-        with torch.autocast("cuda", dtype=torch.float16, enabled=False):
+        with torch.autocast("cuda", dtype=torch.float16, enabled=True):
             hs, cls_hs, references = self.decoder(tgt, memory, memory_key_padding_mask=mask,
                             pos=pos_embed, refpoints_unsigmoid=refpoint_embed, orig_res=(h,w))
         return hs, cls_hs, references
@@ -1036,7 +1036,7 @@ def build_transformer(cfg):
         activation="relu",
         num_patterns=cfg.CONFIG.MODEL.NUM_PATTERNS,
         bbox_embed_diff_each_layer=cfg.CONFIG.MODEL.BBOX_EMBED_DIFF_EACH_LAYER,
-        num_classes=cfg.CONFIG.DATA.NUM_CLASSES,
+        num_classes=cfg.CONFIG.DATA.NUM_CLASSES if 'ava' in cfg.CONFIG.DATA.DATASET_NAME else cfg.CONFIG.DATA.NUM_CLASSES+1,
         temp_len=cfg.CONFIG.DATA.TEMP_LEN,
     )
 

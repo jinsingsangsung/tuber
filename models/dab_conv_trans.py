@@ -288,7 +288,7 @@ class DETR(nn.Module):
                 outputs_coord = outputs_coord.reshape(-1, bs, self.num_queries, 4)
                 outputs_class_b = outputs_class_b.reshape(-1, bs, self.num_queries, 3)
         else:
-            outputs_class = outputs_class.reshape(-1, bs, t, self.num_queries, self.num_classes)
+            outputs_class = outputs_class.reshape(-1, bs, t, self.num_queries, self.num_classes+1)
             outputs_coord = outputs_coord.reshape(-1, bs, t, self.num_queries, 4)
             outputs_class_b = outputs_class_b.reshape(-1, bs, t, self.num_queries, 3)
         out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1], 'pred_logits_b': outputs_class_b[-1],}

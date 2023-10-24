@@ -117,4 +117,4 @@ CONFIG:
     SAVE_FREQ: 5
     RES_DIR: Dab_conv_trans_decsasde_CSN152_{}-{}/res
     EXP_NAME: Dab_conv_trans_decsasde_CSN152_{}-{}
-    DISPLAY_FREQ: 1000
+    DISPLAY_FREQ: 500

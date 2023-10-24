@@ -571,8 +571,8 @@ class SetCriterionUCF(nn.Module):
             weights[idx] = self.weight
         weights = weights[..., None]
         # loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot[...,:-1], weights) / len(src_logits)
-        src_logits_b_ = outputs['pred_logits_b'][:,front_pad:end_pad,:,2:].flatten(0,1)
-        src_logits = torch.cat([src_logits, src_logits_b_], dim=-1)
+        # src_logits_b_ = outputs['pred_logits_b'][:,front_pad:end_pad,:,2:].flatten(0,1)
+        # src_logits = torch.cat([src_logits, src_logits_b_], dim=-1)
         loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)                
         # src_logits = torch.cat([src_logits, src_logits_b[...,2:]], dim=-1)
         # loss_ce = F.cross_entropy(src_logits.flatten(1,2).transpose(1, 2), target_classes.flatten(1,2), self.empty_weight)
@@ -613,8 +613,9 @@ class SetCriterionUCF(nn.Module):
             idx = self._get_src_permutation_idx(indices)
         except:
             device = outputs["pred_boxes"].device
-            return {'loss_bbox': torch.tensor(0, device=device),
-                    'loss_giou': torch.tensor(0, device=device)}
+            loss = (0*outputs["pred_boxes"]).sum()
+            return {'loss_bbox': loss,
+                    'loss_giou': loss}
         
         # idx[0]: range(bs*t)
         # idx[1]: the matched idx corresponds to idx[0]
