@@ -819,6 +819,7 @@ class TransformerDecoderLayer(nn.Module):
 
         self.dim_feedforward = dim_feedforward
         self.dropout_rate = dropout
+        self.norm_ = nn.LayerNorm(d_model)
 
     def with_pos_embed(self, tensor, pos: Optional[Tensor]):
         return tensor if pos is None else tensor + pos
@@ -860,7 +861,9 @@ class TransformerDecoderLayer(nn.Module):
         # Apply projections here
         # shape: num_queries x batch_size x 256
         lvl_w = self.lvl_w_embed(tgt) # num_queries, BT, num_levels
+        lvl_w = lvl_w.softmax(-1)
         q_memory = torch.einsum("ntl,lhtc->nhtc", lvl_w, memory) # (N_q, BT, L), (L, HW, BT, C),  ->  N_q, HW, BT, C
+        q_memory = self.norm_(q_memory)
         if self.query_specific_key:
             memory = q_memory
         else:

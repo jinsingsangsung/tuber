@@ -28,7 +28,15 @@ def read_file_to_list(file_path):
     return ip_list
 
 def main_worker(cfg):
-
+    
+    random.seed(cfg.CONFIG.RANDOM_SEED)
+    np.random.seed(cfg.CONFIG.RANDOM_SEED)
+    torch.manual_seed(cfg.CONFIG.RANDOM_SEED)
+    torch.cuda.manual_seed(cfg.CONFIG.RANDOM_SEED)
+    torch.cuda.manual_seed_all(cfg.CONFIG.RANDOM_SEED)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+    
     # create tensorboard and logs
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
         # tb_logdir = build_log_dir(cfg)
@@ -143,7 +151,7 @@ def main_worker(cfg):
                 epoch % cfg.CONFIG.LOG.SAVE_FREQ == 0 or epoch == cfg.CONFIG.TRAIN.EPOCH_NUM - 1):
             save_checkpoint(cfg, epoch, model, max_accuracy, optimizer, lr_scheduler, scaler)
 
-        if (epoch % cfg.CONFIG.VAL.FREQ == 0 or epoch == cfg.CONFIG.TRAIN.EPOCH_NUM - 1):
+        if (epoch == 9 or epoch % cfg.CONFIG.VAL.FREQ == 0 or epoch == cfg.CONFIG.TRAIN.EPOCH_NUM - 1):
             if cfg.CONFIG.DATA.DATASET_NAME == 'ava':
                 validate_tuber_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)
             elif cfg.CONFIG.DATA.DATASET_NAME == 'jhmdb':
@@ -185,6 +193,8 @@ if __name__ == '__main__':
 
     cfg = get_cfg_defaults()
     cfg.merge_from_file(args.config_file)
+    
+    cfg.CONFIG.RANDOM_SEED = args.random_seed
     study = os.environ["NSML_STUDY"]
     run = os.environ["NSML_RUN_NAME"].split("/")[-1]
 
