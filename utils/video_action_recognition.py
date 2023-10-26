@@ -1095,9 +1095,9 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
         # read results
         if cfg.CONFIG.DATA.DATASET_NAME == "ucf":
-            evaluater = STDetectionEvaluaterUCF(class_num=cfg.CONFIG.DATA.NUM_CLASSES)
+            evaluater = STDetectionEvaluaterUCF(class_num=cfg.CONFIG.DATA.NUM_CLASSES, query_num=cfg.CONFIG.MODEL.QUERY_NUM)
         elif cfg.CONFIG.DATA.DATASET_NAME == "jhmdb":
-            evaluater = STDetectionEvaluaterJHMDB(class_num=cfg.CONFIG.DATA.NUM_CLASSES)
+            evaluater = STDetectionEvaluaterJHMDB(class_num=cfg.CONFIG.DATA.NUM_CLASSES, query_num=cfg.CONFIG.MODEL.QUERY_NUM)
         file_path_lst = [tmp_GT_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, x) for x in range(cfg.DDP_CONFIG.GPU_WORLD_SIZE)]
         evaluater.load_GT_from_path(file_path_lst)
         file_path_lst = [tmp_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, x) for x in range(cfg.DDP_CONFIG.GPU_WORLD_SIZE)]
