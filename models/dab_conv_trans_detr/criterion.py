@@ -798,8 +798,9 @@ class PostProcess(nn.Module):
         try:
             # prob_binary = out_logits_b.softmax(-1)[..., 1:2]
             # prob_bbox = (prob_binary > 0.8).float() * prob_binary
-            prob_binary = out_logits_b[..., 2:]
-            prob = F.softmax(torch.cat([out_logits, prob_binary], dim=-1), -1)
+            # prob_binary = out_logits_b[..., 2:]
+            # prob = F.softmax(torch.cat([out_logits, prob_binary], dim=-1), -1)
+            prob = F.softmax(out_logits, -1)
         except:
             prob = out_logits.sigmoid()
 
