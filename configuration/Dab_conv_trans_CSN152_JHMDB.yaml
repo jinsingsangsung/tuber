@@ -50,8 +50,8 @@ CONFIG:
     DATA_PATH: '/mnt/tmp/JHMDB/Frames'
     NUM_CLASSES: 21
     MULTIGRID: False
-    IMG_SIZE: 224
-    IMG_RESHAPE_SIZE: 256
+    IMG_SIZE: 256
+    IMG_RESHAPE_SIZE: 288
     TEMP_LEN: 40
     FRAME_RATE: 1
 
@@ -95,16 +95,16 @@ CONFIG:
 
   MATCHER:
     COST_CLASS: 1
-    COST_BBOX: 1
-    COST_GIOU: 1
+    COST_BBOX: 5
+    COST_GIOU: 2
     BNY_LOSS: True
     BEFORE: False
 
   LOSS_COFS:
     MASK_COF: 1
     DICE_COF: 1
-    BBOX_COF: 1
-    GIOU_COF: 1
+    BBOX_COF: 5
+    GIOU_COF: 2
     EOS_COF: 0.1
     WEIGHT: 10
     WEIGHT_CHANGE: 1000
