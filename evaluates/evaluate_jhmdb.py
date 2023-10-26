@@ -34,9 +34,10 @@ class STDetectionEvaluaterJHMDB(object):
         evaluate(): run evaluation code
     '''
 
-    def __init__(self, tiou_thresholds=[0.5], load_from_dataset=False, class_num=21):
+    def __init__(self, tiou_thresholds=[0.5], load_from_dataset=False, class_num=21, query_num=15):
         categories = parse_id()
         self.class_num = class_num
+        self.query_num = query_num
         self.categories = categories
         self.tiou_thresholds = tiou_thresholds
         self.lst_pascal_evaluator = []
@@ -132,7 +133,7 @@ class STDetectionEvaluaterJHMDB(object):
 
     def load_detection_from_path(self, file_lst):
         # loading data from files
-        num_queries = 10
+        num_queries = self.query_num
         t_end = time.time()
         sample_dict_per_image = {}
         all_boxes = {} # for video-map
