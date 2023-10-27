@@ -100,9 +100,8 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
     end = time.time()
     model.train()
     criterion.train()
-    # save_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
-    save_path = os.path.join("/model/jinsung", cfg.CONFIG.LOG.EXP_NAME)
-    if not os.pathexists(save_path): os.makedirs(save_path)
+    save_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
+    if not os.path.exists(save_path): os.makedirs(save_path)
 
     # header = 'Epoch: [{}]'.format(epoch)
     # print_freq = 10
