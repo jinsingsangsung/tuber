@@ -224,7 +224,8 @@ if __name__ == '__main__':
     s.connect(("8.8.8.8", 80))
     this_ip = s.getsockname()[0] # put this to world_url
     
-    cfg.DDP_CONFIG.WORLD_SIZE = int(os.environ["NSML_WORLD_SIZE"])
+    # cfg.DDP_CONFIG.WORLD_SIZE = int(os.environ["NSML_WORLD_SIZE"])
+    cfg.DDP_CONFIG.WORLD_SIZE = 1
     
     if cfg.DDP_CONFIG.WORLD_SIZE > 1:
         tmp_path = '{}/ip_lists/{}-{}.txt'
