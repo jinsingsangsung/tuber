@@ -151,7 +151,7 @@ def main_worker(cfg):
                 epoch % cfg.CONFIG.LOG.SAVE_FREQ == 0 or epoch == cfg.CONFIG.TRAIN.EPOCH_NUM - 1):
             save_checkpoint(cfg, epoch, model, max_accuracy, optimizer, lr_scheduler, scaler)
 
-        if (epoch == 9 or epoch % cfg.CONFIG.VAL.FREQ == 0 or epoch == cfg.CONFIG.TRAIN.EPOCH_NUM - 1):
+        if (epoch >= 9 or epoch % cfg.CONFIG.VAL.FREQ == 0 or epoch == cfg.CONFIG.TRAIN.EPOCH_NUM - 1):
             if cfg.CONFIG.DATA.DATASET_NAME == 'ava':
                 validate_tuber_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)
             elif cfg.CONFIG.DATA.DATASET_NAME == 'jhmdb':
