@@ -17,7 +17,8 @@ CONFIG:
   USE_LOCATION: False
   EFFICIENT: False
   TRAIN:
-    EPOCH_NUM: 15
+    CONTINUE: False
+    EPOCH_NUM: 13
     BATCH_SIZE: 2
     LR: 1e-4
     MIN_LR: 1e-6 # only if cosine scheduler is used
@@ -47,7 +48,7 @@ CONFIG:
     DATASET_NAME: 'ava'
     LABEL_PATH: '/home/nsml/assets/ava_action_list_v2.1_for_activitynet_2018.pbtxt'
     ANNO_PATH: '/home/nsml/assets/ava_{}_v22_updated.json'
-    DATA_PATH: '/mnt/tmp/frames/{}/'
+    DATA_PATH: '/home/data/frames/{}/'
     NUM_CLASSES: 80
     MULTIGRID: False
     IMG_SIZE: 256
@@ -77,9 +78,8 @@ CONFIG:
     SAMPLE_RATE: 4
     PRETRAINED: True
     PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/ViT-B_K400_16x4.pth"
-    PRETRAIN_TRANSFORMER_DIR: "/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/AVA_Tuber/Decsasde_CSN50_scratch_270-376/checkpoints/ckpt_epoch_12.pth"
+    PRETRAIN_TRAMSFORMER_DIR: "../pretrained_models/transformer/Decsasde_CSN50.pth"
     PRETRAINED_PATH: ""
-    LOAD: False
     LOAD_FC: False
     LOAD_DETR: True
     POSITION_EMBEDDING: "sine"
@@ -113,11 +113,11 @@ CONFIG:
     CLIPS_MAX_NORM: 0.1
 
   LOG:
-    BASE_PATH: '/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/AVA_Tuber'
+    BASE_PATH: '/home/nsml/results'
     LOG_DIR: 'tb_log'
     SAVE_DIR: 'checkpoints'
-    EVAL_DIR: '/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/AVA_Tuber/eval'
-    SAVE_FREQ: 5
+    EVAL_DIR: '/home/nsml/results'
+    SAVE_FREQ: 1
     RES_DIR: Dab_conv_trans_decsasde_ViT_B_{}-{}/res
     EXP_NAME: Dab_conv_trans_decsasde_ViT_B_{}-{}
     DISPLAY_FREQ: 1000

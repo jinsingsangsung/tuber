@@ -46,7 +46,7 @@ def main_worker(cfg):
     else:
         writer = None
 
-    if int(os.getenv('NSML_SESSION', '0')) > 0:
+    if cfg.CONFIG.TRAIN.CONTINUE > 0:
         cfg.CONFIG.MODEL.LOAD = True
         cfg.CONFIG.MODEL.LOAD_FC = True
         cfg.CONFIG.MODEL.LOAD_DETR = False
@@ -109,11 +109,14 @@ def main_worker(cfg):
     else:
         scaler = None  
 
-    study = os.environ["NSML_STUDY"]
-    run = os.environ["NSML_RUN_NAME"].split("/")[-1]
-    exp_name = cfg.CONFIG.LOG.EXP_NAME.format(study, run)
+    # study = os.environ["NSML_STUDY"]
+    # run = os.environ["NSML_RUN_NAME"].split("/")[-1]
+    now = datetime.datetime.now()
+    date = now.strftime("%Y-%m-%d")
+    time = now.strftime("%H:%M")
+    exp_name = cfg.CONFIG.LOG.EXP_NAME.format(date, time)
 
-    if int(os.getenv('NSML_SESSION', '0')) > 0:
+    if cfg.CONFIG.TRAIN.CONTINUE:
         # 실험 이어하기의 경우
         epochs_folder = os.listdir(os.path.join(cfg.CONFIG.LOG.BASE_PATH, exp_name, cfg.CONFIG.LOG.SAVE_DIR))
         epochs_folder.sort()
@@ -151,7 +154,7 @@ def main_worker(cfg):
                 epoch % cfg.CONFIG.LOG.SAVE_FREQ == 0 or epoch == cfg.CONFIG.TRAIN.EPOCH_NUM - 1):
             save_checkpoint(cfg, epoch, model, max_accuracy, optimizer, lr_scheduler, scaler)
 
-        if (epoch == 9 or epoch % cfg.CONFIG.VAL.FREQ == 0 or epoch == cfg.CONFIG.TRAIN.EPOCH_NUM - 1):
+        if (epoch >= 9 or epoch % cfg.CONFIG.VAL.FREQ == 0 or epoch == cfg.CONFIG.TRAIN.EPOCH_NUM - 1):
             if cfg.CONFIG.DATA.DATASET_NAME == 'ava':
                 validate_tuber_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)
             elif cfg.CONFIG.DATA.DATASET_NAME == 'jhmdb':
@@ -195,8 +198,11 @@ if __name__ == '__main__':
     cfg.merge_from_file(args.config_file)
     
     cfg.CONFIG.RANDOM_SEED = args.random_seed
-    study = os.environ["NSML_STUDY"]
-    run = os.environ["NSML_RUN_NAME"].split("/")[-1]
+    now = datetime.datetime.now()
+    study = now.strftime("%Y-%m-%d")
+    run = now.strftime("%H:%M")
+    # study = os.environ["NSML_STUDY"]
+    # run = os.environ["NSML_RUN_NAME"].split("/")[-1]
 
     cfg.CONFIG.LOG.RES_DIR = cfg.CONFIG.LOG.RES_DIR.format(study, run)
     cfg.CONFIG.LOG.EXP_NAME = cfg.CONFIG.LOG.EXP_NAME.format(study, run)

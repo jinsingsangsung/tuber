@@ -100,7 +100,10 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
     end = time.time()
     model.train()
     criterion.train()
-    save_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
+    # save_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
+    save_path = os.path.join("/model/jinsung", cfg.CONFIG.LOG.EXP_NAME)
+    if not os.pathexists(save_path): os.makedirs(save_path)
+
     # header = 'Epoch: [{}]'.format(epoch)
     # print_freq = 10
     # batch_bar = tqdm(total=len(data_loader), dynamic_ncols=True, leave=False, position=0, desc='train_detection')
@@ -262,7 +265,8 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
             # 'loss_ce_b': losses_ce_b.avg,
             })
         # Report JSON data to the NSML metric API server with a simple HTTP POST request.
-        requests.post(os.environ['NSML_METRIC_API'], data=metrics_data)
+        # requests.post(os.environ['NSML_METRIC_API'], data=metrics_data)
+        print(metrics_data)
     except requests.exceptions.RequestException:
         # Sometimes, the HTTP request might fail, but the training process should not be stopped.
         traceback.print_exc()
@@ -559,7 +563,8 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
                 })
         try:
             # Report JSON data to the NSML metric API server with a simple HTTP POST request.
-            requests.post(os.environ['NSML_METRIC_API'], data=metrics_data)
+            # requests.post(os.environ['NSML_METRIC_API'], data=metrics_data)
+            print(metrics_data)
         except requests.exceptions.RequestException:
             # Sometimes, the HTTP request might fail, but the training process should not be stopped.
             traceback.print_exc()    
@@ -591,7 +596,8 @@ def validate_tuber_jhmdb_detection(cfg, model, criterion, postprocessors, data_l
     buff_GT_anno = []
     buff_GT_id = []
 
-    save_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
+    # save_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
+    save_path = os.path.join("/model/jinsung", cfg.CONFIG.LOG.EXP_NAME)
     
     if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0:
         tmp_path = "{}/{}".format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR)
