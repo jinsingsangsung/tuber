@@ -37,6 +37,7 @@ CONFIG:
     LR_SCHEDULER:
       NAME: 'multistep'
     CUT_GRADIENT: FALSE
+    SYNCBATCHNORM: False
 
   VAL:
     BATCH_SIZE: 1
