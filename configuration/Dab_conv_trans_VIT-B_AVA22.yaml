@@ -79,7 +79,7 @@ CONFIG:
     SAMPLE_RATE: 4
     PRETRAINED: True
     PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/ViT-B_K400_16x4.pth"
-    PRETRAIN_TRAMSFORMER_DIR: "../pretrained_models/transformer/Decsasde_CSN50.pth"
+    PRETRAIN_TRANSFORMER_DIR: "../pretrained_models/transformer/Decsasde_CSN50.pth"
     PRETRAINED_PATH: ""
     LOAD_FC: False
     LOAD_DETR: True
