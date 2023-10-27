@@ -18,7 +18,7 @@ class SetCriterionAVA(nn.Module):
     """
 
     def __init__(self, weight, num_classes, num_queries, matcher, weight_dict, eos_coef, losses, data_file,
-                 evaluation=False, label_smoothing_alpha=0.0):
+                 evaluation=False, label_smoothing_alpha=0.1):
         """ Create the criterion.
         Parameters
             num_classes: number of object categories, omitting the special no-object category
