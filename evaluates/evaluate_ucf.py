@@ -12,7 +12,12 @@ import math
 
 
 def parse_id():
-    activity_list = ['Basketball', 'BasketballDunk', 'Biking', 'CliffDiving', 'CricketBowling', 'Diving', 'Fencing', 'FloorGymnastics', 'GolfSwing', 'HorseRiding', 'IceDancing', 'LongJump', 'PoleVault', 'RopeClimbing', 'SalsaSpin', 'SkateBoarding', 'Skiing', 'Skijet', 'SoccerJuggling', 'Surfing', 'TennisSwing', 'TrampolineJumping', 'VolleyballSpiking', 'WalkingWithDog']
+    activity_list = ['Basketball', 'BasketballDunk', 'Biking', 'CliffDiving',
+                     'CricketBowling', 'Diving', 'Fencing', 'FloorGymnastics',
+                     'GolfSwing', 'HorseRiding', 'IceDancing', 'LongJump',
+                     'PoleVault', 'RopeClimbing', 'SalsaSpin', 'SkateBoarding',
+                     'Skiing', 'Skijet', 'SoccerJuggling', 'Surfing', 'TennisSwing',
+                     'TrampolineJumping', 'VolleyballSpiking', 'WalkingWithDog']
     categories = []
     for i, act_name in enumerate(activity_list):
         categories.append({'id': i + 1, 'name': act_name})
