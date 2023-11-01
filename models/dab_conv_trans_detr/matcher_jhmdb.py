@@ -93,7 +93,7 @@ class HungarianMatcher(nn.Module):
         cost_bbox = torch.cdist(out_bbox, tgt_bbox, p=1)
         cost_giou = -generalized_box_iou(box_cxcywh_to_xyxy(out_bbox), box_cxcywh_to_xyxy(tgt_bbox))
         
-        class_using_cost = False
+        class_using_cost = True
         if class_using_cost:
             # frame-wise hungarian matching
             tgt_classes = torch.cat([v["labels"] for v in targets]) # num_actors, t
