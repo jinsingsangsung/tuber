@@ -103,6 +103,7 @@ CONFIG:
     DICE_COF: 5
     BBOX_COF: 5
     GIOU_COF: 2
+    PERSON_COF: 1    
     EOS_COF: 0.1
     WEIGHT: 10
     WEIGHT_CHANGE: 1000

@@ -342,7 +342,7 @@ def build_model(cfg):
     matcher = build_matcher(cfg)
     weight_dict = {'loss_ce': cfg.CONFIG.LOSS_COFS.DICE_COF, 'loss_bbox': cfg.CONFIG.LOSS_COFS.BBOX_COF}
     weight_dict['loss_giou'] = cfg.CONFIG.LOSS_COFS.GIOU_COF
-    weight_dict['loss_ce_b'] = 1
+    weight_dict['loss_ce_b'] = cfg.CONFIG.LOSS_COFS.PERSON_COF
     # if cfg.CONFIG.MATCHER.BNY_LOSS:
     #     weight_dict['loss_ce_b'] = 1
     #     print("loss binary weight: {}".format(weight_dict['loss_ce_b']))
