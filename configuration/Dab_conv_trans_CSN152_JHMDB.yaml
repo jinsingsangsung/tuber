@@ -94,7 +94,7 @@ CONFIG:
     RM_BINARY: False
 
   MATCHER:
-    COST_CLASS: 5
+    COST_CLASS: 1
     COST_BBOX: 5
     COST_GIOU: 2
     BNY_LOSS: True
@@ -117,7 +117,7 @@ CONFIG:
     LOG_DIR: 'tb_log'
     SAVE_DIR: 'checkpoints'
     EVAL_DIR: '/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/JHMDB_Tuber/eval'
-    SAVE_FREQ: 5
+    SAVE_FREQ: 10
     RES_DIR: Dab_conv_trans_decsasde_CSN152_{}-{}/res
     EXP_NAME: Dab_conv_trans_decsasde_CSN152_{}-{}
-    DISPLAY_FREQ: 50
+    DISPLAY_FREQ: 100
