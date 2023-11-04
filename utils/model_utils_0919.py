@@ -20,28 +20,29 @@ def load_detr_weights(model, pretrain_dir, cfg):
     distributed = cfg.DDP_CONFIG.DISTRIBUTED
     for k, v in checkpoint['model'].items():
         if k.split('.')[1] == 'transformer':
-            parameters_of_interest = [
-                "cls_linear1", "cls_linear2", "cls_norm", "conv_norm", "cls_linear1_", "cls_linear2_", "cls_norm_",
-                "cross_attn", "self.attn", "conv_blocks", "k_proj", "v_proj", "cls_qpos_sine_proj", "norm1", "linear",
-            ]
-            try:
-                param_name = k.split('.')[3]
-            except:
-                pretrained_dict.update({k: v})
-                continue
-            if param_name in parameters_of_interest:
-                for i in range(6):
-                    new_k_front = ".".join(k.split('.')[:3])
-                    new_k_end = ".".join(k.split('.')[4:])
-                    new_k = new_k_front + f".cls_layers.{i}.{param_name}." + new_k_end
-                    pretrained_dict.update(
-                        {new_k: v}
-                    )
-                """
-                module.transformer.decoder.{}.weight --> module.transformer.decoder.cls_layers[i].{}.weight
-                """
-            else:
-                pretrained_dict.update({k: v})
+            # parameters_of_interest = [
+            #     "cls_linear1", "cls_linear2", "cls_norm", "conv_norm", "cls_linear1_", "cls_linear2_", "cls_norm_",
+            #     "cross_attn", "self.attn", "conv_blocks", "k_proj", "v_proj", "cls_qpos_sine_proj", "norm1", "linear",
+            # ]
+            # try:
+            #     param_name = k.split('.')[3]
+            # except:
+            #     pretrained_dict.update({k: v})
+            #     continue
+            # if param_name in parameters_of_interest:
+            #     print("copying parmas!!!!!!!!: ", param_name)
+            #     for i in range(6):
+            #         new_k_front = ".".join(k.split('.')[:3])
+            #         new_k_end = ".".join(k.split('.')[4:])
+            #         new_k = new_k_front + f".cls_layers.{i}.{param_name}." + new_k_end
+            #         pretrained_dict.update(
+            #             {new_k: v}
+            #         )
+            #     """
+            #     module.transformer.decoder.{}.weight --> module.transformer.decoder.cls_layers[i].{}.weight
+            #     """
+            # else:
+            pretrained_dict.update({k: v})
         elif k.split('.')[1] == 'bbox_embed':
             pretrained_dict.update({k: v})
         elif k.split('.')[1] == 'query_embed':
@@ -107,7 +108,7 @@ def deploy_model(model, cfg, is_tuber=True):
     log_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
     
     if cfg.CONFIG.TRAIN.SYNCBATCHNORM:
-        model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+        model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)    
     
     if cfg.DDP_CONFIG.DISTRIBUTED:
         if cfg.DDP_CONFIG.GPU is not None:
@@ -121,6 +122,7 @@ def deploy_model(model, cfg, is_tuber=True):
             # else:
             model = torch.nn.parallel.DistributedDataParallel(model,
                                                             device_ids=[cfg.DDP_CONFIG.GPU],
+                                                            find_unused_parameters=True,
                                                             )
         else:
             model.cuda()
@@ -130,7 +132,7 @@ def deploy_model(model, cfg, is_tuber=True):
             #                                                       )
             # else:
             model = torch.nn.parallel.DistributedDataParallel(model,
-                                                            #   find_unused_parameters=True,
+                                                              find_unused_parameters=True,
                                                                 )       
     elif cfg.DDP_CONFIG.GPU is not None:
         torch.cuda.set_device(cfg.DDP_CONFIG.GPU)
