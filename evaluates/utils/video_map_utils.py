@@ -191,6 +191,13 @@ def overlap2d(b1, b2):
     height = np.maximum(0, ymax-ymin)   
     return width*height
 
+def iou2d(b1, b2):
+    if b1.ndim == 1: b1 = b1[None,:]
+    if b2.ndim == 1: b2 = b2[None,:]
+    assert b2.shape[0]==1
+    o = overlap2d(b1, b2)
+    return o / ( area2d(b1) + area2d(b2) - o ) 
+
 def iou3d(b1, b2):
     assert b1.shape[0] == b2.shape[0]
     assert np.all(b1[:,0] == b2[:,0])

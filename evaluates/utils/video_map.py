@@ -16,7 +16,7 @@ class VideoMAPEvaluator(object):
     def add_pred(self, all_boxes):
         self.all_boxes = all_boxes
 
-    def evaluate_videoAP(self, bTemporal = True, prior_length = None):
+    def evaluate_videoAP(self, bTemporal = True, prior_length=None):
         '''
         gt_videos: {vname:{tubes: [[frame_index, x1,y1,x2,y2]], gt_classes: vlabel}} 
         all_boxes: {imgname:{cls_ind:array[x1,y1,x2,y2, cls_score]}}
@@ -48,6 +48,8 @@ class VideoMAPEvaluator(object):
                     curVideo = "_".join(keys[i].split('_')[:-1])
                     frame_index = int(keys[i].split('_')[-1])
                     img_cls_dets = img_boxes[keys[i]][cls_ind]
+                    # if len(img_cls_dets) == 0:
+                        # import pdb; pdb.set_trace()
                     v_dets.append([frame_index, img_cls_dets])
                     # frame_index += 1
                     if preVideo!=curVideo:
@@ -80,13 +82,14 @@ class VideoMAPEvaluator(object):
             #     video_idx: (i % num_classes) + 1
             #     list of n frames that has bounding boxes, confidence scores
             pred_cls = [p[1:] for p in pred_videos_format if p[0]==cls_ind]
+            # if bTemporal: 
+                # cls_len = prior_length[cls_ind]
+            # else:
+                # cls_len = None            
             cls_len = None
-            try:
-                ap = video_ap_one_class(gt, pred_cls, iou_thresh, False, cls_len)
-            except:
-                ap = video_ap_one_class(gt, pred_cls, iou_thresh, bTemporal, cls_len)
+            ap = video_ap_one_class(gt, pred_cls, iou_thresh, bTemporal, cls_len)
             ap_all.append(ap)
-            print(cls, ap)
+            print("[v-mAP] ", cls, ap)
             metrics[cls] = ap
             # print(cls, metrics[cls])
         metrics["video-mAP@{}IOU".format(self.iou)] = np.mean(ap_all)
@@ -240,15 +243,40 @@ def video_ap_one_class(gt, pred_videos, iou_thresh = 0.2, bTemporal = False, gtl
             if len(gt_this) > 0:
                 if bTemporal:
                     iou = np.array([iou3dt(np.array(g), boxes[:, :5]) for g in gt_this])
-                else:            
-                    if boxes.shape[0] > gt_this[0].shape[0]:
-                        # in case some frame don't have gt 
-                        iou = np.array([iou3d(g, boxes[int(g[0,0]-1):int(g[-1,0]),:5]) for g in gt_this]) 
-                    elif boxes.shape[0]<gt_this[0].shape[0]:
-                        # in flow case 
-                        iou = np.array([iou3d(g[int(boxes[0,0]-1):int(boxes[-1,0]),:], boxes[:,:5]) for g in gt_this]) 
-                    else:
-                        iou = np.array([iou3d(g, boxes[:,:5]) for g in gt_this]) 
+                else:
+                    iou = []
+                    for g_ in gt_this:
+                        if boxes.shape[0] > g_.shape[0]:
+                            # in case some frame don't have gt 
+                            iou.append(iou3d(g_, boxes[int(g_[0,0]-1):int(g_[-1,0]),:5]))
+                            # try:
+                            #     iou = np.array([iou3d(g_, boxes[int(g_[0,0]-1):int(g_[-1,0]),:5]) for g_ in gt_this]) 
+                            # except:
+                            #     print("case1")
+                            #     print(gt_v_index)
+                            #     print([g[0] for g in gt])
+                            #     import pdb; pdb.set_trace()
+                        elif boxes.shape[0]<g_.shape[0]:
+                            # in flow case
+                            iou.append(iou3d(g_[int(boxes[0,0]-1):int(boxes[-1,0]),:], boxes[:,:5]))
+                            # try:
+                            #     iou = np.array([iou3d(g[int(boxes[0,0]-1):int(boxes[-1,0]),:], boxes[:,:5]) for g in gt_this]) 
+                            # except:
+                            #     print("case2")
+                            #     print(gt_v_index)
+                            #     print([g[0] for g in gt])                            
+                            #     import pdb; pdb.set_trace()
+                        else:
+                            iou.append(iou3d(g_, boxes[:,:5]))
+                            # try:
+                            #     iou = np.array([iou3d(g, boxes[:,:5]) for g in gt_this]) 
+                            # except:
+                            #     print(boxes.shape[0], g_.shape[0])
+                            #     print([g[:, 0:] for g in gt_this])
+                            #     print(boxes[:, 0])                         
+                            #     print("case3")
+                            #     import pdb; pdb.set_trace()
+                    iou = np.array(iou)
 
                 if iou.size > 0: # on ucf101 if invalid annotation ....
                     argmax = np.argmax(iou)
@@ -266,6 +294,56 @@ def video_ap_one_class(gt, pred_videos, iou_thresh = 0.2, bTemporal = False, gtl
 
     return ap
 
+def get_max_subset(x_org, gtL):
+    x = x_org - np.mean(x_org)
+    bestSoFar = 0
+    bestNow = 0
+    bestStartIndexSoFar = -1
+    bestStopIndexSoFar = -1
+    bestStartIndexNow = -1
+    for i in range(x.shape[0]):
+        value = bestNow + x[i]
+        if value > 0:
+            if bestNow == 0:
+                bestStartIndexNow = i
+            bestNow = value
+        else:
+            bestNow = 0
+        if bestNow > bestSoFar:
+            bestSoFar = bestNow
+            bestStopIndexSoFar = i
+            bestStartIndexSoFar = bestStartIndexNow
+#    # search suitable length surrounding: approximate method
+#    L_d = bestStopIndexSoFar-bestStartIndexSoFar
+#    lcost = - (|gt_L - L_d| / gt_L)
+    if gtL>(bestStopIndexSoFar-bestStartIndexSoFar):
+        ext = (gtL - (bestStopIndexSoFar-bestStartIndexSoFar))//2
+        bestStartIndexSoFar -= ext
+        bestStopIndexSoFar += ext      
+    elif gtL<(bestStopIndexSoFar-bestStartIndexSoFar):
+        ext = ((bestStopIndexSoFar-bestStartIndexSoFar) - gtL)//2
+        bestStartIndexSoFar += ext
+        bestStopIndexSoFar -= ext
+
+    if bestStartIndexSoFar<0: bestStartIndexSoFar=0
+    if bestStopIndexSoFar>x.shape[0]: bestStopIndexSoFar=x.shape[0]
+    return bestSoFar, bestStartIndexSoFar, bestStopIndexSoFar
+
+def temporal_check(tubes, gt_L):
+    # nframes x 6 array <frame> <x1> <y1> <x2> <y2> <score>
+    # objective: max ( mean(score[L_d]) - (|gt_L - L_d| / gt_L) )
+    save_tubes = []
+    for tube in tubes:  #bbiou = iou2d(d2[:,1:5],b1)
+        nframes = tube.shape[0]
+        edge_scores = np.array([iou2d(tube[i,1:5],tube[i+1,1:5]) for i in range(nframes-1)]) # +tube[i,5]
+        # if both overlap and cls score are low, then reverse the score, they should be remove from the tube
+        ind = np.where(edge_scores<0.3)[0] + 1  
+        score = tube[:, 5]
+        score[ind] = -score[ind]
+        best_v, beststart, bestend = get_max_subset(score, gt_L)
+        trimed_b = tube[int(beststart):int(bestend), :]
+        save_tubes.append(trimed_b)
+    return save_tubes
 
 def gt_to_videts(gt_v):
     # return  [label, video_index, [[frame_index, x1,y1,x2,y2], [], []] ]

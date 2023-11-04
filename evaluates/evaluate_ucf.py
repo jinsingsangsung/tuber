@@ -9,6 +9,8 @@ import time
 from utils.box_ops import box_iou
 import torch
 import math
+import os
+import pickle
 
 
 def parse_id():
@@ -37,7 +39,7 @@ class STDetectionEvaluaterUCF(object):
         evaluate(): run evaluation code
     '''
 
-    def __init__(self, tiou_thresholds=[0.5], load_from_dataset=False, class_num=24, query_num=15):
+    def __init__(self, tiou_thresholds=[0.5], load_from_dataset=False, class_num=24, query_num=15, data_root="/mnt/tmp/UCF101_v2"):
         categories = parse_id()
         self.class_num = class_num
         self.query_num = query_num
@@ -47,6 +49,15 @@ class STDetectionEvaluaterUCF(object):
         self.video_map_evaluator = []
         self.load_from_dataset = load_from_dataset
         self.exclude_key = []
+        # self.gt_file = os.path.join(data_root, 'splitfiles/finalAnnots.mat')
+        # self.testlist = os.path.join(data_root, 'splitfiles/testlist01.txt')
+        # self.trainlist = os.path.join(data_root, 'splitfiles/UCF101_video_trainlist01.txt')
+        # self._annot_path = os.path.join(data_root, 'UCF101_24Action_Detection_Annotations/UCF101_24_Annotations')
+        # self._data_path = os.path.join(data_root, 'rgb-images')
+        cache_file = os.path.join(data_root, 'UCF101v2-GT.pkl')
+        with open(cache_file, 'rb') as fid:
+            self.dataset = pickle.load(fid, encoding='iso-8859-1')        
+        
         for iou in self.tiou_thresholds:
             self.lst_pascal_evaluator.append(
                 object_detection_evaluation.PascalDetectionEvaluator(categories, matching_iou_threshold=iou)
@@ -71,7 +82,7 @@ class STDetectionEvaluaterUCF(object):
                 data = line.split(' [')[1].split(']')[0].split(',')
                 data = [float(x) for x in data]
                 scores = np.array(data[6:])
-                if not image_key in frame_counter:
+                if not image_key in frame_counter: # sometimes the same GT is duplicated over different gpus
                     frame_counter[image_key] = 0
                 if frame_counter[image_key] == 1:
                     continue
@@ -83,10 +94,12 @@ class STDetectionEvaluaterUCF(object):
                     frame_counter[image_key] = 1
 
                 all_annots.append(line)
-
-                if (data[4] - data[2]) * (data[5] - data[3]) < 10:
-                    self.exclude_key.append(image_key)
+                if [coord==0 for coord in data[2:6]] == [True] * 4:
                     continue
+
+                # if (data[4] - data[2]) * (data[5] - data[3]) < 10:
+                    # self.exclude_key.append(image_key)
+                    # continue
 
                 if not image_key in sample_dict_per_image:
                     sample_dict_per_image[image_key] = {
@@ -95,8 +108,7 @@ class STDetectionEvaluaterUCF(object):
                         'scores': [],
                     }
                 # scores = np.max(scores, axis=-1, keepdims=True)
-
-                for x in range(len(scores)):
+                for x in range(len(scores)): # len(scores): num_classes+1
                     if scores[x] <= 1e-2: continue
                     sample_dict_per_image[image_key]['bbox'].append(
                         np.asarray([data[2], data[3], data[4], data[5]], dtype=float)
@@ -137,6 +149,46 @@ class STDetectionEvaluaterUCF(object):
                 nframes = len(set([d[1] for d in annot_memory]))
                 ntubes = len(annot_memory) // nframes
                 gt_videos[vname]["tubes"] = [np.array(annot_memory[n::ntubes])[np.array(annot_memory[n::ntubes])[:,-1] != 1][:,1:6] for n in range(ntubes) if (1-np.array(annot_memory[n::ntubes])[:, -1]).any()]
+        
+        # for vid in gt_videos.keys():
+        #     if gt_videos[vid]["gt_classes"] == 25:
+        #         raise AssertionError
+        # video_testlist = []
+        # with open(self.testlist, 'r') as file:
+        #     lines = file.readlines()
+        #     for line in lines:
+        #         line = line.rstrip()
+        #         video_testlist.append(line)
+        # gt_data = loadmat(self.gt_file)['annot']
+        # n_videos = gt_data.shape[1]
+        # print('loading gt tubes...')
+        # for i in range(n_videos):
+        #     video_name = gt_data[0][i][1][0]
+        #     if video_name in video_testlist:
+        #         n_tubes = len(gt_data[0][i][2][0])
+        #         v_annotation = {}
+        #         all_gt_boxes = []
+        #         for j in range(n_tubes):  
+        #             gt_one_tube = [] 
+        #             tube_start_frame = gt_data[0][i][2][0][j][1][0][0]
+        #             tube_end_frame = gt_data[0][i][2][0][j][0][0][0]
+        #             tube_class = gt_data[0][i][2][0][j][2][0][0]
+        #             tube_data = gt_data[0][i][2][0][j][3]
+        #             tube_length = tube_end_frame - tube_start_frame + 1
+                
+        #             for k in range(tube_length):
+        #                 gt_boxes = []
+        #                 gt_boxes.append(int(tube_start_frame+k))
+        #                 gt_boxes.append(float(tube_data[k][0]))
+        #                 gt_boxes.append(float(tube_data[k][1]))
+        #                 gt_boxes.append(float(tube_data[k][0]) + float(tube_data[k][2]))
+        #                 gt_boxes.append(float(tube_data[k][1]) + float(tube_data[k][3]))
+        #                 gt_one_tube.append(gt_boxes)
+        #             all_gt_boxes.append(gt_one_tube)
+
+        #         v_annotation['gt_classes'] = tube_class
+        #         v_annotation['tubes'] = np.array(all_gt_boxes, dtype="object")
+        #         gt_videos[video_name] = v_annotation        
 
         # write into evaluator
         for image_key, info in sample_dict_per_image.items():
@@ -167,7 +219,7 @@ class STDetectionEvaluaterUCF(object):
         for path in file_lst:
             print("loading ", path)
             data = open(path).readlines()
-            for line in data:
+            for i, line in enumerate(data):
                 image_key = line.split(' [')[0]
 
                 if not image_key in image_key_dict:
@@ -178,29 +230,27 @@ class STDetectionEvaluaterUCF(object):
                 data = line.split(' [')[1].split(']')[0].split(',')
                 data = [float(x) for x in data]
 
-                scores = np.array(data[4:self.class_num + 4])
-
+                scores = np.array(data[4:])
                 x = np.argmax(scores)
-
+                if image_key in self.exclude_key:
+                    continue
+                
+                scores_i = torch.sqrt(torch.tensor(1-scores[-1]) * scores[:-1]).flatten()
                 # all_boxes[image_key][x+1] = np.asarray([data[0], data[1], data[2], data[3], scores[x]], dtype=float)
                 if not image_key in all_boxes:
                     all_boxes[image_key] = {}
 
-                for s in range(len(scores)):
+                for s in range(self.class_num):
                     if not (s+1) in all_boxes[image_key]:
                         all_boxes[image_key][s+1] = []
-
                     # if s != x:
-                        # all_boxes[image_key][s+1].append([data[0], data[1], data[2], data[3], 0])
-                    if s == x:
-                        all_boxes[image_key][s+1].append([data[0], data[1], data[2], data[3], scores[x]])
-                    
+                    #     all_boxes[image_key][s+1].append([data[0], data[1], data[2], data[3], 0])
+                    if (s == x):
+                        all_boxes[image_key][s+1].append([data[0], data[1], data[2], data[3], scores_i[x]])
+                    # all_boxes[image_key][s+1] = np.asarray([[data[0], data[1], data[2], data[3], scores[s]]], type=float)
                     # if len(all_boxes[image_key][s+1]) == num_queries:
                     #     all_boxes[image_key][s+1] = np.asarray(all_boxes[image_key][s+1], dtype=float)
-
-                if image_key in self.exclude_key:
-                    continue
-                if np.argmax(np.array(data[4:])) == len(np.array(data[4:])) - 1:
+                if x == self.class_num:
                     continue
 
                 if not image_key in sample_dict_per_image:
@@ -209,12 +259,43 @@ class STDetectionEvaluaterUCF(object):
                         'labels': [],
                         'scores': [],
                     }
-                if x < 24:
+                if x < self.class_num:
                     sample_dict_per_image[image_key]['bbox'].append(
                         np.asarray([data[0], data[1], data[2], data[3]], dtype=float)
                     )
                     sample_dict_per_image[image_key]['labels'].append(x+1)
                     sample_dict_per_image[image_key]['scores'].append(scores[x])
+
+                # scores_i = torch.sqrt(torch.tensor(1-scores[-1]) * scores[:-1]).flatten()
+                # # num_topk = 5
+                
+                # topk_scores = scores_i.max()[None]
+                # topk_idxs = scores_i.argmax()[None]
+                # print(topk_scores)
+                # # predicted_prob, topk_idxs = scores_i.sort(descending=True)
+                # # topk_scores = predicted_prob[:num_topk].numpy()
+                # # topk_idxs = topk_idxs[:num_topk]
+                
+                # keep_idxs = topk_scores > 0.3
+                # scores = topk_scores[keep_idxs]
+                # topk_idxs = topk_idxs[keep_idxs]
+
+                # labels = (topk_idxs % self.class_num).numpy()
+                # bboxes = np.array(data[:4])
+                # img_annotation = {}
+                # for cls_idx in range(self.class_num):
+                #     if labels == cls_idx:
+                #         c_bboxes = bboxes
+                #         c_scores = scores
+                #     else:
+                #         c_bboxes = bboxes[False]
+                #         c_scores = scores[False]
+                #     import pdb; pdb.set_trace()
+                #     boxes = np.concatenate([c_bboxes[..., None], c_scores[..., None]], axis=-1)
+                #     img_annotation[cls_idx+1] = boxes
+                # all_boxes[image_key] = img_annotation
+                # if topk_scores > 0.5:
+                #     import pdb; pdb.set_trace()
 
                 # for x in range(len(scores)):
                 #     sample_dict_per_image[image_key]['bbox'].append(
@@ -224,7 +305,8 @@ class STDetectionEvaluaterUCF(object):
                 #     sample_dict_per_image[image_key]['scores'].append(scores[x])
 
         for k in list(all_boxes.keys()):
-            for s in range(len(scores)):
+            for s in range(self.class_num):
+                # if not len(all_boxes[k][s+1]):
                 all_boxes[k][s+1] = np.asarray(all_boxes[k][s+1], dtype=float)
 
         print("start adding into evaluator")
@@ -255,17 +337,47 @@ class STDetectionEvaluaterUCF(object):
                     })
             count += 1
 
-
+    def get_prior_length(self):
+        res = {}
+        train_videos = [vid for vid in self.dataset["train_videos"][0]]
+        for v in train_videos:
+            assert not v in res
+            # tubes = self.get_annot_video(v)
+            ilabel, tubes = list(self.dataset["gttubes"][v].items())[0]
+            res[v] = {'tubes': tubes, 'gt_classes': ilabel+1}
+        train_gt_v = res
+        keys = list(train_gt_v.keys())
+        keys.sort()
+        prior_length = {}
+        global_cls = train_gt_v[keys[0]]['gt_classes']
+        global_len = 0.0
+        global_cnt = 0.0
+        for i in range(len(keys)):             
+            if not global_cls==train_gt_v[keys[i]]['gt_classes']:
+                print(global_cls, global_len/global_cnt)
+                prior_length[global_cls] = global_len/global_cnt
+                global_cls = train_gt_v[keys[i]]['gt_classes']
+                global_len = 0.0
+                global_cnt = 0.0
+            else:
+                global_cnt += len(train_gt_v[keys[i]]['tubes'])
+                for annot in train_gt_v[keys[i]]['tubes']:
+                    global_len += annot.shape[0]
+        prior_length[global_cls] = global_len/global_cnt
+        return prior_length
+    
     def evaluate(self):
         result = {}
         v_result = {}
         mAP = []
         v_mAP = []
+        # prior_length = self.get_prior_length()
+        prior_length = None
         for x, iou in enumerate(self.tiou_thresholds):
             evaluator = self.lst_pascal_evaluator[x]
             v_evaluator = self.video_map_evaluator[x]
             metrics = evaluator.evaluate()
-            v_metrics = v_evaluator.evaluate_videoAP()
+            v_metrics = v_evaluator.evaluate_videoAP(bTemporal=True, prior_length=prior_length)
             result.update(metrics)
             v_result.update(v_metrics)
             mAP.append(metrics['PascalBoxes_Precision/mAP@{}IOU'.format(iou)])

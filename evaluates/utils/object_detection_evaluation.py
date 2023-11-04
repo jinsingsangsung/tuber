@@ -732,7 +732,8 @@ class ObjectDetectionEvaluation(object):
         mean_corloc = np.nanmean(self.corloc_per_class)
 
         print('per_class_len',len(self.average_precision_per_class))
-        print('per_class',self.average_precision_per_class)
+        print('per_class:')
+        [print(f"[f-mAP] {cate[ind]['name']}: {v}") for (ind, v) in enumerate(self.average_precision_per_class)]
 
         return ObjectDetectionEvalMetrics(
                 self.average_precision_per_class, mean_ap, self.precisions_per_class,

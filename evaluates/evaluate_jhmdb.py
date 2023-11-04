@@ -90,9 +90,9 @@ class STDetectionEvaluaterJHMDB(object):
                 if gt_videos[vname]["gt_classes"] == 0:
                     gt_videos[vname]["gt_classes"] = int(scores.nonzero()[0])+1
 
-                if (data[4] - data[2]) * (data[5] - data[3]) < 10:
-                    self.exclude_key.append(image_key)
-                    continue
+                # if (data[4] - data[2]) * (data[5] - data[3]) < 10:
+                #     self.exclude_key.append(image_key)
+                #     continue
 
                 if not image_key in sample_dict_per_image:
                     sample_dict_per_image[image_key] = {
@@ -153,23 +153,23 @@ class STDetectionEvaluaterJHMDB(object):
                 data = line.split(' [')[1].split(']')[0].split(',')
                 data = [float(x) for x in data]
 
-                scores = np.array(data[4:self.class_num + 4])
+                scores = np.array(data[4:])
                 x = np.argmax(scores)
                 
                 if not image_key in all_boxes:
                     all_boxes[image_key] = {}
 
-                for s in range(len(scores)):
+                for s in range(self.class_num):
                     if not (s+1) in all_boxes[image_key]:
                         all_boxes[image_key][s+1] = []
                     
-                    if s != x:
-                        all_boxes[image_key][s+1].append([data[0], data[1], data[2], data[3], 0])
-                    else:
+                    # if s != x:
+                        # all_boxes[image_key][s+1].append([data[0], data[1], data[2], data[3], 0])
+                    if (s==x):
                         all_boxes[image_key][s+1].append([data[0], data[1], data[2], data[3], scores[x]])
                         
 
-                if np.argmax(np.array(data[4:])) == len(np.array(data[4:])) - 1:
+                if x == self.class_num:
                     continue            
 
                 if not image_key in self.exclude_key:   
@@ -194,7 +194,7 @@ class STDetectionEvaluaterJHMDB(object):
                 #     sample_dict_per_image[image_key]['scores'].append(scores[x])
 
         for k in list(all_boxes.keys()):
-            for s in range(len(scores)):
+            for s in range(self.class_num):
                 all_boxes[k][s+1] = np.asarray(all_boxes[k][s+1], dtype=float)
 
         print("start adding into evaluator")
@@ -235,7 +235,7 @@ class STDetectionEvaluaterJHMDB(object):
             evaluator = self.lst_pascal_evaluator[x]
             v_evaluator = self.video_map_evaluator[x]
             metrics = evaluator.evaluate()
-            v_metrics = v_evaluator.evaluate_videoAP()
+            v_metrics = v_evaluator.evaluate_videoAP(True, None)
             result.update(metrics)
             v_result.update(v_metrics)
             mAP.append(metrics['PascalBoxes_Precision/mAP@{}IOU'.format(iou)])
