@@ -207,7 +207,7 @@ class VideoDataset(Dataset):
                             p_y2 = np.int_(box[4] / oh * nh)
                             tube.append([box[0], p_x1, p_y1, p_x2, p_y2])
                             classes_.append(np.clip(ilabel, 0, 24))
-                    tube.extend([[n, -1, -1, -1, -1] for n in range(gt_end_frame+1, clip_end_frame+1)])
+                    tube.extend([[n+1, -1, -1, -1, -1] for n in range(gt_end_frame, clip_end_frame)])
                     classes_.extend([self.num_classes for _ in range(clip_end_frame-gt_end_frame)])
                     boxes.append(tube)
                     classes.append(classes_)
@@ -249,7 +249,7 @@ class VideoDataset(Dataset):
                             tube.append([box[0], p_x1, p_y1, p_x2, p_y2])
                             classes_.append(np.clip(ilabel, 0, 24))
                     classes_.extend([self.num_classes for _ in range(clip_end_frame - gt_end_frame)])
-                    tube.extend([[n, -1, -1, -1, -1] for n in range(gt_end_frame, clip_end_frame)])
+                    tube.extend([[n+1, -1, -1, -1, -1] for n in range(gt_end_frame, clip_end_frame)])
                     boxes.append(tube)
                     classes.append(classes_)
                     tube_len.append(self.clip_len)   
@@ -307,16 +307,15 @@ class VideoDataset(Dataset):
         buffer = []
         vid_id, c_frame, front_pad, end_pad, nframes = sample_id
         clip_start_frame = c_frame-self.clip_len//2
-        clip_end_frame = c_frame+self.clip_len//2-1
+        clip_end_frame = c_frame+self.clip_len//2
         if clip_start_frame <= 0:
             frame_ids_ = [1 for _ in range(front_pad)]
-            frame_ids_.extend([s+1 for s in range(clip_end_frame)])
-        elif clip_end_frame > nframes:
+            frame_ids_.extend([s+1 for s in range(clip_end_frame-1)])
+        elif clip_end_frame >= nframes:
             frame_ids_ = [s for s in range(clip_start_frame, nframes+1)]
             frame_ids_.extend([nframes for _ in range(end_pad)])
         else:
-            frame_ids_ = [s for s in range(clip_start_frame, clip_end_frame+1)]
-
+            frame_ids_ = [s for s in range(clip_start_frame, clip_end_frame)]
         assert len(frame_ids_) == self.clip_len
         
         for frame_idx in frame_ids_:
