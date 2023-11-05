@@ -1,9 +1,9 @@
 DDP_CONFIG:
   WORLD_SIZE: 1
   WORLD_RANK: 0
-  GPU_WORLD_SIZE: 1
+  GPU_WORLD_SIZE: 2
   GPU_WORLD_RANK: 0
-  DIST_URL: 'tcp://{}:11589' 
+  DIST_URL: 'tcp://{}:11593' 
   WOLRD_URLS: ["{}"]
   AUTO_RANK_MATCH: True
   DIST_BACKEND: 'nccl'
@@ -17,9 +17,9 @@ CONFIG:
   USE_LOCATION: False
   EFFICIENT: False
   TRAIN:
-    EPOCH_NUM: 80
+    EPOCH_NUM: 200
     BATCH_SIZE: 1
-    LR: 1e-3
+    LR: 1e-4
     MIN_LR: 1e-6 # only if cosine scheduler is used
     LR_BACKBONE: 1e-5 # if <=0, freezes the backbone
     MOMENTUM: 0.9
@@ -27,8 +27,8 @@ CONFIG:
     LR_POLICY: 'cosine'
     USE_WARMUP: True # does nothing
     WARMUP_START_LR: 1e-5
-    WARMUP_EPOCHS: 5 # this determines whether to use Warmup unless using "step"
-    LR_MILESTONE: [6,50] #only for multistep
+    WARMUP_EPOCHS: 10 # this determines whether to use Warmup unless using "step"
+    LR_MILESTONE: [170] #only for multistep
     STEP: 0.1 # gamma for lr decay
     OPTIMIZER:
       NAME: ADAMW
@@ -40,7 +40,7 @@ CONFIG:
 
   VAL:
     BATCH_SIZE: 1
-    FREQ: 5
+    FREQ: 20
     PUT_GT: False
     TYPE: "frame"
 
@@ -49,6 +49,7 @@ CONFIG:
     ANNO_PATH: '/mnt/tmp/JHMDB'
     DATA_PATH: '/mnt/tmp/JHMDB/Frames'
     NUM_CLASSES: 21
+    SPLIT: 0
     MULTIGRID: False
     IMG_SIZE: 224
     IMG_RESHAPE_SIZE: 256
@@ -62,8 +63,8 @@ CONFIG:
     LAST_STRIDE: False
     GENERATE_LFB: False
     NAME: 'jhmdb_detr_9_224'
-    ENC_LAYERS: 6
-    DEC_LAYERS: 6
+    ENC_LAYERS: 5
+    DEC_LAYERS: 5
     D_MODEL: 256
     NHEAD: 8
     NUM_ENCODER_LAYERS: 12
@@ -94,7 +95,7 @@ CONFIG:
     RM_BINARY: False
 
   MATCHER:
-    COST_CLASS: 1
+    COST_CLASS: 5
     COST_BBOX: 5
     COST_GIOU: 2
     BNY_LOSS: True
@@ -105,8 +106,8 @@ CONFIG:
     DICE_COF: 5
     BBOX_COF: 5
     GIOU_COF: 2
-    PERSON_COF: 5    
-    EOS_COF: 0.1
+    PERSON_COF: 2    
+    EOS_COF: 0.5
     WEIGHT: 10
     WEIGHT_CHANGE: 1000
     LOSS_CHANGE_COF: 2
@@ -117,7 +118,7 @@ CONFIG:
     LOG_DIR: 'tb_log'
     SAVE_DIR: 'checkpoints'
     EVAL_DIR: '/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/JHMDB_Tuber/eval'
-    SAVE_FREQ: 10
+    SAVE_FREQ: 20
     RES_DIR: Dab_conv_trans_decsasde_CSN152_{}-{}/res
     EXP_NAME: Dab_conv_trans_decsasde_CSN152_{}-{}
-    DISPLAY_FREQ: 100
+    DISPLAY_FREQ: 50

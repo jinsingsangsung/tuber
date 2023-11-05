@@ -49,7 +49,7 @@ def tubelet_has_gt(tube_list, i, K):
 class VideoDataset(Dataset):
 
     def __init__(self, directory, video_path, transforms, clip_len=8, crop_size=224, resize_size=256,
-                 mode='train'):
+                 mode='train', split=0):
         self.directory = directory
         cache_file = os.path.join(directory, 'JHMDB-GT.pkl')
         assert os.path.isfile(cache_file), "Missing cache file for dataset"
@@ -65,12 +65,12 @@ class VideoDataset(Dataset):
         self.crop_size = crop_size
         self.resize_size = resize_size
         self.index_cnt = 0
-
+        assert split in [0,1,2]
         # get a list of videos
         if mode == 'val' or mode == 'test':
-            self.dataset_samples = self.dataset['test_videos'][0] # split number 0, 1, 2
+            self.dataset_samples = self.dataset['test_videos'][split] # split number 0, 1, 2
         elif mode == 'train':
-            self.dataset_samples = self.dataset['train_videos'][0]
+            self.dataset_samples = self.dataset['train_videos'][split]
 
         self.index_to_sample = [vid for vid in self.dataset_samples]
         max_vid_len = max([self.dataset['nframes'][vid] for vid in self.dataset['nframes'].keys()])
@@ -249,9 +249,9 @@ def make_transforms(image_set, cfg):
             T.RandomHorizontalFlip(),
             T.RandomSizeCrop_Custom(cfg.CONFIG.DATA.IMG_SIZE),
             T.ColorJitter(sat_shift=cfg.CONFIG.AUG.COLOR_JITTER,val_shift=cfg.CONFIG.AUG.COLOR_JITTER,),
-            # T.PCAJitter(alphastd=0.1,
-            #             eigval=np.array(cfg.CONFIG.AUG.TRAIN_PCA_EIGVAL).astype(np.float32),
-            #             eigvec=np.array(cfg.CONFIG.AUG.TRAIN_PCA_EIGVEC).astype(np.float32),),
+            T.PCAJitter(alphastd=0.1,
+                        eigval=np.array(cfg.CONFIG.AUG.TRAIN_PCA_EIGVAL).astype(np.float32),
+                        eigvec=np.array(cfg.CONFIG.AUG.TRAIN_PCA_EIGVEC).astype(np.float32),),
             normalize,
         ])
 
@@ -277,7 +277,8 @@ def build_dataloader(cfg):
                                  clip_len=cfg.CONFIG.DATA.TEMP_LEN,
                                  resize_size=cfg.CONFIG.DATA.IMG_RESHAPE_SIZE,
                                  crop_size=cfg.CONFIG.DATA.IMG_SIZE,
-                                 mode="train")
+                                 mode="train",
+                                 split=cfg.CONFIG.DATA.SPLIT,)
 
     val_dataset = VideoDataset(directory=cfg.CONFIG.DATA.ANNO_PATH,
                                video_path=cfg.CONFIG.DATA.DATA_PATH,
@@ -285,7 +286,8 @@ def build_dataloader(cfg):
                                clip_len=cfg.CONFIG.DATA.TEMP_LEN,
                                resize_size=cfg.CONFIG.DATA.IMG_SIZE,
                                crop_size=cfg.CONFIG.DATA.IMG_SIZE,
-                               mode="val")
+                               mode="val",
+                               split=cfg.CONFIG.DATA.SPLIT,)
 
     if cfg.DDP_CONFIG.DISTRIBUTED:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)

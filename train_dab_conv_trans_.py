@@ -151,7 +151,7 @@ def main_worker(cfg):
                 epoch % cfg.CONFIG.LOG.SAVE_FREQ == 0 or epoch == cfg.CONFIG.TRAIN.EPOCH_NUM - 1):
             save_checkpoint(cfg, epoch, model, max_accuracy, optimizer, lr_scheduler, scaler)
 
-        if (epoch == 9 or epoch % cfg.CONFIG.VAL.FREQ == 0 or epoch == cfg.CONFIG.TRAIN.EPOCH_NUM - 1):
+        if (epoch % cfg.CONFIG.VAL.FREQ == 0 or epoch == cfg.CONFIG.TRAIN.EPOCH_NUM - 1):
             if cfg.CONFIG.DATA.DATASET_NAME == 'ava':
                 validate_tuber_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)
             elif cfg.CONFIG.DATA.DATASET_NAME == 'jhmdb':
@@ -181,6 +181,7 @@ if __name__ == '__main__':
     parser.add_argument('--eff', action='store_true', help="only for AVA, efficiently output only keyframe")
     parser.add_argument('--grad_ckpt', action='store_true', help="use gradient checkpoint")
     parser.add_argument('--amp', action='store_true', help="use average mixed precision")
+    parser.add_argument('--split', default=0, type=int, help="dataset split (for jhmdb)")
     args = parser.parse_args()
     random.seed(args.random_seed)
     np.random.seed(args.random_seed)
@@ -212,6 +213,12 @@ if __name__ == '__main__':
         cfg.CONFIG.GRADIENT_CHECKPOINTING = True     
     if args.amp:
         cfg.CONFIG.AMP = True          
+    if cfg.CONFIG.DATA.DATASET_NAME == 'jhmdb':
+        cfg.CONFIG.DATA.SPLIT = args.split
+        if args.split in [1,2]:
+            cfg.CONFIG.LOG.EXP_NAME = cfg.CONFIG.LOG.EXP_NAME + f"_{args.split}"
+            cfg.CONFIG.LOG.RES_DIR = cfg.CONFIG.LOG.EXP_NAME + "/res"
+            
     
     import socket 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
