@@ -299,8 +299,10 @@ def save_checkpoint(cfg, epoch, model, max_accuracy, optimizer, lr_scheduler, sc
         os.makedirs(model_save_dir)
     log_path = os.path.join(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.EXP_NAME)
     print_log(log_path, 'Saving model at epoch %d to %s' % (epoch, model_save_dir))
-
-    save_path = os.path.join(model_save_dir, f'ckpt_epoch_{epoch:02d}.pth')
+    if not cfg.CONFIG.DATA.DATASET_NAME == 'jhmdb':
+        save_path = os.path.join(model_save_dir, f'ckpt_epoch_{epoch:02d}.pth')
+    else:
+        save_path = os.path.join(model_save_dir, f'ckpt_epoch_{epoch:03d}.pth')
     torch.save(save_state, save_path)
 
 
