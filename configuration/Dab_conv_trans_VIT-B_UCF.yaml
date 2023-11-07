@@ -3,7 +3,7 @@ DDP_CONFIG:
   WORLD_RANK: 0
   GPU_WORLD_SIZE: 4
   GPU_WORLD_RANK: 0
-  DIST_URL: 'tcp://{}:11588' 
+  DIST_URL: 'tcp://{}:11591' 
   WOLRD_URLS: ["{}"]
   AUTO_RANK_MATCH: True
   DIST_BACKEND: 'nccl'
@@ -17,7 +17,7 @@ CONFIG:
   USE_LOCATION: False
   EFFICIENT: False
   TRAIN:
-    EPOCH_NUM: 20
+    EPOCH_NUM: 16
     BATCH_SIZE: 1
     LR: 1e-4
     MIN_LR: 1e-6 # only if cosine scheduler is used
@@ -28,7 +28,7 @@ CONFIG:
     USE_WARMUP: True # does nothing
     WARMUP_START_LR: 1e-5
     WARMUP_EPOCHS: 3 # this determines whether to use Warmup unless using "step"
-    LR_MILESTONE: [12,17] #only for multistep
+    LR_MILESTONE: [12] #only for multistep
     STEP: 0.1 # gamma for lr decay
     OPTIMIZER:
       NAME: ADAMW
@@ -36,6 +36,7 @@ CONFIG:
     LR_SCHEDULER:
       NAME: 'multistep'
     CUT_GRADIENT: FALSE
+    SYNCBATCHNORM: False
 
   VAL:
     BATCH_SIZE: 1
@@ -72,7 +73,7 @@ CONFIG:
     NORMALIZE_BEFORE: False
     DROPOUT: 0.1
     DS_RATE: 8
-    TEMP_LEN: 20
+    TEMP_LEN: 32
     SAMPLE_RATE: 1
     PRETRAINED: True
     PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/ViT-B_K400_16x4.pth"
@@ -115,7 +116,7 @@ CONFIG:
     LOG_DIR: 'tb_log'
     SAVE_DIR: 'checkpoints'
     EVAL_DIR: '/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/UCF/eval'
-    SAVE_FREQ: 5
+    SAVE_FREQ: 1
     RES_DIR: Dab_conv_trans_decsasde_ViT-B_{}-{}/res
     EXP_NAME: Dab_conv_trans_decsasde_ViT-B_{}-{}
     DISPLAY_FREQ: 1000
