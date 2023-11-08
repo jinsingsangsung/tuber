@@ -114,26 +114,26 @@ def deploy_model(model, cfg, is_tuber=True):
         if cfg.DDP_CONFIG.GPU is not None:
             torch.cuda.set_device(cfg.DDP_CONFIG.GPU)
             model.cuda(cfg.DDP_CONFIG.GPU)
-            # if cfg.CONFIG.GRADIENT_CHECKPOINTING:
-            #     model = torch.nn.parallel.DistributedDataParallel(model,
-            #                                                       device_ids=[cfg.DDP_CONFIG.GPU],
-            #                                                       static_graph=True,
-            #                                                       )
-            # else:
-            model = torch.nn.parallel.DistributedDataParallel(model,
-                                                            device_ids=[cfg.DDP_CONFIG.GPU],
-                                                            find_unused_parameters=True,
-                                                            )
+            if cfg.CONFIG.GRADIENT_CHECKPOINTING or cfg.CONFIG.MODEL.BACKBONE_NAME == "ViT":
+                model = torch.nn.parallel.DistributedDataParallel(model,
+                                                                  device_ids=[cfg.DDP_CONFIG.GPU],
+                                                                  static_graph=True,
+                                                                  )
+            else:
+                model = torch.nn.parallel.DistributedDataParallel(model,
+                                                                device_ids=[cfg.DDP_CONFIG.GPU],
+                                                                find_unused_parameters=True,
+                                                                )
         else:
             model.cuda()
-            # if cfg.CONFIG.GRADIENT_CHECKPOINTING:
-            #     model = torch.nn.parallel.DistributedDataParallel(model,
-            #                                                       static_graph=True,
-            #                                                       )
-            # else:
-            model = torch.nn.parallel.DistributedDataParallel(model,
-                                                              find_unused_parameters=True,
-                                                                )       
+            if cfg.CONFIG.GRADIENT_CHECKPOINTING or cfg.CONFIG.MODEL.BACKBONE_NAME == "ViT":
+                model = torch.nn.parallel.DistributedDataParallel(model,
+                                                                  static_graph=True,
+                                                                  )
+            else:
+                model = torch.nn.parallel.DistributedDataParallel(model,
+                                                                find_unused_parameters=True,
+                                                                    )       
     elif cfg.DDP_CONFIG.GPU is not None:
         torch.cuda.set_device(cfg.DDP_CONFIG.GPU)
         model = model.cuda(cfg.DDP_CONFIG.GPU)
