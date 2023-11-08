@@ -15,7 +15,7 @@ CONFIG:
   TWO_STREAM: False
   USE_LFB: False
   USE_LOCATION: False
-  EFFICIENT: False
+  EFFICIENT: True
   TRAIN:
     EPOCH_NUM: 15
     BATCH_SIZE: 2

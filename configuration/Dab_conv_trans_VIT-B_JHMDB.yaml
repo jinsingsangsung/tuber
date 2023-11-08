@@ -96,7 +96,7 @@ CONFIG:
     RM_BINARY: False
 
   MATCHER:
-    COST_CLASS: 1
+    COST_CLASS: 5
     COST_BBOX: 5
     COST_GIOU: 2
     BNY_LOSS: True
