@@ -31,8 +31,8 @@ input = "full_jinsung"
 # input = "full_tuber"
 # tuber_txt = open(f"/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/{input}.txt").readlines()
 # gt_txt = open(f"/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/full_GT.txt").readlines()
-tuber_txt_ = "./{input}.txt"
-gt_txt_ = "./GT_{input}.txt"
+tuber_txt_ = "../{input}.txt"
+gt_txt_ = "../GT_{input}.txt"
 """
 sample tuber csv:
 vid_id,frame_id, x1, y1, x2, y2, cls_id, confidence_score
