@@ -153,6 +153,8 @@ def main_worker(cfg):
         if cfg.DDP_CONFIG.GPU_WORLD_RANK == 0 and (
                 epoch % cfg.CONFIG.LOG.SAVE_FREQ == 0 or epoch == cfg.CONFIG.TRAIN.EPOCH_NUM - 1):
             save_checkpoint(cfg, epoch, model, max_accuracy, optimizer, lr_scheduler, scaler)
+            time.sleep(10)
+            
         if os.path.exists(os.path.join(cfg.CONFIG.LOG.BASE_PATH, exp_name, cfg.CONFIG.LOG.SAVE_DIR)):
             if len(os.listdir(os.path.join(cfg.CONFIG.LOG.BASE_PATH, exp_name, cfg.CONFIG.LOG.SAVE_DIR))) > 20:
                 epochs_folder = os.listdir(os.path.join(cfg.CONFIG.LOG.BASE_PATH, exp_name, cfg.CONFIG.LOG.SAVE_DIR))
