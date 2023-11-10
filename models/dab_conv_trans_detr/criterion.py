@@ -859,6 +859,7 @@ class SetCriterionJHMDB(nn.Module):
         # loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)                
         # src_logits = torch.cat([src_logits, src_logits_b[...,2:]], dim=-1)
         # loss_ce = F.cross_entropy(src_logits.flatten(1,2).transpose(1, 2), target_classes.flatten(1,2), self.empty_weight)
+        import pdb; pdb.set_trace()
         losses = {'loss_ce': loss_ce}
         losses['loss_ce_b'] = loss_ce_b
 
@@ -1060,15 +1061,23 @@ class PostProcessUCF(nn.Module):
         assert len(out_logits) == len(target_sizes)
         assert target_sizes.shape[1] == 2
 
-        try:
-            prob_binary = out_logits_b.softmax(-1)[..., 1:2]
-            # prob_bbox = (prob_binary > 0.8).float() * prob_binary
-            # prob_binary = out_logits_b[..., 2:]
-            # prob = F.softmax(torch.cat([out_logits, prob_binary], dim=-1), -1)
-            prob = F.softmax(out_logits, -1)
-            prob[:,:,:-1] = prob[:,:,:-1] * prob_binary
-        except:
-            prob = out_logits.sigmoid()
+        # try:
+        #     prob_binary = out_logits_b.softmax(-1)[..., 1:2]
+        #     # prob_bbox = (prob_binary > 0.8).float() * prob_binary
+        #     # prob_binary = out_logits_b[..., 2:]
+        #     # prob = F.softmax(torch.cat([out_logits, prob_binary], dim=-1), -1)
+        #     prob = F.softmax(out_logits, -1)
+        #     prob[:,:,:-1] = prob[:,:,:-1] * prob_binary
+        # except:
+        #     prob = out_logits.sigmoid()
+
+        num_frames = out_logits.size(1)
+        prob = out_logits.softmax(-1)
+        # do voting
+        prob_b = out_logits_b.softmax(-1)[..., 1:2]
+        prob = prob * prob_b
+        prob = prob.sum(dim=1, keepdim=True).softmax(-1)
+        prob = prob.expand(-1,num_frames,-1,-1)*prob_b        
 
         # convert to [x0, y0, x1, y1] format
         boxes = box_ops.box_cxcywh_to_xyxy(out_bbox)
@@ -1106,14 +1115,19 @@ class PostProcess(nn.Module):
         assert len(out_logits) == len(target_sizes)
         assert target_sizes.shape[1] == 2
 
-        try:
-            # prob_binary = out_logits_b.softmax(-1)[..., 1:2]
-            # prob_bbox = (prob_binary > 0.8).float() * prob_binary
-            # prob_binary = out_logits_b[..., 2:]
-            # prob = F.softmax(torch.cat([out_logits, prob_binary], dim=-1), -1)
-            prob = F.softmax(out_logits, -1)
-        except:
-            prob = out_logits.sigmoid()
+        # try:
+        #     # prob_binary = out_logits_b.softmax(-1)[..., 1:2]
+        #     # prob_bbox = (prob_binary > 0.8).float() * prob_binary
+        #     # prob_binary = out_logits_b[..., 2:]
+        #     # prob = F.softmax(torch.cat([out_logits, prob_binary], dim=-1), -1)
+        #     # prob = F.softmax(out_logits, -1)
+        num_frames = out_logits.size(1)
+        prob = out_logits.softmax(-1)
+        # do voting
+        prob_b = out_logits_b.softmax(-1)[..., 1:2]
+        prob = prob * prob_b
+        prob = prob.sum(dim=1, keepdim=True).softmax(-1)
+        prob = prob.expand(-1,num_frames,-1,-1)*prob_b
 
         # convert to [x0, y0, x1, y1] format
         boxes = box_ops.box_cxcywh_to_xyxy(out_bbox)
