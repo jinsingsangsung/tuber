@@ -859,7 +859,6 @@ class SetCriterionJHMDB(nn.Module):
         # loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)                
         # src_logits = torch.cat([src_logits, src_logits_b[...,2:]], dim=-1)
         # loss_ce = F.cross_entropy(src_logits.flatten(1,2).transpose(1, 2), target_classes.flatten(1,2), self.empty_weight)
-        import pdb; pdb.set_trace()
         losses = {'loss_ce': loss_ce}
         losses['loss_ce_b'] = loss_ce_b
 
