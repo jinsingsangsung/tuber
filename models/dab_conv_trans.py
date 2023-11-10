@@ -18,7 +18,7 @@ from models.backbone_3d_builder2 import build_3d_backbone
 from models.detr.segmentation import (dice_loss, sigmoid_focal_loss)
 from models.dab_conv_trans_detr.dab_transformer import build_transformer
 # from models.transformer.transformer_layers import TransformerEncoderLayer, TransformerEncoder
-from models.dab_conv_trans_detr.criterion import PostProcess, PostProcessAVA, MLP
+from models.dab_conv_trans_detr.criterion import PostProcess, PostProcessAVA, PostProcessUCF, MLP
 from models.dab_conv_trans_detr.criterion import SetCriterion, SetCriterionAVA, SetCriterionUCF, SetCriterionJHMDB
 from models.dab_conv_trans_detr.transformer_layers import TransformerEncoderLayer, TransformerEncoder
 from models.dab_conv_trans_detr.dab_transformer import TransformerDecoderLayer, TransformerDecoder
@@ -364,6 +364,7 @@ def build_model(cfg):
                                     losses=losses,
                                     data_file=cfg.CONFIG.DATA.DATASET_NAME,
                                     evaluation=cfg.CONFIG.EVAL_ONLY)
+        postprocessors = {'bbox': PostProcessAVA()}
     elif cfg.CONFIG.DATA.DATASET_NAME == 'jhmdb':
         criterion = SetCriterionJHMDB(cfg.CONFIG.LOSS_COFS.WEIGHT,
                                     num_classes,
@@ -373,6 +374,7 @@ def build_model(cfg):
                                     losses=losses,
                                     data_file=cfg.CONFIG.DATA.DATASET_NAME,
                                     evaluation=cfg.CONFIG.EVAL_ONLY)
+        postprocessors = {'bbox': PostProcess()}
     else:
         criterion = SetCriterionUCF(cfg.CONFIG.LOSS_COFS.WEIGHT,
                                     num_classes,
@@ -382,7 +384,8 @@ def build_model(cfg):
                                     losses=losses,
                                     data_file=cfg.CONFIG.DATA.DATASET_NAME,
                                     evaluation=cfg.CONFIG.EVAL_ONLY)
+        postprocessors = {'bbox': PostProcessUCF()}
 
-    postprocessors = {'bbox': PostProcessAVA() if cfg.CONFIG.DATA.DATASET_NAME == 'ava' else PostProcess()}
+    # postprocessors = {'bbox': PostProcessAVA() if cfg.CONFIG.DATA.DATASET_NAME == 'ava' else PostProcess()}
 
     return model, criterion, postprocessors

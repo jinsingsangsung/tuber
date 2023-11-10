@@ -480,7 +480,7 @@ class SetCriterionUCF(nn.Module):
     """
 
     def __init__(self, weight, num_classes, num_queries, matcher, weight_dict, eos_coef, losses, data_file,
-                 evaluation=False, label_smoothing_alpha=0.0):
+                 evaluation=False, label_smoothing_alpha=0.1):
         """ Create the criterion.
         Parameters:
             num_classes: number of object categories, omitting the special no-object category
@@ -533,7 +533,7 @@ class SetCriterionUCF(nn.Module):
         target_classes_b = torch.full(src_logits_b.shape[:2], 2,
                             dtype=torch.int64, device=src_logits_b.device)   
         try:
-            target_classes_b[front_pad:end_pad,:][idx] = 1        
+            target_classes_b[idx] = 1
         except:
             pass
         loss_ce_b = F.cross_entropy(src_logits_b.transpose(1,2), target_classes_b)
@@ -542,12 +542,12 @@ class SetCriterionUCF(nn.Module):
             target_classes_o = torch.cat([t["labels"] for t in targets])
             if target_classes_o.ndim == 1:
                 target_classes_o = target_classes_o[None]
-            target_classes_o = target_classes_o[:, front_pad:end_pad].transpose(0,1).contiguous().flatten() # t*num_actors
+            target_classes_o = target_classes_o.transpose(0,1).contiguous().flatten() # t*num_actors
             # bs*t
             target_classes_o = target_classes_o[target_classes_o != self.num_classes]
             # target_classes_o = torch.cat([unbatched_targets[J*T+i] for i, (_, J) in enumerate(indices)])
             # bs*t
-        src_logits = src_logits[:,front_pad:end_pad,:,:].flatten(0,1) # bs*t, n, 24
+        src_logits = src_logits.flatten(0,1) # bs*t, n, 24
         target_classes = torch.full(src_logits.shape[:2], self.num_classes,
                                     dtype=torch.int64, device=src_logits.device)
         # bs*t, n_q 
@@ -570,10 +570,10 @@ class SetCriterionUCF(nn.Module):
         if not empty_frame:
             weights[idx] = self.weight
         weights = weights[..., None]
-        # loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot[...,:-1], weights) / len(src_logits)
+        loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot, weights) / len(src_logits)
         # src_logits_b_ = outputs['pred_logits_b'][:,front_pad:end_pad,:,2:].flatten(0,1)
         # src_logits = torch.cat([src_logits, src_logits_b_], dim=-1)
-        loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)                
+        # loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)                
         # src_logits = torch.cat([src_logits, src_logits_b[...,2:]], dim=-1)
         # loss_ce = F.cross_entropy(src_logits.flatten(1,2).transpose(1, 2), target_classes.flatten(1,2), self.empty_weight)
         losses = {'loss_ce': loss_ce}
@@ -632,7 +632,7 @@ class SetCriterionUCF(nn.Module):
             front_pad = 0
             end_pad = None
         target_boxes = torch.cat([t["boxes"] for t in targets])
-        target_boxes = target_boxes[:,1:].view(bs, -1, T, 4)[:,:,front_pad:end_pad,:]
+        target_boxes = target_boxes[:,1:].view(bs, -1, T, 4)
         # target_boxes = torch.cat([t["boxes"].reshape(-1, T, 5)[i] for t, (_, i) in zip(targets, indices)], dim=0)
         
         # target_boxes = torch.cat([unbatched_targets[i] for i, (_, J) in enumerate(indices)], dim=0)
@@ -652,8 +652,7 @@ class SetCriterionUCF(nn.Module):
             else:
                 pass        
         valid_target_boxes = torch.stack(valid_target_boxes)
-        num_valid_boxes = sum(sizes)
-    
+        num_valid_boxes = sum(sizes)   
         # tgt_ids = torch.cat([v["labels"] for v in targets])
         # valid_ids = tgt_ids < self.num_classes
         # if valid_ids.any():
@@ -1041,6 +1040,51 @@ class SetCriterionJHMDB(nn.Module):
                     losses.update(l_dict)
 
         return losses
+
+class PostProcessUCF(nn.Module):
+    """ This module converts the model's output into the format expected by the coco api"""
+    @torch.no_grad()
+    def forward(self, outputs, target_sizes):
+        """ Perform the computation
+        Parameters:
+            outputs: raw outputs of the model
+            target_sizes: tensor of dimension [batch_size x 2] containing the size of each images of the batch
+                          For evaluation, this must be the original image size (before any data augmentation)
+                          For visualization, this should be the image size after data augment, but before padding
+        """
+        try:
+            out_logits, out_bbox, out_logits_b = outputs['pred_logits'], outputs['pred_boxes'], outputs['pred_logits_b']
+        except:
+            out_logits, out_bbox = outputs['pred_logits'], outputs['pred_boxes']
+        assert len(out_logits) == len(target_sizes)
+        assert target_sizes.shape[1] == 2
+
+        try:
+            prob_binary = out_logits_b.softmax(-1)[..., 1:2]
+            # prob_bbox = (prob_binary > 0.8).float() * prob_binary
+            # prob_binary = out_logits_b[..., 2:]
+            # prob = F.softmax(torch.cat([out_logits, prob_binary], dim=-1), -1)
+            prob = F.softmax(out_logits, -1)
+            prob[:,:,:-1] = prob[:,:,:-1] * prob_binary
+        except:
+            prob = out_logits.sigmoid()
+
+        # convert to [x0, y0, x1, y1] format
+        boxes = box_ops.box_cxcywh_to_xyxy(out_bbox)
+        # and from relative [0, 1] to absolute [0, height] coordinates
+        img_h, img_w = target_sizes.unbind(1)
+        scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
+        boxes = boxes * scale_fct[:, None, :]
+
+        scores = prob.detach().cpu().numpy()
+        # labels = labels.detach().cpu().numpy()
+        boxes = boxes.detach().cpu().numpy()
+        try:
+            output_b = out_logits_b.softmax(-1).detach().cpu().numpy()[..., 1:]
+            return scores, boxes, output_b
+        except:
+            return scores, boxes
+
 
 
 class PostProcess(nn.Module):

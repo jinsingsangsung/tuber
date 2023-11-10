@@ -62,24 +62,24 @@ class HungarianMatcher(nn.Module):
         l = self.clip_len
         
         # for ease, assume a single batch case
-        try:
-            front_pad = targets[0]["front_pad"]
-            end_pad = -targets[0]["end_pad"]
-            if end_pad == 0:
-                end_pad = None
-        except: # in case of JHMDB
-            front_pad = 0
-            end_pad = None
+        # try:
+        #     front_pad = targets[0]["front_pad"]
+        #     end_pad = -targets[0]["end_pad"]
+        #     if end_pad == 0:
+        #         end_pad = None
+        # except: # in case of JHMDB
+        #     front_pad = 0
+        #     end_pad = None
 
         bs, t, num_queries, num_classes = outputs["pred_logits"].shape
-        out_bbox = outputs["pred_boxes"][:,front_pad:end_pad,:,:].flatten(0,2) # bs*t*nq, 4
+        out_bbox = outputs["pred_boxes"].flatten(0,2) # bs*t*nq, 4
         # out_bbox = outputs["pred_boxes"].permute(1,0,2,3).flatten(1, 2)    # t, bs*nq, 4
         # out_prob = outputs["pred_logits"].permute(1,0,2,3).flatten(1, 2).softmax(-1) # t, bs*nq, num_classes
         # Also concat the target labels
         tgt_bbox = torch.cat([v["boxes"] for v in targets]) # bs*num_actors*t, 5
-        tgt_bbox = tgt_bbox[:,1:].view(bs, -1, t, 4)[:,:,front_pad:end_pad,:]
+        tgt_bbox = tgt_bbox[:,1:].view(bs, -1, t, 4)
         num_actors = tgt_bbox.size(1)
-        num_valid_frames = tgt_bbox.size(2)
+        num_frames = tgt_bbox.size(2)
         tgt_bbox = tgt_bbox.transpose(1,2).contiguous()
         sizes = []
         tgt_bbox = tgt_bbox.flatten(0,2) # bs*t*num_actors, 4
@@ -107,7 +107,7 @@ class HungarianMatcher(nn.Module):
             tgt_classes = torch.cat([v["labels"] for v in targets]) # num_actors, t
             if tgt_classes.ndim == 1: # in case of JHMDB
                 tgt_classes = tgt_classes[None]
-            tgt_classes = tgt_classes[:, front_pad:end_pad]
+            tgt_classes = tgt_classes
             tgt_classes = tgt_classes.transpose(0,1).contiguous().flatten()
             tgt_classes = tgt_classes[tgt_classes!=num_classes-1]
             
@@ -120,22 +120,20 @@ class HungarianMatcher(nn.Module):
             
             # tgt_classes_onehot = F.one_hot(tgt_classes, num_classes).float()
             # out_prob = torch.cat([outputs["pred_logits"], outputs["pred_logits_b"][..., 2:]], dim=-1).flatten(0,2)
-            out_prob = outputs["pred_logits"][:,front_pad:end_pad,:,:].flatten(0,2)
+            out_prob = outputs["pred_logits"].flatten(0,2)
             cost_class = -out_prob.softmax(-1)[:, tgt_classes] # b*num_valid_frames*nq, num_valid_boxes
-
             C = self.cost_bbox * cost_bbox + self.cost_giou * cost_giou + self.cost_class * cost_class 
-
-            C = C.view(bs*(num_valid_frames), num_queries, -1).cpu()
+            C = C.view(bs*(num_frames), num_queries, -1).cpu()
             # sizes = [len(v["boxes"]) for v in targets]
             indices = [linear_sum_assignment(c[i]) for i, c in enumerate(C.split(sizes, -1))]
             return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
         else:
-            out_prob = outputs["pred_logits_b"][:,front_pad:end_pad,:,:].flatten(0, 2).softmax(-1)
+            out_prob = outputs["pred_logits_b"].flatten(0, 2).softmax(-1)
             cost_class = -out_prob[:, 1:2].repeat(1, num_valid_boxes)
 
             C = self.cost_bbox * cost_bbox + self.cost_giou * cost_giou + self.cost_class * cost_class 
 
-            C = C.view(bs*(num_valid_frames), num_queries, -1).cpu()
+            C = C.view(bs*(num_frames), num_queries, -1).cpu()
             # sizes = [len(v["boxes"]) for v in targets]
             indices = [linear_sum_assignment(c[i]) for i, c in enumerate(C.split(sizes, -1))]
             return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]            
