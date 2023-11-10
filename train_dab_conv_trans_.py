@@ -229,7 +229,7 @@ if __name__ == '__main__':
         if args.split in [1,2]:
             cfg.CONFIG.LOG.EXP_NAME = cfg.CONFIG.LOG.EXP_NAME + f"_{args.split}"
             cfg.CONFIG.LOG.RES_DIR = cfg.CONFIG.LOG.EXP_NAME + "/res"
-            cfg.DDP_CONFIG.DIST_URL = cfg.DDP_CONFIG.DIST_URL.split(":")[0] + str(args.split+11111)
+            cfg.DDP_CONFIG.DIST_URL = ":".join(cfg.DDP_CONFIG.DIST_URL.split(":")[:2]) + ":" + str(args.split+11111)
             
     
     import socket 
