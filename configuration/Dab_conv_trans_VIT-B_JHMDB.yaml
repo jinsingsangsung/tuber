@@ -40,7 +40,7 @@ CONFIG:
 
   VAL:
     BATCH_SIZE: 1
-    FREQ: 20
+    FREQ: 10
     PUT_GT: False
     TYPE: "frame"
 
@@ -119,7 +119,7 @@ CONFIG:
     LOG_DIR: 'tb_log'
     SAVE_DIR: 'checkpoints'
     EVAL_DIR: '/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/JHMDB_Tuber/eval'
-    SAVE_FREQ: 1
+    SAVE_FREQ: 10
     RES_DIR: Dab_conv_trans_decsasde_ViT_B_{}-{}/res
     EXP_NAME: Dab_conv_trans_decsasde_ViT_B_{}-{}
     DISPLAY_FREQ: 50
