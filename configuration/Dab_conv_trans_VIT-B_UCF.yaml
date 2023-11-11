@@ -63,8 +63,8 @@ CONFIG:
     LAST_STRIDE: False
     GENERATE_LFB: False
     NAME: 'ucf_detr_9_224'
-    ENC_LAYERS: 5
-    DEC_LAYERS: 5
+    ENC_LAYERS: 3
+    DEC_LAYERS: 3
     D_MODEL: 256
     NHEAD: 8
     NUM_ENCODER_LAYERS: 12
