@@ -616,6 +616,11 @@ class SetCriterionUCF(nn.Module):
             loss = (0*outputs["pred_boxes"]).sum()
             return {'loss_bbox': loss,
                     'loss_giou': loss}
+
+        front_pad = targets[0]["front_pad"]
+        end_pad = -targets[0]["end_pad"]
+        if end_pad == 0:
+            end_pad = None        
         
         # idx[0]: range(bs*t)
         # idx[1]: the matched idx corresponds to idx[0]
