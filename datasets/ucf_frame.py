@@ -306,6 +306,8 @@ class VideoDataset(Dataset):
         import numpy as np
         buffer = []
         vid_id, c_frame, front_pad, end_pad, nframes = sample_id
+        resolution = self.dataset["resolution"][vid_id] # tuple
+        
         clip_start_frame = c_frame-self.clip_len//2
         clip_end_frame = c_frame+self.clip_len//2
         if clip_start_frame <= 0:
@@ -318,7 +320,9 @@ class VideoDataset(Dataset):
             frame_ids_ = [s for s in range(clip_start_frame, clip_end_frame)]
         assert len(frame_ids_) == self.clip_len
         
-        for frame_idx in frame_ids_:
+        for j, frame_idx in enumerate(frame_ids_):
+            if j < front_pad or j >= front_pad + self.dataset["nframes"][vid_id]:
+                tmp = Image.new(mode="RGB", size = resolution)            
             tmp = Image.open(os.path.join(self.video_path, vid_id, "{:0>5}.jpg".format(frame_idx)))
             try:
                 tmp = tmp.resize((target['orig_size'][1], target['orig_size'][0]))

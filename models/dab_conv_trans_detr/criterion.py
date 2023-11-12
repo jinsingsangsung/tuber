@@ -533,7 +533,7 @@ class SetCriterionUCF(nn.Module):
         target_classes_b = torch.full(src_logits_b.shape[:2], 2,
                             dtype=torch.int64, device=src_logits_b.device)   
         try:
-            target_classes_b[idx] = 1
+            target_classes_b[front_pad:end_pad,:][idx] = 1
         except:
             pass
         loss_ce_b = F.cross_entropy(src_logits_b.transpose(1,2), target_classes_b)
@@ -542,7 +542,7 @@ class SetCriterionUCF(nn.Module):
             target_classes_o = torch.cat([t["labels"] for t in targets])
             if target_classes_o.ndim == 1:
                 target_classes_o = target_classes_o[None]
-            target_classes_o = target_classes_o.transpose(0,1).contiguous().flatten() # t*num_actors
+            target_classes_o = target_classes_o[:, front_pad:end_pad].transpose(0,1).contiguous().flatten() # t*num_actors
             # bs*t
             target_classes_o = target_classes_o[target_classes_o != self.num_classes]
             # target_classes_o = torch.cat([unbatched_targets[J*T+i] for i, (_, J) in enumerate(indices)])
@@ -552,7 +552,7 @@ class SetCriterionUCF(nn.Module):
                                     dtype=torch.int64, device=src_logits.device)
         # bs*t, n_q 
         if not empty_frame:
-            target_classes[idx] = target_classes_o
+            target_classes[front_pad:end_pad,:][idx] = target_classes_o
 
         target_classes_onehot = F.one_hot(target_classes, self.num_classes+1).float()
         true_label = 1
