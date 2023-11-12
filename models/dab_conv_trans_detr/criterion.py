@@ -783,7 +783,7 @@ class SetCriterionJHMDB(nn.Module):
     """
 
     def __init__(self, weight, num_classes, num_queries, matcher, weight_dict, eos_coef, losses, data_file,
-                 evaluation=False, label_smoothing_alpha=0.0):
+                 evaluation=False, label_smoothing_alpha=0.1):
         """ Create the criterion.
         Parameters:
             num_classes: number of object categories, omitting the special no-object category
@@ -816,17 +816,22 @@ class SetCriterionJHMDB(nn.Module):
         src_logits = outputs['pred_logits'] # bs, t, n, 24
         T = outputs['pred_logits'].size(1)
 
+        front_pad = targets[0]["front_pad"]
+        end_pad = -targets[0]["end_pad"]
+        if end_pad == 0:
+            end_pad = None
+
         idx = self._get_src_permutation_idx(indices)
         src_logits_b = outputs['pred_logits_b'].flatten(0,1)# bs, t, n, 3
         target_classes_b = torch.full(src_logits_b.shape[:2], 2,
                             dtype=torch.int64, device=src_logits_b.device)   
-        target_classes_b[idx] = 1
+        target_classes_b[front_pad:end_pad,:][idx] = 1
         loss_ce_b = F.cross_entropy(src_logits_b.transpose(1,2), target_classes_b)
         
         target_classes_o = torch.cat([t["labels"] for t in targets])
         if target_classes_o.ndim == 1:
             target_classes_o = target_classes_o[None]
-        target_classes_o = target_classes_o.transpose(0,1).contiguous().flatten() # t*num_actors
+        target_classes_o = target_classes_o[:, front_pad:end_pad].transpose(0,1).contiguous().flatten() # t*num_actors
         # bs*t
         target_classes_o = target_classes_o[target_classes_o != self.num_classes]
         # target_classes_o = torch.cat([unbatched_targets[J*T+i] for i, (_, J) in enumerate(indices)])
@@ -835,7 +840,7 @@ class SetCriterionJHMDB(nn.Module):
         target_classes = torch.full(src_logits.shape[:2], self.num_classes,
                                     dtype=torch.int64, device=src_logits.device)
         # bs*t, n_q 
-        target_classes[idx] = target_classes_o
+        target_classes[front_pad:end_pad,:][idx] = target_classes_o
 
         target_classes_onehot = F.one_hot(target_classes, self.num_classes+1).float()
         true_label = 1
@@ -891,14 +896,19 @@ class SetCriterionJHMDB(nn.Module):
 
         idx = self._get_src_permutation_idx(indices)
         
+        front_pad = targets[0]["front_pad"]
+        end_pad = -targets[0]["end_pad"]
+        if end_pad == 0:
+            end_pad = None        
+        
         # idx[0]: range(bs*t)
         # idx[1]: the matched idx corresponds to idx[0]
         bs, T, num_queries = outputs['pred_boxes'].shape[:3]
-        src_boxes = outputs['pred_boxes'].flatten(0,1)[idx]
+        src_boxes = outputs['pred_boxes'][:,front_pad:end_pad,:].flatten(0,1)[idx]
         
         # for ease, assume a single batch case
         target_boxes = torch.cat([t["boxes"] for t in targets])
-        target_boxes = target_boxes[:,1:].view(bs, -1, T, 4)
+        target_boxes = target_boxes[:,1:].view(bs, -1, T, 4)[:,:,front_pad:end_pad,:]
         # target_boxes = torch.cat([t["boxes"].reshape(-1, T, 5)[i] for t, (_, i) in zip(targets, indices)], dim=0)
         
         # target_boxes = torch.cat([unbatched_targets[i] for i, (_, J) in enumerate(indices)], dim=0)
@@ -906,7 +916,7 @@ class SetCriterionJHMDB(nn.Module):
         num_actors = target_boxes.size(1)
         num_valid_frames = target_boxes.size(2)        
         target_boxes = target_boxes.transpose(1,2).contiguous()
-        sizes = [1]*T
+        sizes = [1]*num_valid_frames
         # valid_target_boxes = []
         target_boxes = target_boxes.flatten(0,2) # bs*t*num_actors, 4
         # for i, box in enumerate(target_boxes):
