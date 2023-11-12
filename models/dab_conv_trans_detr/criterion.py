@@ -620,7 +620,7 @@ class SetCriterionUCF(nn.Module):
         # idx[0]: range(bs*t)
         # idx[1]: the matched idx corresponds to idx[0]
         bs, T, num_queries = outputs['pred_boxes'].shape[:3]
-        src_boxes = outputs['pred_boxes'].flatten(0,1)[idx]
+        src_boxes = outputs['pred_boxes'][:,front_pad:end_pad].flatten(0,1)[idx]
         
         # for ease, assume a single batch case
         try:
@@ -632,7 +632,7 @@ class SetCriterionUCF(nn.Module):
             front_pad = 0
             end_pad = None
         target_boxes = torch.cat([t["boxes"] for t in targets])
-        target_boxes = target_boxes[:,1:].view(bs, -1, T, 4)
+        target_boxes = target_boxes[:,1:].view(bs, -1, T, 4)[:,:,front_pad:end_pad,:]
         # target_boxes = torch.cat([t["boxes"].reshape(-1, T, 5)[i] for t, (_, i) in zip(targets, indices)], dim=0)
         
         # target_boxes = torch.cat([unbatched_targets[i] for i, (_, J) in enumerate(indices)], dim=0)
