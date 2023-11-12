@@ -707,7 +707,7 @@ def validate_tuber_jhmdb_detection(cfg, model, criterion, postprocessors, data_l
 
             val_label = targets[bidx]["labels"] # length T
             # make one-hot vector
-            val_category = torch.full((len(val_label), cfg.CONFIG.DATA.NUM_CLASSES), 0)
+            val_category = torch.full((len(val_label), cfg.CONFIG.DATA.NUM_CLASSES+1), 0)
             for vl in range(len(val_label)):
                 label = int(val_label[vl])
                 val_category[vl, label] = 1
