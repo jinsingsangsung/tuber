@@ -153,7 +153,7 @@ class STDetectionEvaluaterJHMDB(object):
                 data = line.split(' [')[1].split(']')[0].split(',')
                 data = [float(x) for x in data]
 
-                scores = np.array(data[4:])
+                scores = np.array(data[4:4+self.class_num+1])
                 x = np.argmax(scores)
                 
                 if not image_key in all_boxes:

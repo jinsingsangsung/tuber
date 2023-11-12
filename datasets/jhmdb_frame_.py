@@ -178,7 +178,7 @@ class VideoDataset(Dataset):
                 raw_boxes = boxes
 
             classes = torch.as_tensor(classes, dtype=torch.int64)
-            classes = F.pad(classes, (front_pad, end_pad), value=classes[0]) # Note that every frame has the same class label
+            classes = F.pad(classes, (front_pad, end_pad), value=21) # Note that every frame has the same class label
             
             # print('classes', classes.shape)
 
@@ -208,6 +208,7 @@ class VideoDataset(Dataset):
         #     print(111)
         # start = max(mid_point - p_t, 0)
         # end = min(mid_point + self.clip_len - p_t, self.dataset["nframes"][sample_id] - 1)
+        resolution = self.dataset["resolution"][sample_id] # tuple
         end = self.dataset["nframes"][sample_id] - 1
         frame_ids_ = [s for s in range(end)]
         if len(frame_ids_) < self.clip_len:
@@ -216,8 +217,11 @@ class VideoDataset(Dataset):
             back = [end for _ in range(self.clip_len - len(frame_ids_) - front_size)]
             frame_ids_ = front + frame_ids_ + back
         assert len(frame_ids_) == self.clip_len
-        for frame_idx in frame_ids_:
-            tmp = Image.open(os.path.join(self.video_path, sample_id, "{:0>5}.png".format(frame_idx + 1)))
+        for j, frame_idx in enumerate(frame_ids_):
+            if j < front_size or j >= front_size + self.dataset["nframes"][sample_id]:
+                tmp = Image.new(mode="RGB", size = resolution)
+            else:
+                tmp = Image.open(os.path.join(self.video_path, sample_id, "{:0>5}.png".format(frame_idx + 1)))
             try:
                 tmp = tmp.resize((target['orig_size'][1], target['orig_size'][0]))
             except:
