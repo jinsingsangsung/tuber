@@ -190,13 +190,6 @@ class STDetectionEvaluaterJHMDB(object):
                             )
                             sample_dict_per_image[image_key]['labels'].append(x+1)
                             sample_dict_per_image[image_key]['scores'].append(scores[x])
-                    else:
-                        for x in range(len(scores)):
-                            sample_dict_per_image[image_key]['bbox'].append(
-                                np.asarray([data[0], data[1], data[2], data[3]], dtype=float)
-                            )
-                            sample_dict_per_image[image_key]['labels'].append(x+1)
-                            sample_dict_per_image[image_key]['scores'].append(0)                        
 
                 # for x in range(len(scores)):
                 #     sample_dict_per_image[image_key]['bbox'].append(
