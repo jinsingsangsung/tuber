@@ -554,23 +554,23 @@ class SetCriterionUCF(nn.Module):
         if not empty_frame:
             target_classes[front_pad:end_pad,:][idx] = target_classes_o
 
-        target_classes_onehot = F.one_hot(target_classes, self.num_classes+1).float()
-        true_label = 1
-        false_label = 0
-        if self.label_smoothing_alpha:
-            alpha = self.label_smoothing_alpha
-            true_label = (1-alpha)*true_label + alpha/self.num_classes
-            false_label = (1-alpha)*false_label + alpha/self.num_classes
-            target_classes_onehot[target_classes_onehot == 0] = false_label
-            target_classes_onehot[target_classes_onehot == 1] = true_label
+        # target_classes_onehot = F.one_hot(target_classes, self.num_classes+1).float()
+        # true_label = 1
+        # false_label = 0
+        # if self.label_smoothing_alpha:
+        #     alpha = self.label_smoothing_alpha
+        #     true_label = (1-alpha)*true_label + alpha/self.num_classes
+        #     false_label = (1-alpha)*false_label + alpha/self.num_classes
+        #     target_classes_onehot[target_classes_onehot == 0] = false_label
+        #     target_classes_onehot[target_classes_onehot == 1] = true_label
 
-        # loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
-        weights = torch.full(src_logits.shape[:2], 1,
-                             dtype=torch.float32, device=src_logits.device)
-        if not empty_frame:
-            weights[idx] = self.weight
-        weights = weights[..., None]
-        loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot, weights) / len(src_logits)
+        loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
+        # weights = torch.full(src_logits.shape[:2], 1,
+                            #  dtype=torch.float32, device=src_logits.device)
+        # if not empty_frame:
+            # weights[idx] = self.weight
+        # weights = weights[..., None]
+        # loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot, weights) / len(src_logits)
         # src_logits_b_ = outputs['pred_logits_b'][:,front_pad:end_pad,:,2:].flatten(0,1)
         # src_logits = torch.cat([src_logits, src_logits_b_], dim=-1)
         # loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)                
@@ -857,13 +857,13 @@ class SetCriterionJHMDB(nn.Module):
             target_classes_onehot[target_classes_onehot == 0] = false_label
             target_classes_onehot[target_classes_onehot == 1] = true_label
 
-        # loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
-        weights = torch.full(src_logits.shape[:2], 1,
-                             dtype=torch.float32, device=src_logits.device)
-        weights[idx] = self.weight
-        weights = weights[..., None]
+        loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
+        # weights = torch.full(src_logits.shape[:2], 1,
+                            #  dtype=torch.float32, device=src_logits.device)
+        # weights[idx] = self.weight
+        # weights = weights[..., None]
         # loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot[...,:-1], weights) / len(src_logits)
-        loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot, weights) / len(src_logits)
+        # loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot, weights) / len(src_logits)
         # src_logits_b_ = outputs['pred_logits_b'][:,front_pad:end_pad,:,2:].flatten(0,1)
         # src_logits = torch.cat([src_logits, src_logits_b_], dim=-1)
         # loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)                
