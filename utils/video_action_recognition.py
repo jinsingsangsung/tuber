@@ -952,6 +952,7 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
         T = scores.shape[1]
         scores = scores.reshape(-1, *scores.shape[-2:])
         boxes = boxes.reshape(-1, *boxes.shape[-2:])
+        output_b = output_b.reshape(-1, *output_b.shape[-2:])
         
         for bidx in range(B):
 
