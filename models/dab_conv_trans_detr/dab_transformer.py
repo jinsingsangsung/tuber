@@ -1039,7 +1039,7 @@ def build_transformer(cfg):
         activation="relu",
         num_patterns=cfg.CONFIG.MODEL.NUM_PATTERNS,
         bbox_embed_diff_each_layer=cfg.CONFIG.MODEL.BBOX_EMBED_DIFF_EACH_LAYER,
-        num_classes=cfg.CONFIG.DATA.NUM_CLASSES if 'ava' in cfg.CONFIG.DATA.DATASET_NAME else cfg.CONFIG.DATA.NUM_CLASSES+1,
+        num_classes=cfg.CONFIG.DATA.NUM_CLASSES,
         temp_len=cfg.CONFIG.DATA.TEMP_LEN,
     )
 

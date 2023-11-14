@@ -862,8 +862,8 @@ class SetCriterionJHMDB(nn.Module):
                              dtype=torch.float32, device=src_logits.device)
         weights[idx] = self.weight
         weights = weights[..., None]
-        # loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot[...,:-1], weights) / len(src_logits)
-        loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot, weights) / len(src_logits)
+        loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot[...,:-1], weights) / len(src_logits)
+        # loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot, weights) / len(src_logits)
         # src_logits_b_ = outputs['pred_logits_b'][:,front_pad:end_pad,:,2:].flatten(0,1)
         # src_logits = torch.cat([src_logits, src_logits_b_], dim=-1)
         # loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)                

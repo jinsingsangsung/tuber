@@ -157,6 +157,8 @@ class STDetectionEvaluaterJHMDB(object):
                 scores_b = np.array(data[-1:])
                 x = np.argmax(scores)
                 
+                if scores_b < 0.2: continue
+                
                 if not image_key in all_boxes:
                     all_boxes[image_key] = {}
 
@@ -169,9 +171,8 @@ class STDetectionEvaluaterJHMDB(object):
                     if (s==x):
                         all_boxes[image_key][s+1].append([data[0], data[1], data[2], data[3], np.sqrt(scores[s]*scores_b[0])])
                         
-
-                if x == self.class_num:
-                    continue            
+                # if x == self.class_num:
+                #     continue            
 
                 if not image_key in self.exclude_key:   
                     if not image_key in sample_dict_per_image:
