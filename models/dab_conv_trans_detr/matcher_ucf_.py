@@ -109,7 +109,7 @@ class HungarianMatcher(nn.Module):
                 tgt_classes = tgt_classes[None]
             tgt_classes = tgt_classes[:, front_pad:end_pad]
             tgt_classes = tgt_classes.transpose(0,1).contiguous().flatten()
-            tgt_classes = tgt_classes[tgt_classes!=num_classes-1]
+            tgt_classes = tgt_classes[tgt_classes!=num_classes]
             
             try:
                 assert num_valid_boxes == len(tgt_classes)

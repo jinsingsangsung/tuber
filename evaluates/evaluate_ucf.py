@@ -236,6 +236,8 @@ class STDetectionEvaluaterUCF(object):
                 scores_b = np.array(data[-1:])
                 x = np.argmax(scores)
                 
+                if scores_b < 0.2: continue
+                
                 # scores_i = torch.sqrt(torch.tensor(1-scores[-1]) * scores[:-1]).flatten()
                 # all_boxes[image_key][x+1] = np.asarray([data[0], data[1], data[2], data[3], scores[x]], dtype=float)
                 if not image_key in all_boxes:
