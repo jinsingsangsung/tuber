@@ -153,8 +153,9 @@ class STDetectionEvaluaterJHMDB(object):
                 data = line.split(' [')[1].split(']')[0].split(',')
                 data = [float(x) for x in data]
 
-                scores = np.array(data[4:4+self.class_num+1])
-                x = np.argmax(scores)
+                scores = np.array(data[4:4+self.class_num])
+                scores_b = np.array(data[-1:])
+                # x = np.argmax(scores)
                 
                 if not image_key in all_boxes:
                     all_boxes[image_key] = {}
@@ -165,12 +166,15 @@ class STDetectionEvaluaterJHMDB(object):
                     
                     # if s != x:
                         # all_boxes[image_key][s+1].append([data[0], data[1], data[2], data[3], 0])
-                    if (s==x):
-                        all_boxes[image_key][s+1].append([data[0], data[1], data[2], data[3], scores[x]])
+                    # if (s==x):
+                    if scores_b[0] > 0.8:
+                        all_boxes[image_key][s+1].append([data[0], data[1], data[2], data[3], scores[s]])
+                    else:
+                        all_boxes[image_key][s+1].append([data[0], data[1], data[2], data[3], 0])
                         
 
-                if x == self.class_num:
-                    continue            
+                # if x == self.class_num:
+                    # continue            
 
                 if not image_key in self.exclude_key:   
                     if not image_key in sample_dict_per_image:
@@ -179,12 +183,20 @@ class STDetectionEvaluaterJHMDB(object):
                             'labels': [],
                             'scores': [],
                         }
-
-                    sample_dict_per_image[image_key]['bbox'].append(
-                        np.asarray([data[0], data[1], data[2], data[3]], dtype=float)
-                    )
-                    sample_dict_per_image[image_key]['labels'].append(x+1)
-                    sample_dict_per_image[image_key]['scores'].append(scores[x])
+                    if scores_b[0] > 0.8:
+                        for x in range(len(scores)):
+                            sample_dict_per_image[image_key]['bbox'].append(
+                                np.asarray([data[0], data[1], data[2], data[3]], dtype=float)
+                            )
+                            sample_dict_per_image[image_key]['labels'].append(x+1)
+                            sample_dict_per_image[image_key]['scores'].append(scores[x])
+                    else:
+                        for x in range(len(scores)):
+                            sample_dict_per_image[image_key]['bbox'].append(
+                                np.asarray([data[0], data[1], data[2], data[3]], dtype=float)
+                            )
+                            sample_dict_per_image[image_key]['labels'].append(x+1)
+                            sample_dict_per_image[image_key]['scores'].append(0)                        
 
                 # for x in range(len(scores)):
                 #     sample_dict_per_image[image_key]['bbox'].append(

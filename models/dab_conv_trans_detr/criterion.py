@@ -1106,7 +1106,7 @@ class PostProcessUCF(nn.Module):
         # labels = labels.detach().cpu().numpy()
         boxes = boxes.detach().cpu().numpy()
         try:
-            output_b = out_logits_b.softmax(-1).detach().cpu().numpy()[..., 1:]
+            output_b = out_logits_b.softmax(-1).detach().cpu().numpy()[..., 1:2]
             return scores, boxes, output_b
         except:
             return scores, boxes
@@ -1139,12 +1139,14 @@ class PostProcess(nn.Module):
         #     # prob = F.softmax(out_logits, -1)
         num_frames = out_logits.size(1)
         prob = out_logits.softmax(-1)
+        # prob = prob[:,num_frames//2:num_frames//2+1,:,:].expand(-1, num_frames, -1, -1)
         # do voting
-        prob_b = out_logits_b.softmax(-1)[..., 1:2]
-        prob_not_b = out_logits_b.softmax(-1)[..., 2:]
-        prob[..., :-1] = (prob[..., :-1] * prob_b).sqrt()
-        prob[..., -1:] = (prob[..., -1:] * prob_not_b).sqrt()
+        # prob_b = out_logits_b.softmax(-1)[..., 1:2]
+        # prob_not_b = out_logits_b.softmax(-1)[..., 2:]
+        # prob[..., :-1] = (prob[..., :-1] * prob_b).sqrt()
+        # prob[..., -1:] = (prob[..., -1:] * prob_not_b).sqrt()
         # prob = prob.sum(dim=1, keepdim=True).softmax(-1)
+        # prob = prob.expand(-1,num_frames,-1,-1)
         # prob = (prob.expand(-1,num_frames,-1,-1)*prob_b).sqrt()
 
         # convert to [x0, y0, x1, y1] format
@@ -1158,7 +1160,7 @@ class PostProcess(nn.Module):
         # labels = labels.detach().cpu().numpy()
         boxes = boxes.detach().cpu().numpy()
         try:
-            output_b = out_logits_b.softmax(-1).detach().cpu().numpy()[..., 1:]
+            output_b = out_logits_b.softmax(-1).detach().cpu().numpy()[..., 1:2]
             return scores, boxes, output_b
         except:
             return scores, boxes
