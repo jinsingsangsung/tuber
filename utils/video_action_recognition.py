@@ -969,6 +969,7 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
 
             buff_output.append(scores[bidx*T+front_pad:(bidx+1)*T-end_pad, :, :].reshape(-1, scores.shape[-1]))
             buff_anno.append(boxes[bidx*T+front_pad:(bidx+1)*T-end_pad, :, :].reshape(-1, boxes.shape[-1]))
+            buff_binary.append(output_b[bidx*T+front_pad:(bidx+1)*T-end_pad, :, :].reshape(-1, output_b.shape[-1]))
             
             val_label = targets[bidx]["labels"] # num_actors, length T
             # make one-hot vector
@@ -1047,10 +1048,7 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
 
     buff_output = np.concatenate(buff_output, axis=0)
     buff_anno = np.concatenate(buff_anno, axis=0)
-    # try:
-    #     buff_binary = np.concatenate(buff_binary, axis=0)
-    # except:
-    #     pass
+    buff_binary = np.concatenate(buff_binary, axis=0)
 
     buff_GT_label = np.concatenate(buff_GT_label, axis=0)
     buff_GT_anno = np.concatenate(buff_GT_anno, axis=0)
@@ -1059,7 +1057,7 @@ def validate_tuber_ucf_detection(cfg, model, criterion, postprocessors, data_loa
 
     with open(tmp_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, cfg.DDP_CONFIG.GPU_WORLD_RANK), 'w') as f:
         for x in range(len(buff_id)):
-            data = np.concatenate([buff_anno[x], buff_output[x]])
+            data = np.concatenate([buff_anno[x], buff_output[x], buff_binary[x]])
             f.write("{} {}\n".format(buff_id[x], data.tolist()))
     # try:
     #     tmp_binary_path = '{}/{}/binary_{}.txt'
