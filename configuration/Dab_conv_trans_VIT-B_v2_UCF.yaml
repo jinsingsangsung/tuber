@@ -76,7 +76,7 @@ CONFIG:
     TEMP_LEN: 32
     SAMPLE_RATE: 1
     PRETRAINED: True
-    PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/ViT-B_K400_16x4.pth"
+    PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/ViT-B_v2_K400_16x4.pth"
     PRETRAIN_TRANSFORMER_DIR: ""
     PRETRAINED_PATH: ""
     LOAD: False
