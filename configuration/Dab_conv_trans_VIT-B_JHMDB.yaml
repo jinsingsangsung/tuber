@@ -96,7 +96,7 @@ CONFIG:
     RM_BINARY: False
 
   MATCHER:
-    COST_CLASS: 1
+    COST_CLASS: 5
     COST_BBOX: 5
     COST_GIOU: 2
     BNY_LOSS: True
@@ -104,7 +104,7 @@ CONFIG:
 
   LOSS_COFS:
     MASK_COF: 1
-    DICE_COF: 1
+    DICE_COF: 5
     BBOX_COF: 5
     GIOU_COF: 2
     PERSON_COF: 2    
