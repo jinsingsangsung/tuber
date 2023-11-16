@@ -262,7 +262,7 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
             # 'loss_ce_b': losses_ce_b.avg,
             })
         # Report JSON data to the NSML metric API server with a simple HTTP POST request.
-        if cfg.CONFIG.DATASET.NAME != "jhmdb":
+        if cfg.CONFIG.DATA.DATASET_NAME != "jhmdb":
             requests.post(os.environ['NSML_METRIC_API'], data=metrics_data)
         else:
             if epoch % cfg.CONFIG.VAL.FREQ != 0:
