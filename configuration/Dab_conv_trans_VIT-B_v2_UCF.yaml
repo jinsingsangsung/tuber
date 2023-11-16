@@ -23,7 +23,7 @@ CONFIG:
     MIN_LR: 1e-6 # only if cosine scheduler is used
     LR_BACKBONE: 1e-5 # if <=0, freezes the backbone
     MOMENTUM: 0.9
-    W_DECAY: 5e-4
+    W_DECAY: 1e-4
     LR_POLICY: 'cosine'
     USE_WARMUP: True # does nothing
     WARMUP_START_LR: 1e-5
@@ -93,7 +93,7 @@ CONFIG:
     BBOX_EMBED_DIFF_EACH_LAYER: False
 
   MATCHER:
-    COST_CLASS: 1
+    COST_CLASS: 5
     COST_BBOX: 5
     COST_GIOU: 2
     BNY_LOSS: True
@@ -101,11 +101,11 @@ CONFIG:
 
   LOSS_COFS:
     MASK_COF: 1
-    DICE_COF: 1
+    DICE_COF: 5
     BBOX_COF: 5
     GIOU_COF: 2
     PERSON_COF: 3
-    EOS_COF: 0.1
+    EOS_COF: 0.5
     WEIGHT: 10
     WEIGHT_CHANGE: 1000
     LOSS_CHANGE_COF: 2
