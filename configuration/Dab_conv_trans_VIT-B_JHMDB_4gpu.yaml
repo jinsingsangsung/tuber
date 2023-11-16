@@ -1,9 +1,9 @@
 DDP_CONFIG:
   WORLD_SIZE: 1
   WORLD_RANK: 0
-  GPU_WORLD_SIZE: 2
+  GPU_WORLD_SIZE: 4
   GPU_WORLD_RANK: 0
-  DIST_URL: 'tcp://{}:11593' 
+  DIST_URL: 'tcp://{}:11590' 
   WOLRD_URLS: ["{}"]
   AUTO_RANK_MATCH: True
   DIST_BACKEND: 'nccl'
@@ -17,7 +17,7 @@ CONFIG:
   USE_LOCATION: False
   EFFICIENT: False
   TRAIN:
-    EPOCH_NUM: 200
+    EPOCH_NUM: 160
     BATCH_SIZE: 1
     LR: 1e-4
     MIN_LR: 1e-6 # only if cosine scheduler is used
@@ -28,7 +28,7 @@ CONFIG:
     USE_WARMUP: True # does nothing
     WARMUP_START_LR: 1e-5
     WARMUP_EPOCHS: 10 # this determines whether to use Warmup unless using "step"
-    LR_MILESTONE: [170] #only for multistep
+    LR_MILESTONE: [130] #only for multistep
     STEP: 0.1 # gamma for lr decay
     OPTIMIZER:
       NAME: ADAMW
@@ -36,7 +36,7 @@ CONFIG:
     LR_SCHEDULER:
       NAME: 'multistep'
     CUT_GRADIENT: FALSE
-    SYNCBATCHNORM: True    
+    SYNCBATCHNORM: False
 
   VAL:
     BATCH_SIZE: 1
@@ -49,16 +49,17 @@ CONFIG:
     ANNO_PATH: '/mnt/tmp/JHMDB'
     DATA_PATH: '/mnt/tmp/JHMDB/Frames'
     NUM_CLASSES: 21
-    SPLIT: 0
+    SPLIT: 0    
     MULTIGRID: False
-    IMG_SIZE: 224
-    IMG_RESHAPE_SIZE: 256
+    IMG_SIZE: 256
+    IMG_RESHAPE_SIZE: 288
     TEMP_LEN: 40
     FRAME_RATE: 1
 
   MODEL:
     SINGLE_FRAME: True
-    BACKBONE_NAME: CSN-152
+    BACKBONE_NAME: ViT
+    TUNE_POINT: 0 # [0, 11]
     TEMPORAL_DS_STRATEGY: decode
     LAST_STRIDE: False
     GENERATE_LFB: False
@@ -76,7 +77,7 @@ CONFIG:
     TEMP_LEN: 40
     SAMPLE_RATE: 1
     PRETRAINED: True
-    PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/irCSN_152_ft_kinetics_from_ig65m_f126851907.mat"
+    PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/ViT-B_K400_16x4.pth"
     PRETRAIN_TRANSFORMER_DIR: ""
     PRETRAINED_PATH: ""
     LOAD: False
@@ -119,6 +120,6 @@ CONFIG:
     SAVE_DIR: 'checkpoints'
     EVAL_DIR: '/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/JHMDB_Tuber/eval'
     SAVE_FREQ: 10
-    RES_DIR: Dab_conv_trans_decsasde_CSN152_{}-{}/res
-    EXP_NAME: Dab_conv_trans_decsasde_CSN152_{}-{}
+    RES_DIR: Dab_conv_trans_decsasde_ViT_B_{}-{}/res
+    EXP_NAME: Dab_conv_trans_decsasde_ViT_B_{}-{}
     DISPLAY_FREQ: 50
