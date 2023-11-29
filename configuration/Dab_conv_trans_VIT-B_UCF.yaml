@@ -1,7 +1,7 @@
 DDP_CONFIG:
   WORLD_SIZE: 1
   WORLD_RANK: 0
-  GPU_WORLD_SIZE: 4
+  GPU_WORLD_SIZE: 8
   GPU_WORLD_RANK: 0
   DIST_URL: 'tcp://{}:11591' 
   WOLRD_URLS: ["{}"]
@@ -17,18 +17,18 @@ CONFIG:
   USE_LOCATION: False
   EFFICIENT: False
   TRAIN:
-    EPOCH_NUM: 16
+    EPOCH_NUM: 40
     BATCH_SIZE: 1
-    LR: 1e-4
+    LR: 2e-4
     MIN_LR: 1e-6 # only if cosine scheduler is used
-    LR_BACKBONE: 1e-5 # if <=0, freezes the backbone
+    LR_BACKBONE: 2e-5 # if <=0, freezes the backbone
     MOMENTUM: 0.9
-    W_DECAY: 1e-4
+    W_DECAY: 2e-4
     LR_POLICY: 'cosine'
     USE_WARMUP: True # does nothing
-    WARMUP_START_LR: 1e-5
-    WARMUP_EPOCHS: 3 # this determines whether to use Warmup unless using "step"
-    LR_MILESTONE: [14] #only for multistep
+    WARMUP_START_LR: 2e-6
+    WARMUP_EPOCHS: 4 # this determines whether to use Warmup unless using "step"
+    LR_MILESTONE: [30] #only for multistep
     STEP: 0.1 # gamma for lr decay
     OPTIMIZER:
       NAME: ADAMW
@@ -93,7 +93,7 @@ CONFIG:
     BBOX_EMBED_DIFF_EACH_LAYER: False
 
   MATCHER:
-    COST_CLASS: 5
+    COST_CLASS: 4
     COST_BBOX: 5
     COST_GIOU: 2
     BNY_LOSS: True
@@ -101,7 +101,7 @@ CONFIG:
 
   LOSS_COFS:
     MASK_COF: 1
-    DICE_COF: 5
+    DICE_COF: 4
     BBOX_COF: 5
     GIOU_COF: 2
     PERSON_COF: 3 
