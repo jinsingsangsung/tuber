@@ -480,7 +480,7 @@ class SetCriterionUCF(nn.Module):
     """
 
     def __init__(self, weight, num_classes, num_queries, matcher, weight_dict, eos_coef, losses, data_file,
-                 evaluation=False, label_smoothing_alpha=0.1):
+                 evaluation=False, label_smoothing_alpha=0.0):
         """ Create the criterion.
         Parameters:
             num_classes: number of object categories, omitting the special no-object category
@@ -570,10 +570,10 @@ class SetCriterionUCF(nn.Module):
         if not empty_frame:
             weights[idx] = self.weight
         weights = weights[..., None]
-        loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot, weights) / len(src_logits)
+        # loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot, weights) / len(src_logits)
         # src_logits_b_ = outputs['pred_logits_b'][:,front_pad:end_pad,:,2:].flatten(0,1)
         # src_logits = torch.cat([src_logits, src_logits_b_], dim=-1)
-        # loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)                
+        loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
         # src_logits = torch.cat([src_logits, src_logits_b[...,2:]], dim=-1)
         # loss_ce = F.cross_entropy(src_logits.flatten(1,2).transpose(1, 2), target_classes.flatten(1,2), self.empty_weight)
         losses = {'loss_ce': loss_ce}
@@ -788,7 +788,7 @@ class SetCriterionJHMDB(nn.Module):
     """
 
     def __init__(self, weight, num_classes, num_queries, matcher, weight_dict, eos_coef, losses, data_file,
-                 evaluation=False, label_smoothing_alpha=0.1):
+                 evaluation=False, label_smoothing_alpha=0.0):
         """ Create the criterion.
         Parameters:
             num_classes: number of object categories, omitting the special no-object category
@@ -863,10 +863,10 @@ class SetCriterionJHMDB(nn.Module):
         weights[idx] = self.weight
         weights = weights[..., None]
         # loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot[...,:-1], weights) / len(src_logits)
-        loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot, weights) / len(src_logits)
+        # loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot, weights) / len(src_logits)
         # src_logits_b_ = outputs['pred_logits_b'][:,front_pad:end_pad,:,2:].flatten(0,1)
         # src_logits = torch.cat([src_logits, src_logits_b_], dim=-1)
-        # loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)                
+        loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)                
         # src_logits = torch.cat([src_logits, src_logits_b[...,2:]], dim=-1)
         # loss_ce = F.cross_entropy(src_logits.flatten(1,2).transpose(1, 2), target_classes.flatten(1,2), self.empty_weight)
         losses = {'loss_ce': loss_ce}
@@ -1090,8 +1090,8 @@ class PostProcessUCF(nn.Module):
         # do voting
         prob_b = out_logits_b.softmax(-1)[..., 1:2]
         prob = (prob * prob_b).sqrt()
-        prob = prob.sum(dim=1, keepdim=True).softmax(-1)
-        prob = (prob.expand(-1,num_frames,-1,-1)*prob_b).sqrt()
+        # prob = prob.sum(dim=1, keepdim=True).softmax(-1)
+        # prob = (prob.expand(-1,num_frames,-1,-1)*prob_b).sqrt()
 
         # convert to [x0, y0, x1, y1] format
         boxes = box_ops.box_cxcywh_to_xyxy(out_bbox)
@@ -1140,8 +1140,8 @@ class PostProcess(nn.Module):
         # do voting
         prob_b = out_logits_b.softmax(-1)[..., 1:2]
         prob = (prob * prob_b).sqrt()
-        prob = prob.sum(dim=1, keepdim=True).softmax(-1)
-        prob = (prob.expand(-1,num_frames,-1,-1)*prob_b).sqrt()
+        # prob = prob.sum(dim=1, keepdim=True).softmax(-1)
+        # prob = (prob.expand(-1,num_frames,-1,-1)*prob_b).sqrt()
 
         # convert to [x0, y0, x1, y1] format
         boxes = box_ops.box_cxcywh_to_xyxy(out_bbox)
