@@ -17,7 +17,7 @@ CONFIG:
   USE_LOCATION: False
   EFFICIENT: False
   TRAIN:
-    EPOCH_NUM: 40
+    EPOCH_NUM: 18
     BATCH_SIZE: 1
     LR: 2e-4
     MIN_LR: 1e-6 # only if cosine scheduler is used
@@ -28,7 +28,7 @@ CONFIG:
     USE_WARMUP: True # does nothing
     WARMUP_START_LR: 2e-6
     WARMUP_EPOCHS: 4 # this determines whether to use Warmup unless using "step"
-    LR_MILESTONE: [30] #only for multistep
+    LR_MILESTONE: [16] #only for multistep
     STEP: 0.1 # gamma for lr decay
     OPTIMIZER:
       NAME: ADAMW
@@ -77,11 +77,11 @@ CONFIG:
     SAMPLE_RATE: 1
     PRETRAINED: True
     PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/ViT-B_K400_16x4.pth"
-    PRETRAIN_TRANSFORMER_DIR: ""
+    PRETRAIN_TRANSFORMER_DIR: "/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/UCF/Dab_conv_trans_decsasde_ViT-B_270-543/ckpt_epoch_32.pth"
     PRETRAINED_PATH: ""
     LOAD: False
     LOAD_FC: False
-    LOAD_DETR: False
+    LOAD_DETR: True
     POSITION_EMBEDDING: "sine"
     NUM_FEATURE_LEVELS: 4
     NUM_DEC_N_POINTS: 4
