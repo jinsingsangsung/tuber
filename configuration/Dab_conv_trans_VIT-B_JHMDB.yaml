@@ -1,7 +1,7 @@
 DDP_CONFIG:
   WORLD_SIZE: 1
   WORLD_RANK: 0
-  GPU_WORLD_SIZE: 4
+  GPU_WORLD_SIZE: 8
   GPU_WORLD_RANK: 0
   DIST_URL: 'tcp://{}:11590' 
   WOLRD_URLS: ["{}"]
@@ -17,7 +17,7 @@ CONFIG:
   USE_LOCATION: False
   EFFICIENT: False
   TRAIN:
-    EPOCH_NUM: 200
+    EPOCH_NUM: 350
     BATCH_SIZE: 1
     LR: 2e-4
     MIN_LR: 1e-6 # only if cosine scheduler is used
@@ -27,8 +27,8 @@ CONFIG:
     LR_POLICY: 'cosine'
     USE_WARMUP: True # does nothing
     WARMUP_START_LR: 2e-6
-    WARMUP_EPOCHS: 40 # this determines whether to use Warmup unless using "step"
-    LR_MILESTONE: [180] #only for multistep
+    WARMUP_EPOCHS: 10 # this determines whether to use Warmup unless using "step"
+    LR_MILESTONE: [300] #only for multistep
     STEP: 0.1 # gamma for lr decay
     OPTIMIZER:
       NAME: ADAMW
@@ -64,13 +64,13 @@ CONFIG:
     LAST_STRIDE: False
     GENERATE_LFB: False
     NAME: 'jhmdb_detr_9_224'
-    ENC_LAYERS: 1
-    DEC_LAYERS: 1
+    ENC_LAYERS: 3
+    DEC_LAYERS: 3
     D_MODEL: 256
     NHEAD: 8
     NUM_ENCODER_LAYERS: 12
     DIM_FEEDFORWARD: 2048
-    QUERY_NUM: 15
+    QUERY_NUM: 5
     NORMALIZE_BEFORE: False
     DROPOUT: 0.1
     DS_RATE: 8
@@ -104,9 +104,9 @@ CONFIG:
 
   LOSS_COFS:
     MASK_COF: 1
-    DICE_COF: 3
+    DICE_COF: 4
     BBOX_COF: 5
-    GIOU_COF: 3
+    GIOU_COF: 2
     PERSON_COF: 2    
     EOS_COF: 0.5
     WEIGHT: 10
@@ -122,4 +122,4 @@ CONFIG:
     SAVE_FREQ: 10
     RES_DIR: Dab_conv_trans_decsasde_ViT_B_{}-{}/res
     EXP_NAME: Dab_conv_trans_decsasde_ViT_B_{}-{}
-    DISPLAY_FREQ: 50
+    DISPLAY_FREQ: 100
