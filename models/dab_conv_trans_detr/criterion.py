@@ -1089,7 +1089,7 @@ class PostProcessUCF(nn.Module):
         prob = out_logits.softmax(-1)
         # do voting
         prob_b = out_logits_b.softmax(-1)[..., 1:2]
-        prob = (prob * prob_b).sqrt()
+        prob[:-1] = (prob[:-1] * prob_b).sqrt()
         # prob = prob.sum(dim=1, keepdim=True).softmax(-1)
         # prob = (prob.expand(-1,num_frames,-1,-1)*prob_b).sqrt()
 
@@ -1104,7 +1104,7 @@ class PostProcessUCF(nn.Module):
         # labels = labels.detach().cpu().numpy()
         boxes = boxes.detach().cpu().numpy()
         try:
-            output_b = out_logits_b.softmax(-1).detach().cpu().numpy()[..., 1:]
+            output_b = out_logits_b.softmax(-1).detach().cpu().numpy()[..., 1:2]
             return scores, boxes, output_b
         except:
             return scores, boxes

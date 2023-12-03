@@ -230,12 +230,13 @@ class STDetectionEvaluaterUCF(object):
                 data = line.split(' [')[1].split(']')[0].split(',')
                 data = [float(x) for x in data]
 
-                scores = np.array(data[4:])
+                scores = np.array(data[4:-1])
                 x = np.argmax(scores)
                 if image_key in self.exclude_key:
                     continue
                 
-                scores_i = torch.sqrt(torch.tensor(1-scores[-1]) * scores[:-1]).flatten()
+                # scores_i = torch.sqrt(torch.tensor(scores[-1]) * scores[:-1]).flatten()
+                scores_i = scores[:-1]
                 # all_boxes[image_key][x+1] = np.asarray([data[0], data[1], data[2], data[3], scores[x]], dtype=float)
                 if not image_key in all_boxes:
                     all_boxes[image_key] = {}
@@ -246,7 +247,7 @@ class STDetectionEvaluaterUCF(object):
                     # if s != x:
                     #     all_boxes[image_key][s+1].append([data[0], data[1], data[2], data[3], 0])
                     if (s == x):
-                        all_boxes[image_key][s+1].append([data[0], data[1], data[2], data[3], scores_i[x]])
+                        all_boxes[image_key][s+1].append([data[0], data[1], data[2], data[3], scores_i[s]])
                     # all_boxes[image_key][s+1] = np.asarray([[data[0], data[1], data[2], data[3], scores[s]]], type=float)
                     # if len(all_boxes[image_key][s+1]) == num_queries:
                     #     all_boxes[image_key][s+1] = np.asarray(all_boxes[image_key][s+1], dtype=float)
