@@ -178,7 +178,7 @@ def link_bbxes_between_frames(bbox_list, w_iou=1.0, w_scores=1.0, w_scores_mul=0
     return res
 
 
-def link_video_one_class(vid_det, bNMS3d = False, gtlen=None):
+def link_video_one_class(vid_det, bNMS3d = False, gtlen=None, start=None):
     '''
     linking for one class in a video (in full length)
     vid_det: a list of [frame_index, [bbox cls_score]]
@@ -199,8 +199,13 @@ def link_video_one_class(vid_det, bNMS3d = False, gtlen=None):
             if np.array(keep).size:
                 vres_keep = [vres[k] for k in keep]
                 # max subarray with penalization -|Lc-L|/Lc
-                if gtlen:
+                if gtlen and not start:
                     vres = temporal_check(vres_keep, gtlen)
+                elif gtlen and start:
+                    output_res = []
+                    for v in vres_keep:
+                        output_res.append(v[start:start+gtlen])
+                    vres = output_res
                 else:
                     vres = vres_keep
 
@@ -216,7 +221,13 @@ def video_ap_one_class(gt, pred_videos, iou_thresh = 0.2, bTemporal = False, gtl
     pred = []
     for pred_v in pred_videos:
         video_index = pred_v[0]
-        pred_link_v = link_video_one_class(pred_v[1], True, gtlen) # [array<frame_index, x1,y1,x2,y2, cls_score>]
+        valid_pred = [k for k in pred_v[1] if len(k[1])!=0]
+        trim_len = len(valid_pred)
+        try:
+            trim_start = valid_pred[0][0]
+        except:
+            trim_start = None
+        pred_link_v = link_video_one_class(pred_v[1], True, trim_len, trim_start) # [array<frame_index, x1,y1,x2,y2, cls_score>]
         for tube in pred_link_v:
             pred.append((video_index, tube))
     # sort tubes according to scores (descending order)
@@ -242,7 +253,7 @@ def video_ap_one_class(gt, pred_videos, iou_thresh = 0.2, bTemporal = False, gtl
                     gt_this_index.append(j)
             if len(gt_this) > 0:
                 if bTemporal:
-                    iou = np.array([iou3dt(np.array(g), boxes[:, :5]) for g in gt_this])
+                    iou = np.array([iou3dt(np.array(g_), boxes[:, :5]) for g_ in gt_this])
                 else:
                     iou = []
                     for g_ in gt_this:
