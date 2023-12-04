@@ -1105,10 +1105,7 @@ class PostProcess(nn.Module):
                           For evaluation, this must be the original image size (before any data augmentation)
                           For visualization, this should be the image size after data augment, but before padding
         """
-        try:
-            out_logits, out_bbox, out_logits_b = outputs['pred_logits'], outputs['pred_boxes'], outputs['pred_logits_b']
-        except:
-            out_logits, out_bbox = outputs['pred_logits'], outputs['pred_boxes']
+        out_logits, out_bbox, out_logits_b = outputs['pred_logits'], outputs['pred_boxes'], outputs['pred_logits_b']
         assert len(out_logits) == len(target_sizes)
         assert target_sizes.shape[1] == 2
 
@@ -1136,11 +1133,8 @@ class PostProcess(nn.Module):
         scores = prob.detach().cpu().numpy()
         # labels = labels.detach().cpu().numpy()
         boxes = boxes.detach().cpu().numpy()
-        try:
-            output_b = out_logits_b.softmax(-1).detach().cpu().numpy()[..., 1:]
-            return scores, boxes, output_b
-        except:
-            return scores, boxes
+        output_b = out_logits_b.softmax(-1).detach().cpu().numpy()[..., 1:2]
+        return scores, boxes, output_b
 
 class PostProcessAVA(nn.Module):
     """ This module converts the model's output into the format expected by the coco api"""

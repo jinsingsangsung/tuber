@@ -156,42 +156,39 @@ class STDetectionEvaluaterJHMDB(object):
                 scores = np.array(data[4:4+self.class_num+1])
                 x = np.argmax(scores)
                 
+                scores_i = scores[:-1]
                 if not image_key in all_boxes:
                     all_boxes[image_key] = {}
 
                 for s in range(self.class_num):
                     if not (s+1) in all_boxes[image_key]:
                         all_boxes[image_key][s+1] = []
-                    
-                    # if s != x:
-                        # all_boxes[image_key][s+1].append([data[0], data[1], data[2], data[3], 0])
-                    if (s==x):
-                        all_boxes[image_key][s+1].append([data[0], data[1], data[2], data[3], scores[x]])
+
+                    all_boxes[image_key][s+1].append([data[0], data[1], data[2], data[3], scores_i[s]])
                         
 
                 if x == self.class_num:
                     continue            
 
-                if not image_key in self.exclude_key:   
-                    if not image_key in sample_dict_per_image:
-                        sample_dict_per_image[image_key] = {
-                            'bbox': [],
-                            'labels': [],
-                            'scores': [],
-                        }
-
-                    sample_dict_per_image[image_key]['bbox'].append(
-                        np.asarray([data[0], data[1], data[2], data[3]], dtype=float)
-                    )
-                    sample_dict_per_image[image_key]['labels'].append(x+1)
-                    sample_dict_per_image[image_key]['scores'].append(scores[x])
-
-                # for x in range(len(scores)):
+                if not image_key in sample_dict_per_image:
+                    sample_dict_per_image[image_key] = {
+                        'bbox': [],
+                        'labels': [],
+                        'scores': [],
+                    }
+                # if x < self.class_num:
                 #     sample_dict_per_image[image_key]['bbox'].append(
                 #         np.asarray([data[0], data[1], data[2], data[3]], dtype=float)
                 #     )
                 #     sample_dict_per_image[image_key]['labels'].append(x+1)
                 #     sample_dict_per_image[image_key]['scores'].append(scores[x])
+
+                for s in range(len(scores)-1):
+                    sample_dict_per_image[image_key]['bbox'].append(
+                        np.asarray([data[0], data[1], data[2], data[3]], dtype=float)
+                    )
+                    sample_dict_per_image[image_key]['labels'].append(s+1)
+                    sample_dict_per_image[image_key]['scores'].append(scores[s])
 
         for k in list(all_boxes.keys()):
             for s in range(self.class_num):

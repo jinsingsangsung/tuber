@@ -649,10 +649,7 @@ def validate_tuber_jhmdb_detection(cfg, model, criterion, postprocessors, data_l
                 else:
                     outputs = model(samples, lfb_features)
             else:
-                try:
-                    model.training=False
-                except:
-                    pass
+                model.training=False
                 if not "DN" in cfg.CONFIG.LOG.EXP_NAME:
                     outputs = model(samples)
                 else:
@@ -665,10 +662,7 @@ def validate_tuber_jhmdb_detection(cfg, model, criterion, postprocessors, data_l
         weight_dict = criterion.weight_dict
 
         orig_target_sizes = torch.stack([t["size"] for t in targets], dim=0)
-        try:
-            scores, boxes, output_b = postprocessors['bbox'](outputs, orig_target_sizes)
-        except:
-            scores, boxes = postprocessors['bbox'](outputs, orig_target_sizes)
+        scores, boxes, output_b = postprocessors['bbox'](outputs, orig_target_sizes)
 
         B = scores.shape[0]
         T = scores.shape[1]
@@ -691,19 +685,26 @@ def validate_tuber_jhmdb_detection(cfg, model, criterion, postprocessors, data_l
             end_pad = targets[bidx]["end_pad"]
             buff_output.append(scores[bidx*T+front_pad:(bidx+1)*T-end_pad, :, :].reshape(-1, scores.shape[-1]))
             buff_anno.append(boxes[bidx*T+front_pad:(bidx+1)*T-end_pad, :, :].reshape(-1, boxes.shape[-1]))
-            try:
-                buff_binary.append(output_b)
-            except:
-                pass
-
+            buff_binary.append(output_b[bidx, bidx*T+front_pad:(bidx+1)*T-end_pad, :, :].reshape(-1, output_b.shape[-1]))
+            
+            # print("buff_output:", buff_output[0].shape)
+            # print("buff_anno:", buff_anno[0].shape)
+            # print("buff_binary:", buff_binary[0].shape)
+            
+            # if buff_binary[0].shape[0] != buff_anno[0].shape[0]:
+            #     print("T, bidx, front_pad, end_pad, output_b.shape", T, bidx, front_pad.item(), end_pad.item(), output_b.shape)
+            # else:
+            #     print("T, bidx, front_pad, end_pad, output_b.shape", T, bidx, front_pad.item(), end_pad.item(), output_b.shape)
+            # import pdb; pdb.set_trace()
+            
             for t in range(T-front_pad-end_pad):
                 buff_GT_id.extend([frame_id + f"_{t:02d}"])
                 for l in range(cfg.CONFIG.MODEL.QUERY_NUM):
                     buff_id.extend([frame_id + f"_{t:02d}"])
-                    try:
-                        buff_binary.append(output_b[..., 0])
-                    except:
-                        pass
+                    # try:
+                    #     buff_binary.append(output_b[..., 0])
+                    # except:
+                    #     pass
 
             val_label = targets[bidx]["labels"] # length T
             # make one-hot vector
@@ -775,10 +776,7 @@ def validate_tuber_jhmdb_detection(cfg, model, criterion, postprocessors, data_l
 
     buff_output = np.concatenate(buff_output, axis=0)
     buff_anno = np.concatenate(buff_anno, axis=0)
-    # try:
-    #     buff_binary = np.concatenate(buff_binary, axis=0)
-    # except:
-    #     pass
+    buff_binary = np.concatenate(buff_binary, axis=0)
 
     buff_GT_label = np.concatenate(buff_GT_label, axis=0)
     buff_GT_anno = np.concatenate(buff_GT_anno, axis=0)
@@ -786,7 +784,7 @@ def validate_tuber_jhmdb_detection(cfg, model, criterion, postprocessors, data_l
     tmp_path = '{}/{}/{}.txt'
     with open(tmp_path.format(cfg.CONFIG.LOG.BASE_PATH, cfg.CONFIG.LOG.RES_DIR, cfg.DDP_CONFIG.GPU_WORLD_RANK), 'w') as f:
         for x in range(len(buff_id)):
-            data = np.concatenate([buff_anno[x], buff_output[x]])
+            data = np.concatenate([buff_anno[x], buff_output[x], buff_binary[x]])
             f.write("{} {}\n".format(buff_id[x], data.tolist()))
     # try:
     #     tmp_binary_path = '{}/{}/binary_{}.txt'
