@@ -26,14 +26,14 @@ import fvcore.nn as fv
 
 
 cfg = get_cfg_defaults()
-cfg.merge_from_file("./configuration/Dab_conv_trans_CSN152_AVA22.yaml")
+cfg.merge_from_file("./configuration/Dab_conv_trans_VIT-B_JHMDB.yaml")
 # cfg.merge_from_file("./configuration/TubeR_CSN50_AVA21.yaml")
 model, _, _ = build_model(cfg)
 
 device = "cuda:0"
 model = model.to(device)
 
-inp = torch.randn((1, 3, 16, 256, 455)).to(device)
+inp = torch.randn((1, 3, 40, 256, 360)).to(device)
 # flops, params = profile(model, (inp, ))
 # flops, params = clever_format([flops, params], "%.3f")
 # print("flops:", flops)
