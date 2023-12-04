@@ -260,12 +260,12 @@ class STDetectionEvaluaterUCF(object):
                         'labels': [],
                         'scores': [],
                     }
-                if x < self.class_num:
+                for s in range(len(scores)-1):
                     sample_dict_per_image[image_key]['bbox'].append(
                         np.asarray([data[0], data[1], data[2], data[3]], dtype=float)
                     )
-                    sample_dict_per_image[image_key]['labels'].append(x+1)
-                    sample_dict_per_image[image_key]['scores'].append(scores[x])
+                    sample_dict_per_image[image_key]['labels'].append(s+1)
+                    sample_dict_per_image[image_key]['scores'].append(scores[s])
 
                 # scores_i = torch.sqrt(torch.tensor(1-scores[-1]) * scores[:-1]).flatten()
                 # # num_topk = 5

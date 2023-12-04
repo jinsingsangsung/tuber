@@ -1068,28 +1068,16 @@ class PostProcessUCF(nn.Module):
                           For evaluation, this must be the original image size (before any data augmentation)
                           For visualization, this should be the image size after data augment, but before padding
         """
-        try:
-            out_logits, out_bbox, out_logits_b = outputs['pred_logits'], outputs['pred_boxes'], outputs['pred_logits_b']
-        except:
-            out_logits, out_bbox = outputs['pred_logits'], outputs['pred_boxes']
+        out_logits, out_bbox, out_logits_b = outputs['pred_logits'], outputs['pred_boxes'], outputs['pred_logits_b']
         assert len(out_logits) == len(target_sizes)
         assert target_sizes.shape[1] == 2
 
-        # try:
-        #     prob_binary = out_logits_b.softmax(-1)[..., 1:2]
-        #     # prob_bbox = (prob_binary > 0.8).float() * prob_binary
-        #     # prob_binary = out_logits_b[..., 2:]
-        #     # prob = F.softmax(torch.cat([out_logits, prob_binary], dim=-1), -1)
-        #     prob = F.softmax(out_logits, -1)
-        #     prob[:,:,:-1] = prob[:,:,:-1] * prob_binary
-        # except:
-        #     prob = out_logits.sigmoid()
-
         num_frames = out_logits.size(1)
         prob = out_logits.softmax(-1)
-        # do voting
+        
         prob_b = out_logits_b.softmax(-1)[..., 1:2]
         prob[:-1] = (prob[:-1] * prob_b).sqrt()
+        # do voting
         # prob = prob.sum(dim=1, keepdim=True).softmax(-1)
         # prob = (prob.expand(-1,num_frames,-1,-1)*prob_b).sqrt()
 
@@ -1103,13 +1091,8 @@ class PostProcessUCF(nn.Module):
         scores = prob.detach().cpu().numpy()
         # labels = labels.detach().cpu().numpy()
         boxes = boxes.detach().cpu().numpy()
-        try:
-            output_b = out_logits_b.softmax(-1).detach().cpu().numpy()[..., 1:2]
-            return scores, boxes, output_b
-        except:
-            return scores, boxes
-
-
+        output_b = out_logits_b.softmax(-1).detach().cpu().numpy()[..., 1:2]
+        return scores, boxes, output_b
 
 class PostProcess(nn.Module):
     """ This module converts the model's output into the format expected by the coco api"""
