@@ -17,7 +17,7 @@ CONFIG:
   USE_LOCATION: False
   EFFICIENT: False
   TRAIN:
-    EPOCH_NUM: 300
+    EPOCH_NUM: 400
     BATCH_SIZE: 1
     LR: 2e-4
     MIN_LR: 1e-6 # only if cosine scheduler is used
@@ -28,7 +28,7 @@ CONFIG:
     USE_WARMUP: True # does nothing
     WARMUP_START_LR: 2e-6
     WARMUP_EPOCHS: 10 # this determines whether to use Warmup unless using "step"
-    LR_MILESTONE: [280] #only for multistep
+    LR_MILESTONE: [350] #only for multistep
     STEP: 0.1 # gamma for lr decay
     OPTIMIZER:
       NAME: ADAMW
