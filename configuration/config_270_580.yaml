@@ -64,7 +64,7 @@ CONFIG:
     LAST_STRIDE: False
     GENERATE_LFB: False
     NAME: 'jhmdb_detr_9_224'
-    ENC_LAYERS: 5
+    ENC_LAYERS: 4
     DEC_LAYERS: 3
     D_MODEL: 256
     NHEAD: 8
