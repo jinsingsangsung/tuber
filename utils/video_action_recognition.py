@@ -251,7 +251,7 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
             # writer.add_scalar('train/loss_ce_b', losses_ce_b.avg, idx + epoch * len(data_loader))
     
     try:
-        if cfg.CONFIG.DATA.DATASET_NAME == "jhmdb":
+        if cfg.CONFIG.DATA.DATASET_NAME == "jhmdb" or cfg.CONFIG.DATA.DATASET_NAME == "ucf":
             nsml_log_control = True
         metrics_data = json.dumps({
             '@epoch': epoch,
