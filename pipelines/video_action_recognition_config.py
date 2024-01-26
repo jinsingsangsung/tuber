@@ -142,6 +142,8 @@ _C.CONFIG.DATA.NEW_WIDTH = 340
 # Interpolation to resize image (random, bilinear, bicubic)
 _C.CONFIG.DATA.INTERPOLATION = 'bicubic'
 
+_C.CONFIG.DATA.INPUT_CHANNEL_NUM = [3]
+_C.CONFIG.DATA.REVERSE_INPUT_CHANNEL = False
 
 # -----------------------------------------------------------------------------
 # Augmentation settings
@@ -228,6 +230,59 @@ _C.CONFIG.ViT.USE_CHECKPOINT = True
 _C.CONFIG.ViT.LAYER_DECAY = 0.75
 _C.CONFIG.ViT.WEIGHT_DECAY = 0.05
 _C.CONFIG.ViT.NO_WEIGHT_DECAY = ['pos_embed']
+
+_C.CONFIG.RESNET = CN(new_allowed=True)
+_C.CONFIG.RESNET.TRANS_FUNC = "bottleneck_transform"
+# Number of groups. 1 for ResNet, and larger than 1 for ResNeXt).
+_C.CONFIG.RESNET.NUM_GROUPS = 1
+# Width of each group (64 -> ResNet; 4 -> ResNeXt).
+_C.CONFIG.RESNET.WIDTH_PER_GROUP = 64
+# Apply relu in a inplace manner.
+_C.CONFIG.RESNET.INPLACE_RELU = True
+# Apply stride to 1x1 conv.
+_C.CONFIG.RESNET.STRIDE_1X1 = False
+#  If true, initialize the gamma of the final BN of each block to zero.
+_C.CONFIG.RESNET.ZERO_INIT_FINAL_BN = False
+
+# Size of stride on different res stages.
+_C.CONFIG.RESNET.SPATIAL_STRIDES = [[1], [2], [2], [2]]
+
+# Whether use modulated DCN on Res2, Res3, Res4, Res5 or not
+_C.CONFIG.RESNET.DEFORM_ON_PER_STAGE = [False, False, False, False]
+# Number of weight layers.
+_C.CONFIG.RESNET.DEPTH = 101 #50
+
+# If the current block has more than NUM_BLOCK_TEMP_KERNEL blocks, use temporal
+# kernel of 1 for the rest of the blocks.
+# _C.CONFIG.RESNET.NUM_BLOCK_TEMP_KERNEL = [[3], [4], [6], [3]]
+_C.CONFIG.RESNET.NUM_BLOCK_TEMP_KERNEL = [ [ 3, 3 ], [ 4, 4 ], [ 6, 6 ], [ 3, 3 ] ]
+# Size of dilation on different res stages.
+# _C.CONFIG.RESNET.SPATIAL_DILATIONS = [[1], [1], [1], [1]]
+_C.CONFIG.RESNET.SPATIAL_DILATIONS = [ [ 1, 1 ], [ 1, 1 ], [ 1, 1 ], [ 1, 1 ] ]
+_C.CONFIG.RESNET.SPATIAL_STRIDES = [ [ 1, 1 ], [ 2, 2 ], [ 2, 2 ], [ 2, 2 ] ]
+
+
+
+_C.CONFIG.SLOWFAST = CN(new_allowed=True)
+
+# Kernel dimension used for fusing information from Fast pathway to Slow
+# pathway.
+_C.CONFIG.SLOWFAST.FUSION_KERNEL_SZ = 5
+# Corresponds to the frame rate reduction ratio, $\alpha$ between the Slow and
+# Fast pathways.
+_C.CONFIG.SLOWFAST.ALPHA = 4 # 8
+# Corresponds to the inverse of the channel reduction ratio, $\beta$ between
+# the Slow and Fast pathways.
+_C.CONFIG.SLOWFAST.BETA_INV = 8
+# Ratio of channel dimensions between the Slow and Fast pathways.
+_C.CONFIG.SLOWFAST.FUSION_CONV_CHANNEL_RATIO = 2
+_C.CONFIG.SLOWFAST.FUSION_KERNEL_SZ = 5
+
+_C.CONFIG.NONLOCAL = CN(new_allowed=True)
+_C.CONFIG.NONLOCAL.LOCATION = [[[], []], [[], []], [[6, 13, 20], []], [[], []]]
+_C.CONFIG.NONLOCAL.GROUP = [ [ 1, 1 ], [ 1, 1 ], [ 1, 1 ], [ 1, 1 ] ]
+_C.CONFIG.NONLOCAL.INSTANTIATION = "dot_product"
+_C.CONFIG.NONLOCAL.POOL = [ [ [ 2, 2, 2 ], [ 2, 2, 2 ] ], [ [ 2, 2, 2 ], [ 2, 2, 2 ] ], [ [ 2, 2, 2 ], [ 2, 2, 2 ] ], [ [ 2, 2, ], [ 2, 2, 2 ] ] ]
 
 
 _C.CONFIG.LOG = CN(new_allowed=True)

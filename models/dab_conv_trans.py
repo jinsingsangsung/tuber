@@ -82,7 +82,7 @@ class DETR(nn.Module):
         #     self.class_proj = nn.Conv3d(backbone.num_channels, hidden_dim, kernel_size=1)
         num_feature_levels = 4
         self.num_feature_levels = num_feature_levels
-        if not "ViT" in backbone_name:
+        if "CSN" in backbone_name:
             if num_feature_levels > 1:            
                 self.input_proj = nn.ModuleList()
                 num_backbone_outs = len(backbone.strides)
@@ -160,6 +160,7 @@ class DETR(nn.Module):
         self.hidden_dim = hidden_dim
         self.is_swin = "SWIN" in backbone_name
         self.is_vit = "ViT" in backbone_name
+        self.is_slowfast = "SlowFast" in backbone_name
         self.generate_lfb = generate_lfb
         self.last_stride = last_stride
         self.training = training
@@ -201,7 +202,7 @@ class DETR(nn.Module):
         poses = list()
         bs = samples.tensors.shape[0]
 
-        if self.is_vit:
+        if self.is_vit or self.is_slowfast:
             for l, feat in enumerate(features): # 첫 번째 feature는 버림
                 src, mask = feat.decompose()
                 pos_l = pos[l]

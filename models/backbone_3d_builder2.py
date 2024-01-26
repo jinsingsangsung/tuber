@@ -20,6 +20,9 @@ from models.transformer.position_encoding import build_position_encoding
 from models.backbones.ir_CSN_50 import build_CSN
 from models.backbones.ir_CSN_152 import build_CSN as build_CSN_152
 from models.backbones.vit import build_ViT
+from models.backbones.slowfast import build_SlowFast
+from models.backbones.slowfast_utils import pack_pathway_output
+import fvcore.nn.weight_init as weight_init
 # from models.transformer.transformer_layers import LSTRTransformerDecoder, LSTRTransformerDecoderLayer, layer_norm
 # from detectron2.layers import ShapeSpec
 
@@ -56,6 +59,9 @@ class Backbone(nn.Module):
         elif cfg.CONFIG.MODEL.BACKBONE_NAME== 'CSN-50':
             print("CSN-50 backbone")
             self.body = build_CSN(cfg)
+        elif cfg.CONFIG.MODEL.BACKBONE_NAME== 'SlowFast':
+            print("SlowFast-R101 backbone")
+            self.body = build_SlowFast(cfg)
         else:
             print("ViT-B backbone")
             self.body = build_ViT(cfg)
@@ -78,15 +84,13 @@ class Backbone(nn.Module):
         #             LSTRTransformerDecoderLayer(d_model=2048, nhead=8, dim_feedforward=2048, dropout=0.1), 1,
         #             norm=layer_norm(d_model=2048, condition=True))
         use_ViT = "ViT" in cfg.CONFIG.MODEL.BACKBONE_NAME
+        use_SlowFast = "SlowFast" in cfg.CONFIG.MODEL.BACKBONE_NAME
+        use_CSN = "CSN" in cfg.CONFIG.MODEL.BACKBONE_NAME
         self.use_ViT = use_ViT
+        self.use_SlowFast = use_SlowFast
+        self.use_CSN = use_CSN
         if return_interm_layers:
-            if not use_ViT:
-                return_layers = {"layer1": "0", "layer2": "1", "layer3": "2", "layer4": "3"}
-                # return_layers = {"layer2": "0", "layer3": "1", "layer4": "2"}
-                self.strides = [8, 16, 32]
-                self.num_channels = [512, 1024, 2048]
-                self.in_features = None
-            else:
+            if use_ViT:
                 out_channel = cfg.CONFIG.MODEL.D_MODEL
                 in_channels = [cfg.CONFIG.ViT.EMBED_DIM]*4
                 self.strides = [8, 16, 32]
@@ -134,15 +138,35 @@ class Backbone(nn.Module):
                     )
                     layers = nn.Sequential(*layers)
 
-                    self.lateral_convs.append(layers)                
+                    self.lateral_convs.append(layers)                      
+            elif use_SlowFast:
+                self.num_pathways = 2       
+                out_channel = cfg.CONFIG.MODEL.D_MODEL      
+                in_channels = [256+32, 512+64, 1024+128, 2048+256]
+                self.num_channels = in_channels
+                self.strides = [8, 16, 32]
+                self.lateral_convs = nn.ModuleList()
+                for idx, in_channel in enumerate(in_channels):
+                    lateral_conv = nn.Conv3d(in_channel, out_channel, kernel_size=1)
+                    weight_init.c2_xavier_fill(lateral_conv)
+                    self.lateral_convs.append(lateral_conv)
+                    self.in_features = None
+                    
+            else:
+                return_layers = {"layer1": "0", "layer2": "1", "layer3": "2", "layer4": "3"}
+                # return_layers = {"layer2": "0", "layer3": "1", "layer4": "2"}
+                self.strides = [8, 16, 32]
+                self.num_channels = [512, 1024, 2048]
+                self.in_features = None             
         else:
             return_layers = {'layer4': "0"}
             self.strides = [32]
             self.num_channels = [2048]
-        if not use_ViT:
+        if use_CSN:
             self.body = IntermediateLayerGetter(self.body, return_layers=return_layers)
         self.backbone_name = cfg.CONFIG.MODEL.BACKBONE_NAME
         self.temporal_ds_strategy = cfg.CONFIG.MODEL.TEMPORAL_DS_STRATEGY
+        self.cfg = cfg
 
     def space_forward(self, features):
         mapped_features = {}
@@ -158,8 +182,10 @@ class Backbone(nn.Module):
 
     def forward(self, tensor_list: NestedTensor):
         if "SlowFast" in self.backbone_name:
-            xs, xt = self.body([tensor_list.tensors[:, :, ::4, ...], tensor_list.tensors])
-            xs_orig = xt
+            # xs, xt = self.body([tensor_list.tensors[:, :, ::4, ...], tensor_list.tensors])
+            x = pack_pathway_output(self.cfg, tensor_list.tensors, pathways=self.num_pathways)
+            xs = self.body(x) #interm layer features
+            # xs_orig = xt
         elif "TPN" in self.backbone_name:
             xs, xt = self.body(tensor_list.tensors)
             xs_orig = xt
@@ -171,7 +197,7 @@ class Backbone(nn.Module):
         # print(xs['2'].shape)
         # print(xs['3'].shape)
         # bs, ch, t, w, h = xs.shape
-        if self.use_ViT:
+        if self.use_ViT or self.use_SlowFast:
             xs = self.space_forward(xs)
 
         out: Dict[str, NestedTensor] = {}
