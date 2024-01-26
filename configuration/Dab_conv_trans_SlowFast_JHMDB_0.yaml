@@ -79,7 +79,7 @@ CONFIG:
     SAMPLE_RATE: 1
     PRETRAINED: True
     PRETRAIN_BACKBONE_DIR: "../pretrained_models/backbone/SLOWFAST_32x2_R101_50_50.pkl"
-    PRETRAIN_TRANSFORMER_DIR: split 0 : "/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/JHMDB_Tuber/Dab_conv_trans_decsasde_ViT_B_270-559/ckpt_epoch_349.pth"
+    PRETRAIN_TRANSFORMER_DIR: "/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/JHMDB_Tuber/Dab_conv_trans_decsasde_ViT_B_270-559/ckpt_epoch_349.pth"
     PRETRAINED_PATH: ""
     LOAD: False
     LOAD_FC: False
