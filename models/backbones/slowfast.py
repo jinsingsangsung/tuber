@@ -394,11 +394,18 @@ def load_weights(model, pretrain_path, load_fc, tune_point, gpu_world_rank, log_
     # print("not found layers: ", len([k for k in checkpoint.keys() if k not in model_dict.keys()]))
     # print("not found layers: ", [k for k in checkpoint.keys() if k not in model_dict.keys()])
     # import pdb; pdb.set_trace()
-    not_found_layers = [k for k in checkpoint.keys() if k not in model_dict.keys()]
-    for layer in not_found_layers:
-        checkpoint.pop(layer)
+    
+    not_found_layers = {k: v for k, v in checkpoint["model"].items() if k[9:] not in model_dict.keys()}
+    found_layers = {k[9:]: v for k, v in checkpoint["model"].items() if k[9:] in model_dict.keys()}
+    # print("while loading the backbone checkpoint...; not found layers: ", len(not_found_layers))
+    if gpu_world_rank == 0:
+        print_log(log_path, f"while loading the backbone checkpoint...; not found layers: {len([k for k in not_found_layers if 'momentum' not in k])}")
+        print_log(log_path, f"while loading the backbone checkpoint...; num. found layers: {len(found_layers)}")
+    # import pdb; pdb.set_trace()
+    # for layer in not_found_layers:
+    #     checkpoint["model"].pop(layer)
 
-    model_dict.update(checkpoint)
+    model_dict.update(found_layers)
     model.load_state_dict(model_dict)
 
     if gpu_world_rank == 0:
