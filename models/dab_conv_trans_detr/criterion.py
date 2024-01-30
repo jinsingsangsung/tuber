@@ -1119,7 +1119,7 @@ class PostProcess(nn.Module):
         prob = out_logits.softmax(-1)
         # do voting
         prob_b = out_logits_b.softmax(-1)[..., 1:2]
-        prob = (prob * prob_b).sqrt()
+        prob[:-1] = (prob[:-1] * prob_b).sqrt()
         # prob = prob.sum(dim=1, keepdim=True).softmax(-1)
         # prob = (prob.expand(-1,num_frames,-1,-1)*prob_b).sqrt()
 

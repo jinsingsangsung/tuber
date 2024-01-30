@@ -65,7 +65,7 @@ def main_worker(cfg):
     if cfg.CONFIG.DATA.DATASET_NAME == 'ava':
         from datasets.ava_frame import build_dataloader
     elif cfg.CONFIG.DATA.DATASET_NAME == 'jhmdb':
-        from datasets.jhmdb_frame_ import build_dataloader
+        from datasets.jhmdb_frame__ import build_dataloader
     elif cfg.CONFIG.DATA.DATASET_NAME == 'ucf':
         from datasets.ucf_frame import build_dataloader        
     else:

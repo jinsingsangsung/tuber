@@ -552,6 +552,7 @@ def validate_tuber_detection(cfg, model, criterion, postprocessors, data_loader,
         print_log(save_path, mAP)
         # writer.add_scalar('val/val_mAP_epoch', mAP[0], epoch)
         Map_ = mAP[0]
+        time.sleep(1000)
 
     if Map_ != 0:
         metrics_data = json.dumps({
@@ -714,16 +715,18 @@ def validate_tuber_jhmdb_detection(cfg, model, criterion, postprocessors, data_l
                     # except:
                     #     pass
 
-            val_label = targets[bidx]["labels"] # length T
+            val_label = targets[bidx]["labels"] # num_actors, length T
             # make one-hot vector
-            val_category = torch.full((len(val_label), cfg.CONFIG.DATA.NUM_CLASSES+1), 0)
-            for vl in range(len(val_label)):
-                label = int(val_label[vl])
-                val_category[vl, label] = 1
-            val_label = val_category[front_pad:T-end_pad]
+            
+            val_category = torch.full((*val_label.shape[:2], cfg.CONFIG.DATA.NUM_CLASSES+1), 0)
+            for i, vl in enumerate(val_label):
+                for t in range(len(vl)):
+                    label = int(vl[t])
+                    val_category[i, t, label] = 1
+            val_label = val_category[:, front_pad:T-end_pad, :].squeeze(0)
 
-            raw_boxes = targets[bidx]["raw_boxes"]
-            raw_boxes = raw_boxes.reshape(-1, raw_boxes.shape[-1])[front_pad:T-end_pad]
+            raw_boxes = targets[bidx]["raw_boxes"].reshape(-1, cfg.CONFIG.MODEL.TEMP_LEN, 6)
+            raw_boxes = raw_boxes[:, front_pad:T-end_pad, :].squeeze(0)
 
             # print('raw_boxes',raw_boxes.shape)
 
@@ -785,8 +788,11 @@ def validate_tuber_jhmdb_detection(cfg, model, criterion, postprocessors, data_l
     buff_output = np.concatenate(buff_output, axis=0)
     buff_anno = np.concatenate(buff_anno, axis=0)
     buff_binary = np.concatenate(buff_binary, axis=0)
-
-    buff_GT_label = np.concatenate(buff_GT_label, axis=0)
+    try:
+        buff_GT_label = np.concatenate(buff_GT_label, axis=0)
+    except:
+        print([a.shape for a in buff_GT_label])
+        import pdb; pdb.set_trace()
     buff_GT_anno = np.concatenate(buff_GT_anno, axis=0)
     # print(buff_output.shape, buff_anno.shape, len(buff_id), buff_GT_anno.shape, buff_GT_label.shape, len(buff_GT_id))
     tmp_path = '{}/{}/{}.txt'
