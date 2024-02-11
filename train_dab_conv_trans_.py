@@ -162,7 +162,7 @@ def main_worker(cfg):
         #         oldest_epoch = epochs_folder[0]
         #         os.remove(os.path.join(cfg.CONFIG.LOG.BASE_PATH, exp_name, cfg.CONFIG.LOG.SAVE_DIR, oldest_epoch))
 
-        if (epoch % cfg.CONFIG.VAL.FREQ == 0 or epoch == cfg.CONFIG.TRAIN.EPOCH_NUM - 1):
+        if epoch > 7:
             if cfg.CONFIG.DATA.DATASET_NAME == 'ava':
                 validate_tuber_detection(cfg, model, criterion, postprocessors, val_loader, epoch, writer)
             elif cfg.CONFIG.DATA.DATASET_NAME == 'jhmdb':
