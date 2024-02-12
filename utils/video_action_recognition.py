@@ -253,6 +253,8 @@ def train_tuber_detection(cfg, model, criterion, data_loader, optimizer, epoch, 
     try:
         if cfg.CONFIG.DATA.DATASET_NAME == "jhmdb" or cfg.CONFIG.DATA.DATASET_NAME == "ucf":
             nsml_log_control = True
+        else:
+            nsml_log_control = False
         metrics_data = json.dumps({
             '@epoch': epoch,
             '@step': epoch, # actually epoch
