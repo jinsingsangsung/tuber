@@ -17,7 +17,7 @@ CONFIG:
   USE_LOCATION: False
   EFFICIENT: False
   TRAIN:
-    EPOCH_NUM: 15
+    EPOCH_NUM: 12
     BATCH_SIZE: 2
     LR: 1e-4
     MIN_LR: 1e-6 # only if cosine scheduler is used
@@ -28,7 +28,7 @@ CONFIG:
     USE_WARMUP: True # does nothing
     WARMUP_START_LR: 1e-5
     WARMUP_EPOCHS: 3 # this determines whether to use Warmup unless using "step"
-    LR_MILESTONE: [8,12] #only for multistep
+    LR_MILESTONE: [8,11] #only for multistep
     STEP: 0.1 # gamma for lr decay
     OPTIMIZER:
       NAME: ADAMW
@@ -36,6 +36,7 @@ CONFIG:
     LR_SCHEDULER:
       NAME: 'multistep'
     CUT_GRADIENT: FALSE
+    SYNCBATCHNORM: True    
 
   VAL:
     BATCH_SIZE: 1
@@ -118,7 +119,7 @@ CONFIG:
     LOG_DIR: 'tb_log'
     SAVE_DIR: 'checkpoints'
     EVAL_DIR: '/mnt/video_nfs4/users/jinsung/results/tubelet-transformer/AVA_Tuber/eval'
-    SAVE_FREQ: 5
+    SAVE_FREQ: 1
     RES_DIR: Dab_conv_trans_decsasde_ViT_B_{}-{}/res
     EXP_NAME: Dab_conv_trans_decsasde_ViT_B_{}-{}
     DISPLAY_FREQ: 1000
